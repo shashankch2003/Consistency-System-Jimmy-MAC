@@ -13,12 +13,48 @@ export const payments = pgTable("payments", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// TABLE 1 & 2: Yearly and Monthly Overview Goals
+export const yearlyGoals = pgTable("yearly_goals", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  year: integer("year").notNull(),
+  goalName: text("goal_name").notNull(),
+  description: text("description"),
+  rating: integer("rating").default(1), // 1-10
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const monthlyOverviewGoals = pgTable("monthly_overview_goals", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  year: integer("year").notNull(),
+  month: integer("month").notNull(), // 1-12
+  mainGoal: text("main_goal").notNull(),
+  rating: integer("rating").default(1), // 1-10
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// TABLE 3: Dynamic Current Month Goals
+export const monthlyDynamicGoals = pgTable("monthly_dynamic_goals", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  year: integer("year").notNull(),
+  month: integer("month").notNull(), // 1-12
+  title: text("title").notNull(),
+  description: text("description"),
+  rating: integer("rating").default(1), // 1-10
+  status: text("status").default("Not Started"), // Not Started / In Progress / Completed
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Legacy goals table (to be removed from UI but kept in schema for safety if needed, 
+// though user asked to "remove the first section", we'll migrate to new tables)
 export const goals = pgTable("goals", {
   id: serial("id").primaryKey(),
   userId: varchar("user_id").notNull(),
   title: text("title").notNull(),
   description: text("description"),
-  targetDate: text("target_date"), // YYYY-MM-DD or YYYY-MM
+  targetDate: text("target_date"),
   progressPercentage: integer("progress_percentage").default(0),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -68,7 +104,9 @@ export const hourlyEntries = pgTable("hourly_entries", {
 });
 
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
-export const insertGoalSchema = createInsertSchema(goals).omit({ id: true, createdAt: true });
+export const insertYearlyGoalSchema = createInsertSchema(yearlyGoals).omit({ id: true, createdAt: true });
+export const insertMonthlyOverviewGoalSchema = createInsertSchema(monthlyOverviewGoals).omit({ id: true, createdAt: true });
+export const insertMonthlyDynamicGoalSchema = createInsertSchema(monthlyDynamicGoals).omit({ id: true, createdAt: true });
 export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true });
 export const insertGoodHabitSchema = createInsertSchema(goodHabits).omit({ id: true });
 export const insertGoodHabitEntrySchema = createInsertSchema(goodHabitEntries).omit({ id: true });

@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { 
-  insertPaymentSchema, insertGoalSchema, insertTaskSchema, 
-  insertGoodHabitSchema, insertGoodHabitEntrySchema, 
+  insertPaymentSchema, insertYearlyGoalSchema, insertMonthlyOverviewGoalSchema, insertMonthlyDynamicGoalSchema,
+  insertTaskSchema, insertGoodHabitSchema, insertGoodHabitEntrySchema, 
   insertBadHabitSchema, insertBadHabitEntrySchema, insertHourlyEntrySchema,
-  payments, goals, tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries 
+  payments, yearlyGoals, monthlyOverviewGoals, monthlyDynamicGoals, tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries 
 } from './schema';
 
 export const errorSchemas = {
@@ -13,23 +13,57 @@ export const errorSchemas = {
 };
 
 export const api = {
-  goals: {
+  yearlyGoals: {
     list: {
-      method: 'GET' as const, path: '/api/goals' as const,
-      responses: { 200: z.array(z.custom<typeof goals.$inferSelect>()) }
+      method: 'GET' as const, path: '/api/yearly-goals' as const,
+      input: z.object({ year: z.coerce.number().optional() }).optional(),
+      responses: { 200: z.array(z.custom<typeof yearlyGoals.$inferSelect>()) }
     },
     create: {
-      method: 'POST' as const, path: '/api/goals' as const,
-      input: insertGoalSchema.omit({ userId: true }),
-      responses: { 201: z.custom<typeof goals.$inferSelect>(), 400: errorSchemas.validation }
+      method: 'POST' as const, path: '/api/yearly-goals' as const,
+      input: insertYearlyGoalSchema.omit({ userId: true }),
+      responses: { 201: z.custom<typeof yearlyGoals.$inferSelect>(), 400: errorSchemas.validation }
     },
     update: {
-      method: 'PUT' as const, path: '/api/goals/:id' as const,
-      input: insertGoalSchema.partial(),
-      responses: { 200: z.custom<typeof goals.$inferSelect>(), 400: errorSchemas.validation, 404: errorSchemas.notFound }
+      method: 'PUT' as const, path: '/api/yearly-goals/:id' as const,
+      input: insertYearlyGoalSchema.omit({ userId: true }).partial(),
+      responses: { 200: z.custom<typeof yearlyGoals.$inferSelect>(), 400: errorSchemas.validation, 404: errorSchemas.notFound }
     },
     delete: {
-      method: 'DELETE' as const, path: '/api/goals/:id' as const,
+      method: 'DELETE' as const, path: '/api/yearly-goals/:id' as const,
+      responses: { 204: z.void(), 404: errorSchemas.notFound }
+    }
+  },
+  monthlyOverviewGoals: {
+    list: {
+      method: 'GET' as const, path: '/api/monthly-overview-goals' as const,
+      input: z.object({ year: z.coerce.number().optional() }).optional(),
+      responses: { 200: z.array(z.custom<typeof monthlyOverviewGoals.$inferSelect>()) }
+    },
+    upsert: {
+      method: 'POST' as const, path: '/api/monthly-overview-goals' as const,
+      input: insertMonthlyOverviewGoalSchema.omit({ userId: true }),
+      responses: { 200: z.custom<typeof monthlyOverviewGoals.$inferSelect>(), 400: errorSchemas.validation }
+    }
+  },
+  monthlyDynamicGoals: {
+    list: {
+      method: 'GET' as const, path: '/api/monthly-dynamic-goals' as const,
+      input: z.object({ year: z.coerce.number().optional(), month: z.coerce.number().optional() }).optional(),
+      responses: { 200: z.array(z.custom<typeof monthlyDynamicGoals.$inferSelect>()) }
+    },
+    create: {
+      method: 'POST' as const, path: '/api/monthly-dynamic-goals' as const,
+      input: insertMonthlyDynamicGoalSchema.omit({ userId: true }),
+      responses: { 201: z.custom<typeof monthlyDynamicGoals.$inferSelect>(), 400: errorSchemas.validation }
+    },
+    update: {
+      method: 'PUT' as const, path: '/api/monthly-dynamic-goals/:id' as const,
+      input: insertMonthlyDynamicGoalSchema.omit({ userId: true }).partial(),
+      responses: { 200: z.custom<typeof monthlyDynamicGoals.$inferSelect>(), 400: errorSchemas.validation, 404: errorSchemas.notFound }
+    },
+    delete: {
+      method: 'DELETE' as const, path: '/api/monthly-dynamic-goals/:id' as const,
       responses: { 204: z.void(), 404: errorSchemas.notFound }
     }
   },

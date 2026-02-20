@@ -14,27 +14,68 @@ export async function registerRoutes(
   await setupAuth(app);
   registerAuthRoutes(app);
 
-  // Goals
-  app.get(api.goals.list.path, isAuthenticated, async (req: any, res) => {
-    const goals = await storage.getGoals(req.user.claims.sub);
+  // Yearly Goals
+  app.get(api.yearlyGoals.list.path, isAuthenticated, async (req: any, res) => {
+    const year = req.query.year ? parseInt(req.query.year as string) : undefined;
+    const goals = await storage.getYearlyGoals(req.user.claims.sub, year);
     res.json(goals);
   });
-  app.post(api.goals.create.path, isAuthenticated, async (req: any, res) => {
+  app.post(api.yearlyGoals.create.path, isAuthenticated, async (req: any, res) => {
     try {
-      const input = api.goals.create.input.parse(req.body);
-      const goal = await storage.createGoal({ ...input, userId: req.user.claims.sub });
+      const input = api.yearlyGoals.create.input.parse(req.body);
+      const goal = await storage.createYearlyGoal({ ...input, userId: req.user.claims.sub });
       res.status(201).json(goal);
     } catch (e: any) { res.status(400).json({ message: e.message }); }
   });
-  app.put(api.goals.update.path, isAuthenticated, async (req: any, res) => {
+  app.put(api.yearlyGoals.update.path, isAuthenticated, async (req: any, res) => {
     try {
-      const input = api.goals.update.input.parse(req.body);
-      const goal = await storage.updateGoal(parseInt(req.params.id), input);
+      const input = api.yearlyGoals.update.input.parse(req.body);
+      const goal = await storage.updateYearlyGoal(parseInt(req.params.id), input);
       res.json(goal);
     } catch (e: any) { res.status(400).json({ message: e.message }); }
   });
-  app.delete(api.goals.delete.path, isAuthenticated, async (req, res) => {
-    await storage.deleteGoal(parseInt(req.params.id));
+  app.delete(api.yearlyGoals.delete.path, isAuthenticated, async (req, res) => {
+    await storage.deleteYearlyGoal(parseInt(req.params.id));
+    res.status(204).end();
+  });
+
+  // Monthly Overview Goals
+  app.get(api.monthlyOverviewGoals.list.path, isAuthenticated, async (req: any, res) => {
+    const year = req.query.year ? parseInt(req.query.year as string) : undefined;
+    const goals = await storage.getMonthlyOverviewGoals(req.user.claims.sub, year);
+    res.json(goals);
+  });
+  app.post(api.monthlyOverviewGoals.upsert.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const input = api.monthlyOverviewGoals.upsert.input.parse(req.body);
+      const goal = await storage.upsertMonthlyOverviewGoal({ ...input, userId: req.user.claims.sub });
+      res.json(goal);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
+  // Monthly Dynamic Goals
+  app.get(api.monthlyDynamicGoals.list.path, isAuthenticated, async (req: any, res) => {
+    const year = req.query.year ? parseInt(req.query.year as string) : undefined;
+    const month = req.query.month ? parseInt(req.query.month as string) : undefined;
+    const goals = await storage.getMonthlyDynamicGoals(req.user.claims.sub, year, month);
+    res.json(goals);
+  });
+  app.post(api.monthlyDynamicGoals.create.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const input = api.monthlyDynamicGoals.create.input.parse(req.body);
+      const goal = await storage.createMonthlyDynamicGoal({ ...input, userId: req.user.claims.sub });
+      res.status(201).json(goal);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+  app.put(api.monthlyDynamicGoals.update.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const input = api.monthlyDynamicGoals.update.input.parse(req.body);
+      const goal = await storage.updateMonthlyDynamicGoal(parseInt(req.params.id), input);
+      res.json(goal);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+  app.delete(api.monthlyDynamicGoals.delete.path, isAuthenticated, async (req, res) => {
+    await storage.deleteMonthlyDynamicGoal(parseInt(req.params.id));
     res.status(204).end();
   });
 
