@@ -1,0 +1,440 @@
+I want to build a premium SaaS website + web application called Consistency System.
+
+This project has two parts:
+
+Public Website (Landing + Sales Website)
+
+Logged-in Web App (5 Core Sections)
+
+This must look extremely professional — enterprise-grade SaaS quality.
+
+Use my exact provided text.
+Do NOT rewrite any wording.
+Do NOT modify any content.
+Use my exact images.
+Use my exact brand color theme.
+
+🔹 PART 1 — PUBLIC WEBSITE
+Website Structure
+
+Create a modern SaaS landing website including:
+
+Sticky Navbar
+
+Hero Section
+
+Features Overview
+
+5 Sections Overview (Side-by-side display)
+
+Pricing Section (₹3999 one-time)
+
+Razorpay Payment Integration
+
+Footer
+
+Design must be:
+
+Clean
+
+Minimal
+
+Premium
+
+Fully responsive
+
+Modern SaaS layout
+
+5 CORE SECTIONS (DISPLAY ON WEBSITE)
+
+Show these 5 sections clearly and side-by-side:
+
+Goals
+
+Daily Task Tracking
+
+Good Habits
+
+Bad Habits
+
+Hourly Tasks
+
+Each section must:
+
+Use my exact content
+
+Use my exact images
+
+Show feature visuals
+
+Be arranged in professional card-style layout
+
+Look high-end and polished
+
+🔹 PART 2 — PAYMENT SYSTEM (RAZORPAY)
+
+Business Model:
+One-time payment ₹3999.
+
+Flow:
+
+User clicks “Buy Now”
+
+Razorpay checkout opens
+
+Payment success → create account
+
+Store payment record
+
+Grant access to dashboard
+
+If payment fails → no account access
+
+Store:
+
+Payment:
+
+id
+
+user_id
+
+razorpay_payment_id
+
+amount
+
+status
+
+created_at
+
+Payment verification must happen server-side.
+
+🔹 PART 3 — AUTHENTICATION SYSTEM
+
+Include:
+
+Signup
+
+Login
+
+Logout
+
+JWT authentication
+
+Password hashing
+
+Protected routes
+
+Access only if is_paid = true
+
+User Model:
+
+id
+
+name
+
+email
+
+password
+
+is_paid
+
+created_at
+
+🔹 PART 4 — LOGGED-IN DASHBOARD STRUCTURE
+
+After login, user enters main dashboard.
+
+Use sidebar navigation.
+
+Sections in this exact order:
+
+1️⃣ GOALS SECTION
+
+Purpose:
+Long-term goal tracking.
+
+Features:
+
+Add goal
+
+Edit goal
+
+Delete goal
+
+Set target date
+
+Track progress %
+
+Visual progress bar
+
+Monthly and yearly goal tracking summary
+
+Database:
+
+Goal:
+
+id
+
+user_id
+
+title
+
+description
+
+target_date
+
+progress_percentage
+
+created_at
+
+2️⃣ DAILY TASK TRACKING (PERCENTAGE BOARD)
+
+Kanban style board:
+
+Columns:
+
+Not Done (0%)
+
+25%
+
+50%
+
+75%
+
+100%
+
+Features:
+
+Add task
+
+Drag and drop between columns
+
+Auto-calculate daily average %
+
+Date navigation (previous/next)
+
+Weekly average
+
+Monthly average
+
+Yearly overview graph
+
+Task Model:
+
+id
+
+user_id
+
+date
+
+title
+
+completion_percentage
+
+Daily average formula:
+(Sum of task percentages ÷ number of tasks)
+
+3️⃣ GOOD HABITS SECTION
+
+Track positive habits.
+
+Features:
+
+Monthly view
+
+Habit grid (days 1–30/31)
+
+Checkbox per day
+
+Monthly completion %
+
+Weekly breakdown
+
+Top 10 habits ranking
+
+Line or bar graph
+
+Donut chart for monthly completion
+
+Models:
+
+GoodHabit:
+
+id
+
+user_id
+
+name
+
+GoodHabitEntry:
+
+id
+
+habit_id
+
+date
+
+completed (boolean)
+
+4️⃣ BAD HABITS SECTION
+
+Same layout as Good Habits but inverted logic.
+
+Features:
+
+Checkbox means habit occurred
+
+Lower occurrence = better
+
+Monthly occurrence graph
+
+Weekly breakdown
+
+Top 10 worst habits ranking
+
+Reduction percentage
+
+Models:
+
+BadHabit:
+
+id
+
+user_id
+
+name
+
+monthly_limit (optional)
+
+BadHabitEntry:
+
+id
+
+habit_id
+
+date
+
+occurred (boolean)
+
+5️⃣ HOURLY TASKS SECTION
+
+Track productivity hour-by-hour.
+
+Features:
+
+Date navigation
+
+24-hour table
+
+Task description per hour
+
+Productivity score (1–10)
+
+Daily productivity %
+
+Weekly average
+
+Monthly graph
+
+Yearly comparison
+
+Model:
+
+HourlyEntry:
+
+id
+
+user_id
+
+date
+
+hour
+
+task_description
+
+productivity_score
+
+Daily productivity formula:
+(Sum of hourly scores ÷ max possible score) × 100
+
+🔹 PART 5 — ANALYTICS & GRAPHS
+
+Use Chart.js.
+
+Include:
+
+Daily graphs
+
+Weekly graphs
+
+Monthly graphs
+
+Yearly graphs
+
+Graphs must:
+
+Auto-update
+
+Be clean
+
+Minimal animation
+
+Highly readable
+
+🔹 PART 6 — DESIGN REQUIREMENTS
+
+Premium SaaS UI
+
+Dark theme (if specified)
+
+Clean spacing
+
+Subtle shadows
+
+Modern typography
+
+Fully responsive
+
+Minimal animations
+
+Professional dashboard look
+
+Must feel like a $100,000 SaaS product.
+
+🔹 PART 7 — PERFORMANCE & STRUCTURE
+
+Load under 2 seconds
+
+Clean modular architecture:
+
+Components
+
+Pages
+
+Services
+
+Models
+
+Scalable for 1000+ users
+
+Efficient state management
+
+Minimal re-renders
+
+🔹 RESTRICTIONS
+
+Do NOT:
+
+Rewrite my content
+
+Change wording
+
+Add gamification
+
+Add AI features
+
+Add subscription model
+
+Add unnecessary integrations
+
+Only implement what is specified.
