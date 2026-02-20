@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { format, eachDayOfInterval, startOfMonth, endOfMonth, isSameDay, addMonths, subMonths, getDaysInMonth } from "date-fns";
 import { useBadHabits, useCreateBadHabit, useDeleteBadHabit, useBadHabitEntries, useToggleBadHabitEntry } from "@/hooks/use-bad-habits";
-import { ShareDownloadBar } from "@/components/ShareDownloadBar";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Trash2, X, ChevronLeft, ChevronRight, BarChart3, ShieldAlert, TrendingDown, AlertTriangle } from "lucide-react";
@@ -136,19 +136,6 @@ export default function BadHabitsPage() {
           <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} data-testid="button-next-month">
             <ChevronRight className="w-5 h-5" />
           </Button>
-          <ShareDownloadBar
-            section="Bad Habits"
-            shareData_={{
-              "Month": format(currentMonth, "MMMM yyyy"),
-              "Slip Rate": analytics ? `${analytics.overallSlipRate}%` : "N/A",
-              "Total Slips": String(analytics?.totalSlips || 0),
-              "Clean Days": String(analytics?.totalClean || 0),
-              "Worst Habit": analytics?.worstHabit?.name || "N/A",
-            }}
-            csvFilename={`Bad_Habits_${monthStr}`}
-            csvHeaders={["Habit", "Slip Rate %", "Slip Days", "Clean Days"]}
-            csvRows={analytics?.perHabit?.map(h => [h.name, h.slipRate, h.slipDays, h.cleanDays]) || []}
-          />
         </div>
       </div>
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { format, addDays, subDays, startOfMonth, endOfMonth, eachDayOfInterval, getWeek, getYear } from "date-fns";
 import { useTasks, useTasksByMonth, useTasksByYear, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/use-tasks";
-import { ShareDownloadBar } from "@/components/ShareDownloadBar";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -17,7 +17,7 @@ function ProgressDot({ active, level, onClick, testId }: { active: boolean; leve
     0: "border-zinc-500 bg-zinc-500",
     25: "border-red-500 bg-red-500",
     50: "border-yellow-500 bg-yellow-500",
-    75: "border-blue-500 bg-blue-500",
+    75: "border-emerald-500 bg-emerald-500",
     100: "border-green-500 bg-green-500",
   };
 
@@ -34,7 +34,7 @@ function ProgressDot({ active, level, onClick, testId }: { active: boolean; leve
 }
 
 function ProgressBar({ value }: { value: number }) {
-  const color = value === 0 ? "bg-zinc-500" : value <= 25 ? "bg-red-500" : value <= 50 ? "bg-yellow-500" : value <= 75 ? "bg-blue-500" : "bg-green-500";
+  const color = value === 0 ? "bg-zinc-500" : value <= 25 ? "bg-red-500" : value <= 50 ? "bg-yellow-500" : value <= 75 ? "bg-emerald-500" : "bg-green-500";
   return (
     <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
       <div className={cn("h-full rounded-full transition-all", color)} style={{ width: `${value}%` }} />
@@ -160,18 +160,6 @@ export default function TasksPage() {
             <span className="text-sm text-muted-foreground">Daily Avg: </span>
             <span className="text-lg font-bold text-primary">{averageCompletion}%</span>
           </div>
-          <ShareDownloadBar
-            section="Daily Tasks"
-            shareData_={{
-              "Date": format(date, "MMMM d, yyyy"),
-              "Tasks": String(tasks?.length || 0),
-              "Daily Average": `${averageCompletion}%`,
-              "Month": format(analyticsMonth, "MMMM yyyy"),
-            }}
-            csvFilename={`Daily_Tasks_${dateStr}`}
-            csvHeaders={["Task", "Completion %"]}
-            csvRows={tasks?.map(t => [t.title, t.completionPercentage || 0]) || []}
-          />
         </div>
       </div>
 
@@ -287,7 +275,7 @@ export default function TasksPage() {
           </div>
           <div className="bg-card rounded-xl border border-border p-4 text-center">
             <p className="text-sm text-muted-foreground">Active Days</p>
-            <p className="text-3xl font-bold text-blue-500" data-testid="text-active-days">
+            <p className="text-3xl font-bold text-emerald-500" data-testid="text-active-days">
               {dailyData.filter(d => d.taskCount > 0).length}
             </p>
             <p className="text-xs text-muted-foreground mt-1">out of {daysInMonth.length} days</p>
@@ -324,7 +312,7 @@ export default function TasksPage() {
 
         <div className="bg-card rounded-xl border border-border p-6">
           <div className="flex items-center gap-2 mb-4">
-            <TrendingUp className="w-5 h-5 text-blue-500" />
+            <TrendingUp className="w-5 h-5 text-emerald-500" />
             <h3 className="text-lg font-semibold">Weekly Average — {format(analyticsMonth, "MMMM yyyy")}</h3>
           </div>
           <p className="text-sm text-muted-foreground mb-4">Average task completion grouped by week</p>

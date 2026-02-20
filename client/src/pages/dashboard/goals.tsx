@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { ShareDownloadBar } from "@/components/ShareDownloadBar";
+
 import { 
   useYearlyGoals, useCreateYearlyGoal, useUpdateYearlyGoal, useDeleteYearlyGoal,
   useMonthlyOverviewGoals, useUpsertMonthlyOverviewGoal,
@@ -33,7 +33,7 @@ function RatingSelect({ value, onChange, testId }: { value: number; onChange: (v
 
 function ProgressBar({ rating }: { rating: number }) {
   const pct = rating * 10;
-  const color = pct === 0 ? "bg-zinc-500" : pct <= 30 ? "bg-red-500" : pct <= 60 ? "bg-yellow-500" : pct <= 80 ? "bg-blue-500" : "bg-green-500";
+  const color = pct === 0 ? "bg-zinc-500" : pct <= 30 ? "bg-red-500" : pct <= 60 ? "bg-yellow-500" : pct <= 80 ? "bg-emerald-500" : "bg-green-500";
   return (
     <div className="flex items-center gap-3">
       <div className="flex-1 h-2.5 bg-secondary rounded-full overflow-hidden">
@@ -48,7 +48,7 @@ function getAvgColor(avg: number) {
   if (avg === 0) return "text-zinc-400";
   if (avg <= 30) return "text-red-400";
   if (avg <= 60) return "text-yellow-400";
-  if (avg <= 80) return "text-blue-400";
+  if (avg <= 80) return "text-emerald-400";
   return "text-green-400";
 }
 
@@ -290,8 +290,8 @@ function MonthlyOverviewTable({ year, onOpenDescription }: { year: number; onOpe
       <div className="p-5 border-b border-border/50">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
-              <Calendar className="w-5 h-5 text-blue-400" />
+            <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+              <Calendar className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
               <h3 className="text-lg font-semibold">Month-Wise Overview Goals</h3>
@@ -535,13 +535,6 @@ export default function GoalsPage() {
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           <YearSelector year={year} setYear={setYear} />
-          <ShareDownloadBar
-            section="Goals Overview"
-            shareData_={{ Section: "Goals Overview", Year: year }}
-            csvFilename={`Goals_${year}`}
-            csvHeaders={["Section", "Year"]}
-            csvRows={[["Goals Overview", String(year)]]}
-          />
         </div>
       </div>
 

@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { format, addDays, subDays, startOfMonth, endOfMonth, eachDayOfInterval, getWeek, isSameDay, subMonths, addMonths, getDaysInMonth } from "date-fns";
 import { useHourlyEntries, useHourlyEntriesByMonth, useUpdateHourlyEntry } from "@/hooks/use-hourly";
-import { ShareDownloadBar } from "@/components/ShareDownloadBar";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChevronLeft, ChevronRight, BarChart3, Clock, TrendingUp, Calendar, Zap } from "lucide-react";
@@ -155,23 +155,10 @@ export default function HourlyPage() {
               <span className="text-sm text-muted-foreground">Avg: </span>
               <span className="text-lg font-bold text-primary">{dailyAvg}/10</span>
             </div>
-            <div className="px-4 py-2 bg-blue-500/10 rounded-lg border border-blue-500/20" data-testid="badge-tracked-hours">
+            <div className="px-4 py-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20" data-testid="badge-tracked-hours">
               <span className="text-sm text-muted-foreground">Hours: </span>
-              <span className="text-lg font-bold text-blue-400">{trackedHours}</span>
+              <span className="text-lg font-bold text-emerald-400">{trackedHours}</span>
             </div>
-            <ShareDownloadBar
-              section="Hourly Tracker"
-              shareData_={{
-                "Date": format(date, "MMMM d, yyyy"),
-                "Daily Average": `${dailyAvg}/10`,
-                "Hours Tracked": String(trackedHours),
-                "Month": format(analyticsMonth, "MMMM yyyy"),
-                "Monthly Average": analytics ? `${analytics.monthlyAvg}/10` : "N/A",
-              }}
-              csvFilename={`Hourly_Tracker_${dateStr}`}
-              csvHeaders={["Hour", "Task", "Score"]}
-              csvRows={entries?.filter(e => e.productivityScore > 0).map(e => [`${String(e.hour).padStart(2, '0')}:00`, e.taskDescription, e.productivityScore]) || []}
-            />
           </div>
         </div>
       </div>
@@ -262,7 +249,7 @@ export default function HourlyPage() {
               </div>
               <div className="bg-card rounded-xl border border-border p-5 text-center">
                 <p className="text-sm text-muted-foreground mb-1">Total Hours</p>
-                <p className="text-3xl font-bold text-blue-400" data-testid="text-total-hours">{analytics.totalTrackedHours}</p>
+                <p className="text-3xl font-bold text-emerald-400" data-testid="text-total-hours">{analytics.totalTrackedHours}</p>
                 <p className="text-xs text-muted-foreground">tracked this month</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-5 text-center">
@@ -311,7 +298,7 @@ export default function HourlyPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="bg-card rounded-xl border border-border p-6">
                 <div className="flex items-center gap-2 mb-1">
-                  <TrendingUp className="w-5 h-5 text-blue-500" />
+                  <TrendingUp className="w-5 h-5 text-emerald-500" />
                   <h3 className="text-lg font-semibold">Weekly Average — {format(analyticsMonth, "MMMM yyyy")}</h3>
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">Average productivity grouped by week</p>
