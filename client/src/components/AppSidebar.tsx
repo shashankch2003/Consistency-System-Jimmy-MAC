@@ -43,7 +43,7 @@ export function AppSidebar() {
           <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
             <LayoutDashboard className="w-5 h-5 text-primary" />
           </div>
-          <span className="font-display font-bold text-lg">Consistency</span>
+          <span className="font-display font-bold text-lg">Consistency System</span>
         </Link>
       </SidebarHeader>
       

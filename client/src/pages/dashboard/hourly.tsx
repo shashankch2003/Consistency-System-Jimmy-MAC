@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { format, addDays, subDays, startOfMonth, endOfMonth, eachDayOfInterval, getWeek, isSameDay, subMonths, addMonths, getDaysInMonth } from "date-fns";
 import { useHourlyEntries, useHourlyEntriesByMonth, useUpdateHourlyEntry } from "@/hooks/use-hourly";
+import { ShareDownloadBar } from "@/components/ShareDownloadBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChevronLeft, ChevronRight, BarChart3, Clock, TrendingUp, Calendar, Zap } from "lucide-react";
@@ -149,7 +150,7 @@ export default function HourlyPage() {
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
             <div className="px-4 py-2 bg-primary/10 rounded-lg border border-primary/20" data-testid="badge-daily-avg">
               <span className="text-sm text-muted-foreground">Avg: </span>
               <span className="text-lg font-bold text-primary">{dailyAvg}/10</span>
@@ -158,6 +159,19 @@ export default function HourlyPage() {
               <span className="text-sm text-muted-foreground">Hours: </span>
               <span className="text-lg font-bold text-blue-400">{trackedHours}</span>
             </div>
+            <ShareDownloadBar
+              section="Hourly Tracker"
+              shareData_={{
+                "Date": format(date, "MMMM d, yyyy"),
+                "Daily Average": `${dailyAvg}/10`,
+                "Hours Tracked": String(trackedHours),
+                "Month": format(analyticsMonth, "MMMM yyyy"),
+                "Monthly Average": analytics ? `${analytics.monthlyAvg}/10` : "N/A",
+              }}
+              csvFilename={`Hourly_Tracker_${dateStr}`}
+              csvHeaders={["Hour", "Task", "Score"]}
+              csvRows={entries?.filter(e => e.productivityScore > 0).map(e => [`${String(e.hour).padStart(2, '0')}:00`, e.taskDescription, e.productivityScore]) || []}
+            />
           </div>
         </div>
       </div>

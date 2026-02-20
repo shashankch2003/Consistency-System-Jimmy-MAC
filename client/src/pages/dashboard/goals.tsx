@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { ShareDownloadBar } from "@/components/ShareDownloadBar";
 import { 
   useYearlyGoals, useCreateYearlyGoal, useUpdateYearlyGoal, useDeleteYearlyGoal,
   useMonthlyOverviewGoals, useUpsertMonthlyOverviewGoal,
@@ -532,7 +533,16 @@ export default function GoalsPage() {
           <h1 className="text-3xl font-bold tracking-tight">Goals</h1>
           <p className="text-muted-foreground mt-1">Track your yearly, monthly, and detailed goals</p>
         </div>
-        <YearSelector year={year} setYear={setYear} />
+        <div className="flex items-center gap-3 flex-wrap">
+          <YearSelector year={year} setYear={setYear} />
+          <ShareDownloadBar
+            section="Goals Overview"
+            shareData_={{ Section: "Goals Overview", Year: year }}
+            csvFilename={`Goals_${year}`}
+            csvHeaders={["Section", "Year"]}
+            csvRows={[["Goals Overview", String(year)]]}
+          />
+        </div>
       </div>
 
       <YearlyGoalsTable year={year} onOpenDescription={(goalId, title, desc, type) => setDescView({ goalId, title, description: desc, type })} />

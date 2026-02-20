@@ -16,7 +16,7 @@ export default function LandingPage() {
             <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
               <LayoutDashboard className="w-5 h-5 text-primary" />
             </div>
-            <span className="text-xl font-display font-bold">Consistency</span>
+            <span className="text-xl font-display font-bold">Consistency System</span>
           </div>
           <div className="flex items-center gap-4">
             {user ? (
@@ -44,7 +44,7 @@ export default function LandingPage() {
             className="text-5xl md:text-7xl font-display font-bold tracking-tight mb-6"
           >
             Master Your Life with <br />
-            <span className="text-gradient-primary">Consistency</span>
+            <span className="text-gradient-primary">Consistency System</span>
           </motion.h1>
           
           <motion.p 

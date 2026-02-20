@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { format, eachDayOfInterval, startOfMonth, endOfMonth, isSameDay, addMonths, subMonths, getDaysInMonth } from "date-fns";
 import { useGoodHabits, useCreateGoodHabit, useDeleteGoodHabit, useGoodHabitEntries, useToggleGoodHabitEntry } from "@/hooks/use-good-habits";
+import { ShareDownloadBar } from "@/components/ShareDownloadBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Trash2, Check, ChevronLeft, ChevronRight, BarChart3, Target, TrendingUp, Award } from "lucide-react";
@@ -120,7 +121,7 @@ export default function GoodHabitsPage() {
           <h1 className="text-3xl font-display font-bold" data-testid="text-good-habits-title">Good Habits</h1>
           <p className="text-muted-foreground">Build consistency with daily tracking</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} data-testid="button-prev-month">
             <ChevronLeft className="w-5 h-5" />
           </Button>
@@ -130,6 +131,19 @@ export default function GoodHabitsPage() {
           <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} data-testid="button-next-month">
             <ChevronRight className="w-5 h-5" />
           </Button>
+          <ShareDownloadBar
+            section="Good Habits"
+            shareData_={{
+              "Month": format(currentMonth, "MMMM yyyy"),
+              "Overall Completion": analytics ? `${analytics.overallRate}%` : "N/A",
+              "Total Completed": String(analytics?.totalCompleted || 0),
+              "Total Remaining": String(analytics?.overallRemaining || 0),
+              "Best Habit": analytics?.bestHabit?.name || "N/A",
+            }}
+            csvFilename={`Good_Habits_${monthStr}`}
+            csvHeaders={["Habit", "Completion Rate %", "Completed Days", "Remaining Days"]}
+            csvRows={analytics?.perHabit?.map(h => [h.name, h.rate, h.completedDays, h.remaining]) || []}
+          />
         </div>
       </div>
 

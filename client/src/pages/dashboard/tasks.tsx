@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { format, addDays, subDays, startOfMonth, endOfMonth, eachDayOfInterval, getWeek, getYear } from "date-fns";
 import { useTasks, useTasksByMonth, useTasksByYear, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/use-tasks";
+import { ShareDownloadBar } from "@/components/ShareDownloadBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -159,6 +160,18 @@ export default function TasksPage() {
             <span className="text-sm text-muted-foreground">Daily Avg: </span>
             <span className="text-lg font-bold text-primary">{averageCompletion}%</span>
           </div>
+          <ShareDownloadBar
+            section="Daily Tasks"
+            shareData_={{
+              "Date": format(date, "MMMM d, yyyy"),
+              "Tasks": String(tasks?.length || 0),
+              "Daily Average": `${averageCompletion}%`,
+              "Month": format(analyticsMonth, "MMMM yyyy"),
+            }}
+            csvFilename={`Daily_Tasks_${dateStr}`}
+            csvHeaders={["Task", "Completion %"]}
+            csvRows={tasks?.map(t => [t.title, t.completionPercentage || 0]) || []}
+          />
         </div>
       </div>
 
