@@ -20,7 +20,7 @@ export const yearlyGoals = pgTable("yearly_goals", {
   year: integer("year").notNull(),
   goalName: text("goal_name").notNull(),
   description: text("description"),
-  rating: integer("rating").default(1), // 1-10
+  rating: integer("rating").default(0), // 0-10
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -30,7 +30,7 @@ export const monthlyOverviewGoals = pgTable("monthly_overview_goals", {
   year: integer("year").notNull(),
   month: integer("month").notNull(), // 1-12
   mainGoal: text("main_goal").notNull(),
-  rating: integer("rating").default(1), // 1-10
+  rating: integer("rating").default(0), // 0-10
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -42,7 +42,7 @@ export const monthlyDynamicGoals = pgTable("monthly_dynamic_goals", {
   month: integer("month").notNull(), // 1-12
   title: text("title").notNull(),
   description: text("description"),
-  rating: integer("rating").default(1), // 1-10
+  rating: integer("rating").default(0), // 0-10
   status: text("status").default("Not Started"), // Not Started / In Progress / Completed
   createdAt: timestamp("created_at").defaultNow(),
 });

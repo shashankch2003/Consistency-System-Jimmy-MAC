@@ -10,22 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, ChevronLeft, ChevronRight, Target, Calendar, TrendingUp, FileText, BarChart3 } from "lucide-react";
+import { Plus, Trash2, ChevronLeft, ChevronRight, Target, Calendar, TrendingUp, FileText, BarChart3, ArrowLeft, Save } from "lucide-react";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-const STATUS_OPTIONS = ["Not Started", "In Progress", "Completed"];
-
-function getStatusColor(status: string) {
-  switch (status) {
-    case "Completed": return "bg-green-500/20 text-green-400 border-green-500/30";
-    case "In Progress": return "bg-blue-500/20 text-blue-400 border-blue-500/30";
-    default: return "bg-zinc-500/20 text-zinc-400 border-zinc-500/30";
-  }
-}
 
 function RatingSelect({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
@@ -34,7 +22,7 @@ function RatingSelect({ value, onChange }: { value: number; onChange: (v: number
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {[1,2,3,4,5,6,7,8,9,10].map(r => (
+        {[0,1,2,3,4,5,6,7,8,9,10].map(r => (
           <SelectItem key={r} value={String(r)}>{r}</SelectItem>
         ))}
       </SelectContent>
@@ -44,11 +32,11 @@ function RatingSelect({ value, onChange }: { value: number; onChange: (v: number
 
 function ProgressBar({ rating }: { rating: number }) {
   const pct = rating * 10;
-  const color = pct <= 30 ? "bg-red-500" : pct <= 60 ? "bg-yellow-500" : pct <= 80 ? "bg-blue-500" : "bg-green-500";
+  const color = pct === 0 ? "bg-zinc-500" : pct <= 30 ? "bg-red-500" : pct <= 60 ? "bg-yellow-500" : pct <= 80 ? "bg-blue-500" : "bg-green-500";
   return (
     <div className="flex items-center gap-3">
       <div className="flex-1 h-2.5 bg-secondary rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
+        <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${Math.max(pct, 2)}%` }} />
       </div>
       <span className="text-sm font-medium text-muted-foreground w-10 text-right">{pct}%</span>
     </div>
@@ -56,6 +44,7 @@ function ProgressBar({ rating }: { rating: number }) {
 }
 
 function getAvgColor(avg: number) {
+  if (avg === 0) return "text-zinc-400";
   if (avg <= 30) return "text-red-400";
   if (avg <= 60) return "text-yellow-400";
   if (avg <= 80) return "text-blue-400";
@@ -75,47 +64,59 @@ function AvgBadge({ label, avg, total }: { label: string; avg: number; total: nu
   );
 }
 
-function DescriptionModal({ open, onOpenChange, title, description, onSave }: { 
-  open: boolean; 
-  onOpenChange: (v: boolean) => void; 
+function DescriptionPage({ title, description, onSave, onBack }: { 
   title: string; 
   description: string; 
   onSave: (desc: string) => void;
+  onBack: () => void;
 }) {
   const [text, setText] = useState(description);
+  const [saved, setSaved] = useState(false);
 
-  const prevOpen = useState(false);
-  if (open && !prevOpen[0]) {
-    setText(description);
-  }
-  prevOpen[0] = open;
+  const handleSave = () => {
+    onSave(text);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh]">
-        <DialogHeader>
-          <DialogTitle className="text-lg">Description for: {title}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
+    <div className="p-4 sm:p-8 max-w-4xl mx-auto space-y-6">
+      <div className="flex items-center gap-4">
+        <Button variant="outline" size="icon" onClick={onBack} data-testid="button-back-from-description">
+          <ArrowLeft className="w-4 h-4" />
+        </Button>
+        <div className="flex-1">
+          <h2 className="text-xl font-semibold">{title}</h2>
+          <p className="text-sm text-muted-foreground">Write your detailed description below</p>
+        </div>
+        <Button onClick={handleSave} className="gap-2" data-testid="button-save-description">
+          <Save className="w-4 h-4" />
+          {saved ? "Saved!" : "Save"}
+        </Button>
+      </div>
+
+      <Card className="border-border/50">
+        <div className="p-6">
           <Textarea
             value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Write your detailed description here..."
-            className="min-h-[300px] resize-y text-sm leading-relaxed"
-            data-testid="textarea-description-modal"
+            onChange={(e) => { setText(e.target.value); setSaved(false); }}
+            placeholder="Write your detailed description, notes, action plans, milestones, or anything you need to remember about this goal..."
+            className="min-h-[500px] resize-y text-base leading-relaxed border-0 p-0 focus-visible:ring-0 bg-transparent"
+            data-testid="textarea-description-page"
             autoFocus
           />
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel-description">
-              Cancel
-            </Button>
-            <Button onClick={() => { onSave(text); onOpenChange(false); }} data-testid="button-save-description">
-              Save Description
-            </Button>
-          </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </Card>
+
+      <div className="flex justify-between items-center">
+        <Button variant="outline" onClick={onBack} data-testid="button-back-bottom">
+          <ArrowLeft className="w-4 h-4 mr-2" /> Back to Goals
+        </Button>
+        <Button onClick={handleSave} data-testid="button-save-description-bottom">
+          <Save className="w-4 h-4 mr-2" /> {saved ? "Saved!" : "Save Description"}
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -133,23 +134,22 @@ function YearSelector({ year, setYear }: { year: number; setYear: (y: number) =>
   );
 }
 
-function YearlyGoalsTable({ year }: { year: number }) {
+function YearlyGoalsTable({ year, onOpenDescription }: { year: number; onOpenDescription: (goalId: number, title: string, description: string, type: "yearly" | "dynamic") => void }) {
   const { data: goals, isLoading } = useYearlyGoals(year);
   const createGoal = useCreateYearlyGoal();
   const updateGoal = useUpdateYearlyGoal();
   const deleteGoal = useDeleteYearlyGoal();
   const [newGoalName, setNewGoalName] = useState("");
-  const [descModal, setDescModal] = useState<{ open: boolean; goalId: number; title: string; description: string }>({ open: false, goalId: 0, title: "", description: "" });
 
   const handleAdd = () => {
     if (!newGoalName.trim()) return;
-    createGoal.mutate({ year, goalName: newGoalName, rating: 1 });
+    createGoal.mutate({ year, goalName: newGoalName, rating: 0 });
     setNewGoalName("");
   };
 
   if (isLoading) return <Skeleton className="h-40 w-full rounded-xl" />;
 
-  const avgRating = goals?.length ? Math.round(goals.reduce((acc: number, g: any) => acc + (g.rating || 1), 0) / goals.length * 10) : 0;
+  const avgRating = goals?.length ? Math.round(goals.reduce((acc: number, g: any) => acc + (g.rating || 0), 0) / goals.length * 10) : 0;
 
   return (
     <Card className="border-border/50">
@@ -198,7 +198,7 @@ function YearlyGoalsTable({ year }: { year: number }) {
                 </TableCell>
                 <TableCell>
                   <button
-                    onClick={() => setDescModal({ open: true, goalId: goal.id, title: goal.goalName, description: goal.description || "" })}
+                    onClick={() => onOpenDescription(goal.id, goal.goalName, goal.description || "", "yearly")}
                     className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full text-left group"
                     data-testid={`button-open-desc-yearly-${goal.id}`}
                   >
@@ -209,10 +209,10 @@ function YearlyGoalsTable({ year }: { year: number }) {
                   </button>
                 </TableCell>
                 <TableCell>
-                  <RatingSelect value={goal.rating || 1} onChange={(r) => updateGoal.mutate({ id: goal.id, rating: r })} />
+                  <RatingSelect value={goal.rating ?? 0} onChange={(r) => updateGoal.mutate({ id: goal.id, rating: r })} />
                 </TableCell>
-                <TableCell className="font-medium">{(goal.rating || 1) * 10}%</TableCell>
-                <TableCell><ProgressBar rating={goal.rating || 1} /></TableCell>
+                <TableCell className="font-medium">{(goal.rating ?? 0) * 10}%</TableCell>
+                <TableCell><ProgressBar rating={goal.rating ?? 0} /></TableCell>
                 <TableCell>
                   <Button size="icon" variant="ghost" onClick={() => deleteGoal.mutate(goal.id)} data-testid={`button-delete-yearly-goal-${goal.id}`}>
                     <Trash2 className="w-4 h-4 text-muted-foreground" />
@@ -241,14 +241,6 @@ function YearlyGoalsTable({ year }: { year: number }) {
           </TableBody>
         </Table>
       </div>
-
-      <DescriptionModal 
-        open={descModal.open}
-        onOpenChange={(v) => setDescModal(prev => ({ ...prev, open: v }))}
-        title={descModal.title}
-        description={descModal.description}
-        onSave={(desc) => updateGoal.mutate({ id: descModal.goalId, description: desc })}
-      />
     </Card>
   );
 }
@@ -264,7 +256,7 @@ function MonthlyOverviewTable({ year }: { year: number }) {
   };
 
   const goalsWithData = goals?.filter((g: any) => g.mainGoal && g.mainGoal.trim()) || [];
-  const avgRating = goalsWithData.length ? Math.round(goalsWithData.reduce((acc: number, g: any) => acc + (g.rating || 1), 0) / goalsWithData.length * 10) : 0;
+  const avgRating = goalsWithData.length ? Math.round(goalsWithData.reduce((acc: number, g: any) => acc + (g.rating ?? 0), 0) / goalsWithData.length * 10) : 0;
 
   return (
     <Card className="border-border/50">
@@ -309,7 +301,7 @@ function MonthlyOverviewTable({ year }: { year: number }) {
                       className="bg-transparent border-0 p-0 h-auto focus-visible:ring-1"
                       onBlur={(e) => {
                         if (e.target.value.trim() && e.target.value !== (goal?.mainGoal || "")) {
-                          upsertGoal.mutate({ year, month, mainGoal: e.target.value, rating: goal?.rating || 1 });
+                          upsertGoal.mutate({ year, month, mainGoal: e.target.value, rating: goal?.rating ?? 0 });
                         }
                       }}
                       data-testid={`input-monthly-goal-${month}`}
@@ -317,14 +309,14 @@ function MonthlyOverviewTable({ year }: { year: number }) {
                   </TableCell>
                   <TableCell>
                     <RatingSelect 
-                      value={goal?.rating || 1} 
+                      value={goal?.rating ?? 0} 
                       onChange={(r) => {
                         upsertGoal.mutate({ year, month, mainGoal: goal?.mainGoal || "Untitled Goal", rating: r });
                       }} 
                     />
                   </TableCell>
-                  <TableCell className="font-medium">{(goal?.rating || 1) * 10}%</TableCell>
-                  <TableCell><ProgressBar rating={goal?.rating || 1} /></TableCell>
+                  <TableCell className="font-medium">{(goal?.rating ?? 0) * 10}%</TableCell>
+                  <TableCell><ProgressBar rating={goal?.rating ?? 0} /></TableCell>
                 </TableRow>
               );
             })}
@@ -335,24 +327,23 @@ function MonthlyOverviewTable({ year }: { year: number }) {
   );
 }
 
-function DynamicMonthGoalsTable({ year }: { year: number }) {
+function DynamicMonthGoalsTable({ year, onOpenDescription }: { year: number; onOpenDescription: (goalId: number, title: string, description: string, type: "yearly" | "dynamic") => void }) {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const { data: goals, isLoading } = useMonthlyDynamicGoals(year, selectedMonth);
   const createGoal = useCreateMonthlyDynamicGoal();
   const updateGoal = useUpdateMonthlyDynamicGoal();
   const deleteGoal = useDeleteMonthlyDynamicGoal();
   const [newTitle, setNewTitle] = useState("");
-  const [descModal, setDescModal] = useState<{ open: boolean; goalId: number; title: string; description: string }>({ open: false, goalId: 0, title: "", description: "" });
 
   const handleAdd = () => {
     if (!newTitle.trim()) return;
-    createGoal.mutate({ year, month: selectedMonth, title: newTitle, rating: 1, status: "Not Started" });
+    createGoal.mutate({ year, month: selectedMonth, title: newTitle, rating: 0, status: "Not Started" });
     setNewTitle("");
   };
 
   if (isLoading) return <Skeleton className="h-40 w-full rounded-xl" />;
 
-  const avgRating = goals?.length ? Math.round(goals.reduce((acc: number, g: any) => acc + (g.rating || 1), 0) / goals.length * 10) : 0;
+  const avgRating = goals?.length ? Math.round(goals.reduce((acc: number, g: any) => acc + (g.rating ?? 0), 0) / goals.length * 10) : 0;
 
   return (
     <Card className="border-border/50">
@@ -388,12 +379,11 @@ function DynamicMonthGoalsTable({ year }: { year: number }) {
         <Table>
           <TableHeader>
             <TableRow className="border-border/50">
-              <TableHead className="w-[180px]">Goal Title</TableHead>
-              <TableHead className="w-[180px]">Description</TableHead>
+              <TableHead className="w-[200px]">Goal Title</TableHead>
+              <TableHead className="w-[200px]">Description</TableHead>
               <TableHead className="w-[100px]">Rating</TableHead>
               <TableHead className="w-[80px]">%</TableHead>
-              <TableHead className="min-w-[150px]">Progress</TableHead>
-              <TableHead className="w-[130px]">Status</TableHead>
+              <TableHead className="min-w-[180px]">Progress</TableHead>
               <TableHead className="w-[50px]"></TableHead>
             </TableRow>
           </TableHeader>
@@ -414,7 +404,7 @@ function DynamicMonthGoalsTable({ year }: { year: number }) {
                 </TableCell>
                 <TableCell>
                   <button
-                    onClick={() => setDescModal({ open: true, goalId: goal.id, title: goal.title, description: goal.description || "" })}
+                    onClick={() => onOpenDescription(goal.id, goal.title, goal.description || "", "dynamic")}
                     className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full text-left group"
                     data-testid={`button-open-desc-dynamic-${goal.id}`}
                   >
@@ -425,24 +415,10 @@ function DynamicMonthGoalsTable({ year }: { year: number }) {
                   </button>
                 </TableCell>
                 <TableCell>
-                  <RatingSelect value={goal.rating || 1} onChange={(r) => updateGoal.mutate({ id: goal.id, rating: r })} />
+                  <RatingSelect value={goal.rating ?? 0} onChange={(r) => updateGoal.mutate({ id: goal.id, rating: r })} />
                 </TableCell>
-                <TableCell className="font-medium">{(goal.rating || 1) * 10}%</TableCell>
-                <TableCell><ProgressBar rating={goal.rating || 1} /></TableCell>
-                <TableCell>
-                  <Select value={goal.status || "Not Started"} onValueChange={(v) => updateGoal.mutate({ id: goal.id, status: v })}>
-                    <SelectTrigger className="h-8 text-xs border-0 p-1" data-testid={`select-dynamic-goal-status-${goal.id}`}>
-                      <Badge variant="outline" className={`text-xs ${getStatusColor(goal.status || "Not Started")}`}>
-                        {goal.status || "Not Started"}
-                      </Badge>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STATUS_OPTIONS.map(s => (
-                        <SelectItem key={s} value={s}>{s}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </TableCell>
+                <TableCell className="font-medium">{(goal.rating ?? 0) * 10}%</TableCell>
+                <TableCell><ProgressBar rating={goal.rating ?? 0} /></TableCell>
                 <TableCell>
                   <Button size="icon" variant="ghost" onClick={() => deleteGoal.mutate(goal.id)} data-testid={`button-delete-dynamic-goal-${goal.id}`}>
                     <Trash2 className="w-4 h-4 text-muted-foreground" />
@@ -466,11 +442,11 @@ function DynamicMonthGoalsTable({ year }: { year: number }) {
                   </Button>
                 </div>
               </TableCell>
-              <TableCell colSpan={6}></TableCell>
+              <TableCell colSpan={5}></TableCell>
             </TableRow>
             {goals?.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                   No goals for {MONTHS[selectedMonth - 1]} yet. Add your first goal above.
                 </TableCell>
               </TableRow>
@@ -478,20 +454,33 @@ function DynamicMonthGoalsTable({ year }: { year: number }) {
           </TableBody>
         </Table>
       </div>
-
-      <DescriptionModal 
-        open={descModal.open}
-        onOpenChange={(v) => setDescModal(prev => ({ ...prev, open: v }))}
-        title={descModal.title}
-        description={descModal.description}
-        onSave={(desc) => updateGoal.mutate({ id: descModal.goalId, description: desc })}
-      />
     </Card>
   );
 }
 
 export default function GoalsPage() {
   const [year, setYear] = useState(new Date().getFullYear());
+  const [descView, setDescView] = useState<{ goalId: number; title: string; description: string; type: "yearly" | "dynamic" } | null>(null);
+
+  const updateYearlyGoal = useUpdateYearlyGoal();
+  const updateDynamicGoal = useUpdateMonthlyDynamicGoal();
+
+  if (descView) {
+    return (
+      <DescriptionPage
+        title={descView.title}
+        description={descView.description}
+        onSave={(desc) => {
+          if (descView.type === "yearly") {
+            updateYearlyGoal.mutate({ id: descView.goalId, description: desc });
+          } else {
+            updateDynamicGoal.mutate({ id: descView.goalId, description: desc });
+          }
+        }}
+        onBack={() => setDescView(null)}
+      />
+    );
+  }
 
   return (
     <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-8">
@@ -503,9 +492,9 @@ export default function GoalsPage() {
         <YearSelector year={year} setYear={setYear} />
       </div>
 
-      <YearlyGoalsTable year={year} />
+      <YearlyGoalsTable year={year} onOpenDescription={(goalId, title, desc, type) => setDescView({ goalId, title, description: desc, type })} />
       <MonthlyOverviewTable year={year} />
-      <DynamicMonthGoalsTable year={year} />
+      <DynamicMonthGoalsTable year={year} onOpenDescription={(goalId, title, desc, type) => setDescView({ goalId, title, description: desc, type })} />
     </div>
   );
 }
