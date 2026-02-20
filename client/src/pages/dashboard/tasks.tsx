@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { format, addDays, subDays, startOfMonth, endOfMonth, eachDayOfInterval, getWeek, getYear } from "date-fns";
+import { format, addDays, subDays, startOfMonth, endOfMonth, eachDayOfInterval, getYear } from "date-fns";
 import { useTasks, useTasksByMonth, useTasksByYear, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/use-tasks";
 
 import { Button } from "@/components/ui/button";
@@ -91,28 +91,25 @@ export default function TasksPage() {
   });
 
   const weeklyData: { week: string; avg: number; taskCount: number; days: number }[] = [];
-  const weekMap = new Map<number, { total: number; count: number; taskCount: number; days: Set<string> }>();
-  daysInMonth.forEach(day => {
-    const dayStr = format(day, "yyyy-MM-dd");
-    const dayTasks = monthTasks?.filter(t => t.date === dayStr) || [];
-    const weekNum = getWeek(day, { weekStartsOn: 1 });
-    if (!weekMap.has(weekNum)) weekMap.set(weekNum, { total: 0, count: 0, taskCount: 0, days: new Set() });
-    const w = weekMap.get(weekNum)!;
-    w.days.add(dayStr);
-    dayTasks.forEach(t => {
-      w.total += (t.completionPercentage || 0);
-      w.count += 1;
+  for (let i = 0; i < daysInMonth.length; i += 7) {
+    const chunk = daysInMonth.slice(i, i + 7);
+    let total = 0, count = 0, taskCount = 0;
+    chunk.forEach(day => {
+      const dayStr = format(day, "yyyy-MM-dd");
+      const dayTasks = monthTasks?.filter(t => t.date === dayStr) || [];
+      dayTasks.forEach(t => {
+        total += (t.completionPercentage || 0);
+        count += 1;
+      });
+      taskCount += dayTasks.length;
     });
-    w.taskCount += dayTasks.length;
-  });
-  Array.from(weekMap.entries()).sort((a, b) => a[0] - b[0]).forEach(([weekNum, w]) => {
     weeklyData.push({
-      week: `Week ${weeklyData.length + 1}`,
-      avg: w.count > 0 ? Math.round(w.total / w.count) : 0,
-      taskCount: w.taskCount,
-      days: w.days.size,
+      week: `Week ${Math.floor(i / 7) + 1}`,
+      avg: count > 0 ? Math.round(total / count) : 0,
+      taskCount,
+      days: chunk.length,
     });
-  });
+  }
 
   const currentYear = getYear(analyticsMonth);
   const { data: yearTasks } = useTasksByYear(currentYear);
