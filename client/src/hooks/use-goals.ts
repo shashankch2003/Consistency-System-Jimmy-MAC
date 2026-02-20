@@ -1,66 +1,113 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, buildUrl } from "@shared/routes";
-import { insertGoalSchema } from "@shared/schema";
-import { z } from "zod";
+import { apiRequest } from "@/lib/queryClient";
 
-type InsertGoal = z.infer<typeof insertGoalSchema>;
-
-export function useGoals() {
+// Yearly Goals
+export function useYearlyGoals(year: number) {
   return useQuery({
-    queryKey: [api.goals.list.path],
+    queryKey: ['/api/yearly-goals', year],
     queryFn: async () => {
-      const res = await fetch(api.goals.list.path, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch goals");
-      return api.goals.list.responses[200].parse(await res.json());
+      const res = await fetch(`/api/yearly-goals?year=${year}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch yearly goals");
+      return await res.json();
     },
   });
 }
 
-export function useCreateGoal() {
+export function useCreateYearlyGoal() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: Omit<InsertGoal, "userId">) => {
-      const validated = api.goals.create.input.parse(data);
-      const res = await fetch(api.goals.create.path, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(validated),
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to create goal");
-      return api.goals.create.responses[201].parse(await res.json());
+    mutationFn: async (data: { year: number; goalName: string; description?: string; rating?: number }) => {
+      const res = await apiRequest("POST", "/api/yearly-goals", data);
+      return await res.json();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [api.goals.list.path] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/yearly-goals'] }),
   });
 }
 
-export function useUpdateGoal() {
+export function useUpdateYearlyGoal() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...data }: { id: number } & Partial<InsertGoal>) => {
-      const validated = api.goals.update.input.parse(data);
-      const url = buildUrl(api.goals.update.path, { id });
-      const res = await fetch(url, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(validated),
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to update goal");
-      return api.goals.update.responses[200].parse(await res.json());
+    mutationFn: async ({ id, ...data }: { id: number; goalName?: string; description?: string; rating?: number }) => {
+      const res = await apiRequest("PUT", `/api/yearly-goals/${id}`, data);
+      return await res.json();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [api.goals.list.path] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/yearly-goals'] }),
   });
 }
 
-export function useDeleteGoal() {
+export function useDeleteYearlyGoal() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
-      const url = buildUrl(api.goals.delete.path, { id });
-      const res = await fetch(url, { method: "DELETE", credentials: "include" });
-      if (!res.ok) throw new Error("Failed to delete goal");
+      await apiRequest("DELETE", `/api/yearly-goals/${id}`);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [api.goals.list.path] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/yearly-goals'] }),
+  });
+}
+
+// Monthly Overview Goals
+export function useMonthlyOverviewGoals(year: number) {
+  return useQuery({
+    queryKey: ['/api/monthly-overview-goals', year],
+    queryFn: async () => {
+      const res = await fetch(`/api/monthly-overview-goals?year=${year}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch monthly overview goals");
+      return await res.json();
+    },
+  });
+}
+
+export function useUpsertMonthlyOverviewGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { year: number; month: number; mainGoal: string; rating?: number }) => {
+      const res = await apiRequest("POST", "/api/monthly-overview-goals", data);
+      return await res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/monthly-overview-goals'] }),
+  });
+}
+
+// Monthly Dynamic Goals
+export function useMonthlyDynamicGoals(year: number, month: number) {
+  return useQuery({
+    queryKey: ['/api/monthly-dynamic-goals', year, month],
+    queryFn: async () => {
+      const res = await fetch(`/api/monthly-dynamic-goals?year=${year}&month=${month}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch monthly dynamic goals");
+      return await res.json();
+    },
+  });
+}
+
+export function useCreateMonthlyDynamicGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { year: number; month: number; title: string; description?: string; rating?: number; status?: string }) => {
+      const res = await apiRequest("POST", "/api/monthly-dynamic-goals", data);
+      return await res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/monthly-dynamic-goals'] }),
+  });
+}
+
+export function useUpdateMonthlyDynamicGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...data }: { id: number; title?: string; description?: string; rating?: number; status?: string }) => {
+      const res = await apiRequest("PUT", `/api/monthly-dynamic-goals/${id}`, data);
+      return await res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/monthly-dynamic-goals'] }),
+  });
+}
+
+export function useDeleteMonthlyDynamicGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/monthly-dynamic-goals/${id}`);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/monthly-dynamic-goals'] }),
   });
 }
