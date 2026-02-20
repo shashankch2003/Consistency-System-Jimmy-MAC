@@ -1,38 +1,164 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
+import { db } from "./db";
+import { eq, and } from "drizzle-orm";
+import {
+  goals, tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, payments,
+  type InsertGoal, type InsertTask, type InsertGoodHabit, type InsertGoodHabitEntry,
+  type InsertBadHabit, type InsertBadHabitEntry, type InsertHourlyEntry, type InsertPayment
+} from "@shared/schema";
+import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
 
-// modify the interface with any CRUD methods
-// you might need
+export interface IStorage extends IAuthStorage {
+  // Goals
+  getGoals(userId: string): Promise<typeof goals.$inferSelect[]>;
+  createGoal(goal: InsertGoal): Promise<typeof goals.$inferSelect>;
+  updateGoal(id: number, updates: Partial<InsertGoal>): Promise<typeof goals.$inferSelect>;
+  deleteGoal(id: number): Promise<void>;
 
-export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  // Tasks
+  getTasks(userId: string, date?: string): Promise<typeof tasks.$inferSelect[]>;
+  createTask(task: InsertTask): Promise<typeof tasks.$inferSelect>;
+  updateTask(id: number, updates: Partial<InsertTask>): Promise<typeof tasks.$inferSelect>;
+  deleteTask(id: number): Promise<void>;
+
+  // Good Habits
+  getGoodHabits(userId: string): Promise<typeof goodHabits.$inferSelect[]>;
+  createGoodHabit(habit: InsertGoodHabit): Promise<typeof goodHabits.$inferSelect>;
+  deleteGoodHabit(id: number): Promise<void>;
+  
+  getGoodHabitEntries(habitIds: number[], month?: string): Promise<typeof goodHabitEntries.$inferSelect[]>;
+  upsertGoodHabitEntry(entry: InsertGoodHabitEntry): Promise<typeof goodHabitEntries.$inferSelect>;
+
+  // Bad Habits
+  getBadHabits(userId: string): Promise<typeof badHabits.$inferSelect[]>;
+  createBadHabit(habit: InsertBadHabit): Promise<typeof badHabits.$inferSelect>;
+  deleteBadHabit(id: number): Promise<void>;
+  
+  getBadHabitEntries(habitIds: number[], month?: string): Promise<typeof badHabitEntries.$inferSelect[]>;
+  upsertBadHabitEntry(entry: InsertBadHabitEntry): Promise<typeof badHabitEntries.$inferSelect>;
+
+  // Hourly Entries
+  getHourlyEntries(userId: string, date?: string): Promise<typeof hourlyEntries.$inferSelect[]>;
+  upsertHourlyEntry(entry: InsertHourlyEntry): Promise<typeof hourlyEntries.$inferSelect>;
+
+  // Payments
+  createPayment(payment: InsertPayment): Promise<typeof payments.$inferSelect>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
+export class DatabaseStorage implements IStorage {
+  // Auth delegator
+  async getUser(id: string) { return authStorage.getUser(id); }
+  async upsertUser(user: any) { return authStorage.upsertUser(user); }
 
-  constructor() {
-    this.users = new Map();
+  async getGoals(userId: string) {
+    return await db.select().from(goals).where(eq(goals.userId, userId));
+  }
+  async createGoal(goal: InsertGoal) {
+    const [created] = await db.insert(goals).values(goal).returning();
+    return created;
+  }
+  async updateGoal(id: number, updates: Partial<InsertGoal>) {
+    const [updated] = await db.update(goals).set(updates).where(eq(goals.id, id)).returning();
+    return updated;
+  }
+  async deleteGoal(id: number) {
+    await db.delete(goals).where(eq(goals.id, id));
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async getTasks(userId: string, date?: string) {
+    let query = db.select().from(tasks).where(eq(tasks.userId, userId));
+    const allTasks = await query;
+    if (date) return allTasks.filter(t => t.date === date);
+    return allTasks;
+  }
+  async createTask(task: InsertTask) {
+    const [created] = await db.insert(tasks).values(task).returning();
+    return created;
+  }
+  async updateTask(id: number, updates: Partial<InsertTask>) {
+    const [updated] = await db.update(tasks).set(updates).where(eq(tasks.id, id)).returning();
+    return updated;
+  }
+  async deleteTask(id: number) {
+    await db.delete(tasks).where(eq(tasks.id, id));
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+  async getGoodHabits(userId: string) {
+    return await db.select().from(goodHabits).where(eq(goodHabits.userId, userId));
+  }
+  async createGoodHabit(habit: InsertGoodHabit) {
+    const [created] = await db.insert(goodHabits).values(habit).returning();
+    return created;
+  }
+  async deleteGoodHabit(id: number) {
+    await db.delete(goodHabitEntries).where(eq(goodHabitEntries.habitId, id));
+    await db.delete(goodHabits).where(eq(goodHabits.id, id));
+  }
+  
+  async getGoodHabitEntries(habitIds: number[], month?: string) {
+    if (habitIds.length === 0) return [];
+    const all = await db.select().from(goodHabitEntries);
+    let filtered = all.filter(e => habitIds.includes(e.habitId));
+    if (month) filtered = filtered.filter(e => e.date.startsWith(month));
+    return filtered;
+  }
+  async upsertGoodHabitEntry(entry: InsertGoodHabitEntry) {
+    const existing = await db.select().from(goodHabitEntries).where(and(eq(goodHabitEntries.habitId, entry.habitId), eq(goodHabitEntries.date, entry.date)));
+    if (existing.length > 0) {
+      const [updated] = await db.update(goodHabitEntries).set({ completed: entry.completed }).where(eq(goodHabitEntries.id, existing[0].id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(goodHabitEntries).values(entry).returning();
+    return created;
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async getBadHabits(userId: string) {
+    return await db.select().from(badHabits).where(eq(badHabits.userId, userId));
+  }
+  async createBadHabit(habit: InsertBadHabit) {
+    const [created] = await db.insert(badHabits).values(habit).returning();
+    return created;
+  }
+  async deleteBadHabit(id: number) {
+    await db.delete(badHabitEntries).where(eq(badHabitEntries.habitId, id));
+    await db.delete(badHabits).where(eq(badHabits.id, id));
+  }
+  
+  async getBadHabitEntries(habitIds: number[], month?: string) {
+    if (habitIds.length === 0) return [];
+    const all = await db.select().from(badHabitEntries);
+    let filtered = all.filter(e => habitIds.includes(e.habitId));
+    if (month) filtered = filtered.filter(e => e.date.startsWith(month));
+    return filtered;
+  }
+  async upsertBadHabitEntry(entry: InsertBadHabitEntry) {
+    const existing = await db.select().from(badHabitEntries).where(and(eq(badHabitEntries.habitId, entry.habitId), eq(badHabitEntries.date, entry.date)));
+    if (existing.length > 0) {
+      const [updated] = await db.update(badHabitEntries).set({ occurred: entry.occurred }).where(eq(badHabitEntries.id, existing[0].id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(badHabitEntries).values(entry).returning();
+    return created;
+  }
+
+  async getHourlyEntries(userId: string, date?: string) {
+    const all = await db.select().from(hourlyEntries).where(eq(hourlyEntries.userId, userId));
+    if (date) return all.filter(e => e.date === date);
+    return all;
+  }
+  async upsertHourlyEntry(entry: InsertHourlyEntry) {
+    const existing = await db.select().from(hourlyEntries).where(and(eq(hourlyEntries.userId, entry.userId), eq(hourlyEntries.date, entry.date), eq(hourlyEntries.hour, entry.hour)));
+    if (existing.length > 0) {
+      const [updated] = await db.update(hourlyEntries).set({ taskDescription: entry.taskDescription, productivityScore: entry.productivityScore }).where(eq(hourlyEntries.id, existing[0].id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(hourlyEntries).values(entry).returning();
+    return created;
+  }
+
+  async createPayment(payment: InsertPayment) {
+    const [created] = await db.insert(payments).values(payment).returning();
+    return created;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
