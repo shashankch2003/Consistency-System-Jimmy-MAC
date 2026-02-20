@@ -200,6 +200,34 @@ export async function registerRoutes(
     } catch (e: any) { res.status(400).json({ message: e.message }); }
   });
 
+  // Task Bank
+  app.get(api.taskBank.list.path, isAuthenticated, async (req: any, res) => {
+    const items = await storage.getTaskBankItems(req.user.claims.sub);
+    res.json(items);
+  });
+  app.post(api.taskBank.create.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const input = api.taskBank.create.input.parse(req.body);
+      const item = await storage.createTaskBankItem({ ...input, userId: req.user.claims.sub });
+      res.status(201).json(item);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+  app.delete(api.taskBank.delete.path, isAuthenticated, async (req: any, res) => {
+    await storage.deleteTaskBankItem(parseInt(req.params.id), req.user.claims.sub);
+    res.status(204).end();
+  });
+  app.post(api.taskBank.assign.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const input = api.taskBank.assign.input.parse(req.body);
+      const items = await storage.getTaskBankItems(req.user.claims.sub);
+      const bankItem = items.find(i => i.id === parseInt(req.params.id));
+      if (!bankItem) return res.status(404).json({ message: "Not found" });
+      const task = await storage.createTask({ userId: req.user.claims.sub, title: bankItem.title, date: input.date });
+      await storage.deleteTaskBankItem(bankItem.id);
+      res.status(201).json(task);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
   // Payments
   app.post(api.payments.createOrder.path, isAuthenticated, async (req: any, res) => {
     const orderId = `order_${crypto.randomBytes(8).toString('hex')}`;

@@ -104,6 +104,13 @@ export const hourlyEntries = pgTable("hourly_entries", {
   productivityScore: integer("productivity_score").notNull(),
 });
 
+export const taskBankItems = pgTable("task_bank_items", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  title: text("title").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
 export const insertYearlyGoalSchema = createInsertSchema(yearlyGoals).omit({ id: true, createdAt: true });
 export const insertMonthlyOverviewGoalSchema = createInsertSchema(monthlyOverviewGoals).omit({ id: true, createdAt: true });
@@ -114,3 +121,4 @@ export const insertGoodHabitEntrySchema = createInsertSchema(goodHabitEntries).o
 export const insertBadHabitSchema = createInsertSchema(badHabits).omit({ id: true });
 export const insertBadHabitEntrySchema = createInsertSchema(badHabitEntries).omit({ id: true });
 export const insertHourlyEntrySchema = createInsertSchema(hourlyEntries).omit({ id: true });
+export const insertTaskBankItemSchema = createInsertSchema(taskBankItems).omit({ id: true, createdAt: true });

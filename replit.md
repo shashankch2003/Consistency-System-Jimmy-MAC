@@ -48,6 +48,7 @@ The frontend lives in `client/src/` with pages under `client/src/pages/`, reusab
   - `monthly_overview_goals` — Monthly goal overview with ratings
   - `monthly_dynamic_goals` — Current month goals with status tracking
   - `tasks` — Daily task management
+  - `task_bank_items` — Quick-capture task ideas (unscheduled, assignable to dates)
   - `good_habits` / `good_habit_entries` — Good habit tracking with daily entries
   - `bad_habits` / `bad_habit_entries` — Bad habit tracking with daily entries
   - `hourly_entries` — Hourly time tracking

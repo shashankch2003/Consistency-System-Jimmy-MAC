@@ -2,8 +2,8 @@ import { z } from 'zod';
 import { 
   insertPaymentSchema, insertYearlyGoalSchema, insertMonthlyOverviewGoalSchema, insertMonthlyDynamicGoalSchema,
   insertTaskSchema, insertGoodHabitSchema, insertGoodHabitEntrySchema, 
-  insertBadHabitSchema, insertBadHabitEntrySchema, insertHourlyEntrySchema,
-  payments, yearlyGoals, monthlyOverviewGoals, monthlyDynamicGoals, tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries 
+  insertBadHabitSchema, insertBadHabitEntrySchema, insertHourlyEntrySchema, insertTaskBankItemSchema,
+  payments, yearlyGoals, monthlyOverviewGoals, monthlyDynamicGoals, tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, taskBankItems 
 } from './schema';
 
 export const errorSchemas = {
@@ -152,6 +152,26 @@ export const api = {
       method: 'POST' as const, path: '/api/hourly-entries' as const,
       input: insertHourlyEntrySchema.omit({ userId: true }),
       responses: { 200: z.custom<typeof hourlyEntries.$inferSelect>(), 400: errorSchemas.validation }
+    }
+  },
+  taskBank: {
+    list: {
+      method: 'GET' as const, path: '/api/task-bank' as const,
+      responses: { 200: z.array(z.custom<typeof taskBankItems.$inferSelect>()) }
+    },
+    create: {
+      method: 'POST' as const, path: '/api/task-bank' as const,
+      input: insertTaskBankItemSchema.omit({ userId: true }),
+      responses: { 201: z.custom<typeof taskBankItems.$inferSelect>(), 400: errorSchemas.validation }
+    },
+    delete: {
+      method: 'DELETE' as const, path: '/api/task-bank/:id' as const,
+      responses: { 204: z.void(), 404: errorSchemas.notFound }
+    },
+    assign: {
+      method: 'POST' as const, path: '/api/task-bank/:id/assign' as const,
+      input: z.object({ date: z.string() }),
+      responses: { 201: z.custom<typeof tasks.$inferSelect>(), 400: errorSchemas.validation }
     }
   },
   payments: {

@@ -2,7 +2,7 @@ import { db } from "./db";
 import { eq, and, asc, like } from "drizzle-orm";
 import {
   yearlyGoals, monthlyOverviewGoals, monthlyDynamicGoals,
-  tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, payments,
+  tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, payments, taskBankItems,
 } from "@shared/schema";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
 
@@ -16,6 +16,7 @@ type InsertBadHabit = typeof badHabits.$inferInsert;
 type InsertBadHabitEntry = typeof badHabitEntries.$inferInsert;
 type InsertHourlyEntry = typeof hourlyEntries.$inferInsert;
 type InsertPayment = typeof payments.$inferInsert;
+type InsertTaskBankItem = typeof taskBankItems.$inferInsert;
 
 export interface IStorage extends IAuthStorage {
   getYearlyGoals(userId: string, year?: number): Promise<(typeof yearlyGoals.$inferSelect)[]>;
@@ -55,6 +56,10 @@ export interface IStorage extends IAuthStorage {
   upsertHourlyEntry(entry: InsertHourlyEntry): Promise<typeof hourlyEntries.$inferSelect>;
 
   createPayment(payment: InsertPayment): Promise<typeof payments.$inferSelect>;
+
+  getTaskBankItems(userId: string): Promise<(typeof taskBankItems.$inferSelect)[]>;
+  createTaskBankItem(item: InsertTaskBankItem): Promise<typeof taskBankItems.$inferSelect>;
+  deleteTaskBankItem(id: number, userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -221,6 +226,17 @@ export class DatabaseStorage implements IStorage {
   async createPayment(payment: InsertPayment) {
     const [created] = await db.insert(payments).values(payment).returning();
     return created;
+  }
+
+  async getTaskBankItems(userId: string) {
+    return await db.select().from(taskBankItems).where(eq(taskBankItems.userId, userId)).orderBy(asc(taskBankItems.id));
+  }
+  async createTaskBankItem(item: InsertTaskBankItem) {
+    const [created] = await db.insert(taskBankItems).values(item).returning();
+    return created;
+  }
+  async deleteTaskBankItem(id: number, userId: string) {
+    await db.delete(taskBankItems).where(and(eq(taskBankItems.id, id), eq(taskBankItems.userId, userId)));
   }
 }
 

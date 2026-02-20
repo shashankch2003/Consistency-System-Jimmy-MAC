@@ -11,6 +11,7 @@ import TasksPage from "@/pages/dashboard/tasks";
 import GoodHabitsPage from "@/pages/dashboard/good-habits";
 import BadHabitsPage from "@/pages/dashboard/bad-habits";
 import HourlyPage from "@/pages/dashboard/hourly";
+import TaskBankPage from "@/pages/dashboard/task-bank";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -32,6 +33,11 @@ function Router() {
       <Route path="/dashboard/tasks">
         <DashboardLayout>
           <TasksPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/task-bank">
+        <DashboardLayout>
+          <TaskBankPage />
         </DashboardLayout>
       </Route>
       <Route path="/dashboard/good-habits">
