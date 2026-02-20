@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 import {
   yearlyGoals, monthlyOverviewGoals, monthlyDynamicGoals,
   tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, payments,
@@ -60,9 +60,9 @@ export class DatabaseStorage implements IStorage {
 
   async getYearlyGoals(userId: string, year?: number) {
     if (year) {
-      return await db.select().from(yearlyGoals).where(and(eq(yearlyGoals.userId, userId), eq(yearlyGoals.year, year)));
+      return await db.select().from(yearlyGoals).where(and(eq(yearlyGoals.userId, userId), eq(yearlyGoals.year, year))).orderBy(asc(yearlyGoals.id));
     }
-    return await db.select().from(yearlyGoals).where(eq(yearlyGoals.userId, userId));
+    return await db.select().from(yearlyGoals).where(eq(yearlyGoals.userId, userId)).orderBy(asc(yearlyGoals.id));
   }
   async createYearlyGoal(goal: InsertYearlyGoal) {
     const [created] = await db.insert(yearlyGoals).values(goal).returning();
@@ -78,16 +78,20 @@ export class DatabaseStorage implements IStorage {
 
   async getMonthlyOverviewGoals(userId: string, year?: number) {
     if (year) {
-      return await db.select().from(monthlyOverviewGoals).where(and(eq(monthlyOverviewGoals.userId, userId), eq(monthlyOverviewGoals.year, year)));
+      return await db.select().from(monthlyOverviewGoals).where(and(eq(monthlyOverviewGoals.userId, userId), eq(monthlyOverviewGoals.year, year))).orderBy(asc(monthlyOverviewGoals.month));
     }
-    return await db.select().from(monthlyOverviewGoals).where(eq(monthlyOverviewGoals.userId, userId));
+    return await db.select().from(monthlyOverviewGoals).where(eq(monthlyOverviewGoals.userId, userId)).orderBy(asc(monthlyOverviewGoals.month));
   }
   async upsertMonthlyOverviewGoal(goal: InsertMonthlyOverviewGoal) {
     const existing = await db.select().from(monthlyOverviewGoals).where(
       and(eq(monthlyOverviewGoals.userId, goal.userId), eq(monthlyOverviewGoals.year, goal.year), eq(monthlyOverviewGoals.month, goal.month))
     );
     if (existing.length > 0) {
-      const [updated] = await db.update(monthlyOverviewGoals).set({ mainGoal: goal.mainGoal, rating: goal.rating }).where(eq(monthlyOverviewGoals.id, existing[0].id)).returning();
+      const updates: Record<string, any> = {};
+      if (goal.mainGoal !== undefined) updates.mainGoal = goal.mainGoal;
+      if (goal.rating !== undefined) updates.rating = goal.rating;
+      if (goal.description !== undefined) updates.description = goal.description;
+      const [updated] = await db.update(monthlyOverviewGoals).set(updates).where(eq(monthlyOverviewGoals.id, existing[0].id)).returning();
       return updated;
     }
     const [created] = await db.insert(monthlyOverviewGoals).values(goal).returning();
@@ -98,7 +102,7 @@ export class DatabaseStorage implements IStorage {
     const conditions = [eq(monthlyDynamicGoals.userId, userId)];
     if (year) conditions.push(eq(monthlyDynamicGoals.year, year));
     if (month) conditions.push(eq(monthlyDynamicGoals.month, month));
-    return await db.select().from(monthlyDynamicGoals).where(and(...conditions));
+    return await db.select().from(monthlyDynamicGoals).where(and(...conditions)).orderBy(asc(monthlyDynamicGoals.id));
   }
   async createMonthlyDynamicGoal(goal: InsertMonthlyDynamicGoal) {
     const [created] = await db.insert(monthlyDynamicGoals).values(goal).returning();

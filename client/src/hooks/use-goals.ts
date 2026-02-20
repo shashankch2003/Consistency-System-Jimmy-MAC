@@ -60,7 +60,7 @@ export function useMonthlyOverviewGoals(year: number) {
 export function useUpsertMonthlyOverviewGoal() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { year: number; month: number; mainGoal: string; rating?: number }) => {
+    mutationFn: async (data: { year: number; month: number; mainGoal: string; description?: string; rating?: number }) => {
       const res = await apiRequest("POST", "/api/monthly-overview-goals", data);
       return await res.json();
     },

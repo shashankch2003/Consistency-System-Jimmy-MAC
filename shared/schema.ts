@@ -30,6 +30,7 @@ export const monthlyOverviewGoals = pgTable("monthly_overview_goals", {
   year: integer("year").notNull(),
   month: integer("month").notNull(), // 1-12
   mainGoal: text("main_goal").notNull(),
+  description: text("description"),
   rating: integer("rating").default(0), // 0-10
   createdAt: timestamp("created_at").defaultNow(),
 });

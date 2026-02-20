@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { 
   useYearlyGoals, useCreateYearlyGoal, useUpdateYearlyGoal, useDeleteYearlyGoal,
   useMonthlyOverviewGoals, useUpsertMonthlyOverviewGoal,
@@ -15,10 +15,10 @@ import { Plus, Trash2, ChevronLeft, ChevronRight, Target, Calendar, TrendingUp, 
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-function RatingSelect({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+function RatingSelect({ value, onChange, testId }: { value: number; onChange: (v: number) => void; testId?: string }) {
   return (
     <Select value={String(value)} onValueChange={(v) => onChange(Number(v))}>
-      <SelectTrigger className="w-20" data-testid="select-rating">
+      <SelectTrigger className="w-20" data-testid={testId || "select-rating"}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -61,6 +61,34 @@ function AvgBadge({ label, avg, total }: { label: string; avg: number; total: nu
         <span className="text-xs text-muted-foreground">({total} goals)</span>
       </div>
     </div>
+  );
+}
+
+function EditableInput({ value, onSave, placeholder, testId }: { value: string; onSave: (v: string) => void; placeholder?: string; testId?: string }) {
+  const [localValue, setLocalValue] = useState(value);
+  const [isFocused, setIsFocused] = useState(false);
+
+  if (!isFocused && localValue !== value) {
+    setLocalValue(value);
+  }
+
+  const handleBlur = useCallback(() => {
+    setIsFocused(false);
+    if (localValue !== value) {
+      onSave(localValue);
+    }
+  }, [localValue, value, onSave]);
+
+  return (
+    <Input
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      onFocus={() => setIsFocused(true)}
+      onBlur={handleBlur}
+      placeholder={placeholder}
+      className="bg-transparent border-0 p-0 h-auto focus-visible:ring-1"
+      data-testid={testId}
+    />
   );
 }
 
@@ -134,7 +162,9 @@ function YearSelector({ year, setYear }: { year: number; setYear: (y: number) =>
   );
 }
 
-function YearlyGoalsTable({ year, onOpenDescription }: { year: number; onOpenDescription: (goalId: number, title: string, description: string, type: "yearly" | "dynamic") => void }) {
+type DescViewType = "yearly" | "dynamic" | "overview";
+
+function YearlyGoalsTable({ year, onOpenDescription }: { year: number; onOpenDescription: (goalId: number, title: string, description: string, type: DescViewType) => void }) {
   const { data: goals, isLoading } = useYearlyGoals(year);
   const createGoal = useCreateYearlyGoal();
   const updateGoal = useUpdateYearlyGoal();
@@ -149,7 +179,7 @@ function YearlyGoalsTable({ year, onOpenDescription }: { year: number; onOpenDes
 
   if (isLoading) return <Skeleton className="h-40 w-full rounded-xl" />;
 
-  const avgRating = goals?.length ? Math.round(goals.reduce((acc: number, g: any) => acc + (g.rating || 0), 0) / goals.length * 10) : 0;
+  const avgRating = goals?.length ? Math.round(goals.reduce((acc: number, g: any) => acc + (g.rating ?? 0), 0) / goals.length * 10) : 0;
 
   return (
     <Card className="border-border/50">
@@ -185,15 +215,11 @@ function YearlyGoalsTable({ year, onOpenDescription }: { year: number; onOpenDes
             {goals?.map((goal: any) => (
               <TableRow key={goal.id} className="border-border/30">
                 <TableCell>
-                  <Input 
-                    defaultValue={goal.goalName} 
-                    className="bg-transparent border-0 p-0 h-auto focus-visible:ring-1"
-                    onBlur={(e) => {
-                      if (e.target.value !== goal.goalName) {
-                        updateGoal.mutate({ id: goal.id, goalName: e.target.value });
-                      }
-                    }}
-                    data-testid={`input-yearly-goal-name-${goal.id}`}
+                  <EditableInput
+                    key={`name-${goal.id}-${goal.goalName}`}
+                    value={goal.goalName}
+                    onSave={(v) => updateGoal.mutate({ id: goal.id, goalName: v })}
+                    testId={`input-yearly-goal-name-${goal.id}`}
                   />
                 </TableCell>
                 <TableCell>
@@ -209,7 +235,7 @@ function YearlyGoalsTable({ year, onOpenDescription }: { year: number; onOpenDes
                   </button>
                 </TableCell>
                 <TableCell>
-                  <RatingSelect value={goal.rating ?? 0} onChange={(r) => updateGoal.mutate({ id: goal.id, rating: r })} />
+                  <RatingSelect value={goal.rating ?? 0} onChange={(r) => updateGoal.mutate({ id: goal.id, rating: r })} testId={`select-rating-yearly-${goal.id}`} />
                 </TableCell>
                 <TableCell className="font-medium">{(goal.rating ?? 0) * 10}%</TableCell>
                 <TableCell><ProgressBar rating={goal.rating ?? 0} /></TableCell>
@@ -245,7 +271,7 @@ function YearlyGoalsTable({ year, onOpenDescription }: { year: number; onOpenDes
   );
 }
 
-function MonthlyOverviewTable({ year }: { year: number }) {
+function MonthlyOverviewTable({ year, onOpenDescription }: { year: number; onOpenDescription: (goalId: number, title: string, description: string, type: DescViewType, month: number, mainGoal: string) => void }) {
   const { data: goals, isLoading } = useMonthlyOverviewGoals(year);
   const upsertGoal = useUpsertMonthlyOverviewGoal();
 
@@ -282,6 +308,7 @@ function MonthlyOverviewTable({ year }: { year: number }) {
             <TableRow className="border-border/50">
               <TableHead className="w-[120px]">Month</TableHead>
               <TableHead className="min-w-[200px]">Main Monthly Goal</TableHead>
+              <TableHead className="w-[200px]">Description</TableHead>
               <TableHead className="w-[100px]">Rating</TableHead>
               <TableHead className="w-[80px]">%</TableHead>
               <TableHead className="min-w-[180px]">Progress</TableHead>
@@ -295,24 +322,41 @@ function MonthlyOverviewTable({ year }: { year: number }) {
                 <TableRow key={month} className="border-border/30">
                   <TableCell className="font-medium">{monthName}</TableCell>
                   <TableCell>
-                    <Input 
-                      defaultValue={goal?.mainGoal || ""} 
-                      placeholder="Enter monthly goal..."
-                      className="bg-transparent border-0 p-0 h-auto focus-visible:ring-1"
-                      onBlur={(e) => {
-                        if (e.target.value.trim() && e.target.value !== (goal?.mainGoal || "")) {
-                          upsertGoal.mutate({ year, month, mainGoal: e.target.value, rating: goal?.rating ?? 0 });
+                    <EditableInput
+                      key={`overview-${month}-${goal?.mainGoal || ""}`}
+                      value={goal?.mainGoal || ""}
+                      onSave={(v) => {
+                        if (v.trim()) {
+                          upsertGoal.mutate({ year, month, mainGoal: v, rating: goal?.rating ?? 0 });
                         }
                       }}
-                      data-testid={`input-monthly-goal-${month}`}
+                      placeholder="Enter monthly goal..."
+                      testId={`input-monthly-goal-${month}`}
                     />
+                  </TableCell>
+                  <TableCell>
+                    {goal ? (
+                      <button
+                        onClick={() => onOpenDescription(goal.id, `${monthName} - ${goal.mainGoal}`, goal.description || "", "overview", month, goal.mainGoal)}
+                        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full text-left group"
+                        data-testid={`button-open-desc-overview-${month}`}
+                      >
+                        <FileText className="w-3.5 h-3.5 shrink-0 opacity-50 group-hover:opacity-100" />
+                        <span className="truncate max-w-[150px]">
+                          {goal.description ? goal.description : "Add description..."}
+                        </span>
+                      </button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground/50">Set a goal first</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <RatingSelect 
                       value={goal?.rating ?? 0} 
                       onChange={(r) => {
                         upsertGoal.mutate({ year, month, mainGoal: goal?.mainGoal || "Untitled Goal", rating: r });
-                      }} 
+                      }}
+                      testId={`select-rating-overview-${month}`}
                     />
                   </TableCell>
                   <TableCell className="font-medium">{(goal?.rating ?? 0) * 10}%</TableCell>
@@ -327,7 +371,7 @@ function MonthlyOverviewTable({ year }: { year: number }) {
   );
 }
 
-function DynamicMonthGoalsTable({ year, onOpenDescription }: { year: number; onOpenDescription: (goalId: number, title: string, description: string, type: "yearly" | "dynamic") => void }) {
+function DynamicMonthGoalsTable({ year, onOpenDescription }: { year: number; onOpenDescription: (goalId: number, title: string, description: string, type: DescViewType) => void }) {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const { data: goals, isLoading } = useMonthlyDynamicGoals(year, selectedMonth);
   const createGoal = useCreateMonthlyDynamicGoal();
@@ -391,15 +435,11 @@ function DynamicMonthGoalsTable({ year, onOpenDescription }: { year: number; onO
             {goals?.map((goal: any) => (
               <TableRow key={goal.id} className="border-border/30">
                 <TableCell>
-                  <Input 
-                    defaultValue={goal.title} 
-                    className="bg-transparent border-0 p-0 h-auto focus-visible:ring-1"
-                    onBlur={(e) => {
-                      if (e.target.value !== goal.title) {
-                        updateGoal.mutate({ id: goal.id, title: e.target.value });
-                      }
-                    }}
-                    data-testid={`input-dynamic-goal-title-${goal.id}`}
+                  <EditableInput
+                    key={`dynamic-${goal.id}-${goal.title}`}
+                    value={goal.title}
+                    onSave={(v) => updateGoal.mutate({ id: goal.id, title: v })}
+                    testId={`input-dynamic-goal-title-${goal.id}`}
                   />
                 </TableCell>
                 <TableCell>
@@ -415,7 +455,7 @@ function DynamicMonthGoalsTable({ year, onOpenDescription }: { year: number; onO
                   </button>
                 </TableCell>
                 <TableCell>
-                  <RatingSelect value={goal.rating ?? 0} onChange={(r) => updateGoal.mutate({ id: goal.id, rating: r })} />
+                  <RatingSelect value={goal.rating ?? 0} onChange={(r) => updateGoal.mutate({ id: goal.id, rating: r })} testId={`select-rating-dynamic-${goal.id}`} />
                 </TableCell>
                 <TableCell className="font-medium">{(goal.rating ?? 0) * 10}%</TableCell>
                 <TableCell><ProgressBar rating={goal.rating ?? 0} /></TableCell>
@@ -460,10 +500,11 @@ function DynamicMonthGoalsTable({ year, onOpenDescription }: { year: number; onO
 
 export default function GoalsPage() {
   const [year, setYear] = useState(new Date().getFullYear());
-  const [descView, setDescView] = useState<{ goalId: number; title: string; description: string; type: "yearly" | "dynamic" } | null>(null);
+  const [descView, setDescView] = useState<{ goalId: number; title: string; description: string; type: DescViewType; month?: number; mainGoal?: string } | null>(null);
 
   const updateYearlyGoal = useUpdateYearlyGoal();
   const updateDynamicGoal = useUpdateMonthlyDynamicGoal();
+  const upsertOverviewGoal = useUpsertMonthlyOverviewGoal();
 
   if (descView) {
     return (
@@ -473,8 +514,10 @@ export default function GoalsPage() {
         onSave={(desc) => {
           if (descView.type === "yearly") {
             updateYearlyGoal.mutate({ id: descView.goalId, description: desc });
-          } else {
+          } else if (descView.type === "dynamic") {
             updateDynamicGoal.mutate({ id: descView.goalId, description: desc });
+          } else if (descView.type === "overview" && descView.month) {
+            upsertOverviewGoal.mutate({ year, month: descView.month, mainGoal: descView.mainGoal || "Untitled Goal", description: desc });
           }
         }}
         onBack={() => setDescView(null)}
@@ -493,7 +536,7 @@ export default function GoalsPage() {
       </div>
 
       <YearlyGoalsTable year={year} onOpenDescription={(goalId, title, desc, type) => setDescView({ goalId, title, description: desc, type })} />
-      <MonthlyOverviewTable year={year} />
+      <MonthlyOverviewTable year={year} onOpenDescription={(goalId, title, desc, type, month, mainGoal) => setDescView({ goalId, title, description: desc, type, month, mainGoal })} />
       <DynamicMonthGoalsTable year={year} onOpenDescription={(goalId, title, desc, type) => setDescView({ goalId, title, description: desc, type })} />
     </div>
   );
