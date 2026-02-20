@@ -70,7 +70,7 @@ export const api = {
   tasks: {
     list: {
       method: 'GET' as const, path: '/api/tasks' as const,
-      input: z.object({ date: z.string().optional() }).optional(),
+      input: z.object({ date: z.string().optional(), month: z.string().optional(), year: z.coerce.number().optional() }).optional(),
       responses: { 200: z.array(z.custom<typeof tasks.$inferSelect>()) }
     },
     create: {

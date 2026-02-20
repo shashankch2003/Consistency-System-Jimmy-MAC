@@ -20,6 +20,32 @@ export function useTasks(date?: string) {
   });
 }
 
+export function useTasksByMonth(month?: string) {
+  return useQuery({
+    queryKey: [api.tasks.list.path, "month", month],
+    queryFn: async () => {
+      const url = `${api.tasks.list.path}?month=${month}`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch tasks");
+      return api.tasks.list.responses[200].parse(await res.json());
+    },
+    enabled: !!month,
+  });
+}
+
+export function useTasksByYear(year?: number) {
+  return useQuery({
+    queryKey: [api.tasks.list.path, "year", year],
+    queryFn: async () => {
+      const url = `${api.tasks.list.path}?year=${year}`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch tasks");
+      return api.tasks.list.responses[200].parse(await res.json());
+    },
+    enabled: !!year,
+  });
+}
+
 export function useCreateTask() {
   const queryClient = useQueryClient();
   return useMutation({

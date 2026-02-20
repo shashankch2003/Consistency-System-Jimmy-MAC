@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, like } from "drizzle-orm";
 import {
   yearlyGoals, monthlyOverviewGoals, monthlyDynamicGoals,
   tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, payments,
@@ -32,6 +32,8 @@ export interface IStorage extends IAuthStorage {
   deleteMonthlyDynamicGoal(id: number): Promise<void>;
 
   getTasks(userId: string, date?: string): Promise<(typeof tasks.$inferSelect)[]>;
+  getTasksByMonth(userId: string, month: string): Promise<(typeof tasks.$inferSelect)[]>;
+  getTasksByYear(userId: string, year: number): Promise<(typeof tasks.$inferSelect)[]>;
   createTask(task: InsertTask): Promise<typeof tasks.$inferSelect>;
   updateTask(id: number, updates: Partial<InsertTask>): Promise<typeof tasks.$inferSelect>;
   deleteTask(id: number): Promise<void>;
@@ -118,9 +120,15 @@ export class DatabaseStorage implements IStorage {
 
   async getTasks(userId: string, date?: string) {
     if (date) {
-      return await db.select().from(tasks).where(and(eq(tasks.userId, userId), eq(tasks.date, date)));
+      return await db.select().from(tasks).where(and(eq(tasks.userId, userId), eq(tasks.date, date))).orderBy(asc(tasks.id));
     }
-    return await db.select().from(tasks).where(eq(tasks.userId, userId));
+    return await db.select().from(tasks).where(eq(tasks.userId, userId)).orderBy(asc(tasks.id));
+  }
+  async getTasksByMonth(userId: string, month: string) {
+    return await db.select().from(tasks).where(and(eq(tasks.userId, userId), like(tasks.date, `${month}%`))).orderBy(asc(tasks.date), asc(tasks.id));
+  }
+  async getTasksByYear(userId: string, year: number) {
+    return await db.select().from(tasks).where(and(eq(tasks.userId, userId), like(tasks.date, `${year}-%`))).orderBy(asc(tasks.date), asc(tasks.id));
   }
   async createTask(task: InsertTask) {
     const [created] = await db.insert(tasks).values(task).returning();

@@ -82,8 +82,18 @@ export async function registerRoutes(
   // Tasks
   app.get(api.tasks.list.path, isAuthenticated, async (req: any, res) => {
     const date = req.query.date as string | undefined;
-    const tasks = await storage.getTasks(req.user.claims.sub, date);
-    res.json(tasks);
+    const month = req.query.month as string | undefined;
+    const year = req.query.year as string | undefined;
+    if (year) {
+      const tasks = await storage.getTasksByYear(req.user.claims.sub, parseInt(year));
+      res.json(tasks);
+    } else if (month) {
+      const tasks = await storage.getTasksByMonth(req.user.claims.sub, month);
+      res.json(tasks);
+    } else {
+      const tasks = await storage.getTasks(req.user.claims.sub, date);
+      res.json(tasks);
+    }
   });
   app.post(api.tasks.create.path, isAuthenticated, async (req: any, res) => {
     try {
