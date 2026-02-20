@@ -15,7 +15,7 @@ export default function GoodHabitsPage() {
   const today = new Date();
   const daysInMonth = getDaysInMonth(currentMonth);
   const isCurrentMonthView = isSameMonth(currentMonth, today);
-  const daysPassed = isCurrentMonthView ? today.getDate() : daysInMonth;
+  const daysPassed = daysInMonth;
 
   const monthStr = format(currentMonth, "yyyy-MM");
 
@@ -76,10 +76,6 @@ export default function GoodHabitsPage() {
     const dailyData = days.map(day => {
       const dateStr = format(day, "yyyy-MM-dd");
       const dayNum = parseInt(format(day, "d"));
-      const isFuture = isCurrentMonthView && dayNum > today.getDate();
-      if (isFuture) {
-        return { day: dayNum, completed: 0, total: habits.length, rate: 0, future: true };
-      }
       const dayCompleted = habits.filter(h =>
         completedEntries.some(e => e.habitId === h.id && e.date === dateStr)
       ).length;
@@ -88,7 +84,6 @@ export default function GoodHabitsPage() {
         completed: dayCompleted,
         total: habits.length,
         rate: habits.length > 0 ? Math.round((dayCompleted / habits.length) * 100) : 0,
-        future: false,
       };
     });
 
@@ -96,11 +91,7 @@ export default function GoodHabitsPage() {
     let weekNum = 1;
     for (let i = 0; i < days.length; i += 7) {
       const weekDays = days.slice(i, Math.min(i + 7, days.length));
-      const activeDays = weekDays.filter(d => {
-        if (!isCurrentMonthView) return true;
-        const dn = parseInt(format(d, "d"));
-        return dn <= today.getDate();
-      });
+      const activeDays = weekDays;
       let weekCompleted = 0;
       let weekTotal = 0;
       activeDays.forEach(d => {
@@ -120,7 +111,7 @@ export default function GoodHabitsPage() {
     }
 
     return { perHabit, overallRate, overallRemaining, totalCompleted, totalPossible, bestHabit, dailyData, weeklyData };
-  }, [habits, entries, days, daysPassed, currentMonth, isCurrentMonthView]);
+  }, [habits, entries, days, daysPassed, currentMonth]);
 
   return (
     <div className="p-8 max-w-[100vw] overflow-x-auto space-y-8">
@@ -258,7 +249,7 @@ export default function GoodHabitsPage() {
                 <Award className="w-5 h-5 text-blue-400" />
                 Done vs Not Done — Per Habit
               </h3>
-              <p className="text-sm text-muted-foreground mb-4">Days completed out of {daysPassed} {isCurrentMonthView ? "days so far" : "days"}</p>
+              <p className="text-sm text-muted-foreground mb-4">Days completed out of {daysPassed} days in the month</p>
               <div className="space-y-3 max-h-[300px] overflow-y-auto" data-testid="chart-done-vs-not-done">
                 {analytics.perHabit.map(h => (
                   <div key={h.id} className="space-y-1" data-testid={`row-done-not-done-${h.id}`}>
@@ -294,7 +285,7 @@ export default function GoodHabitsPage() {
             <p className="text-sm text-muted-foreground mb-4">What % of habits were completed each day this month</p>
             <div className="h-[250px]" data-testid="chart-daily-completion">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={analytics.dailyData.filter(d => !d.future)} margin={{ top: 5, right: 20, bottom: 5 }}>
+                <BarChart data={analytics.dailyData} margin={{ top: 5, right: 20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis dataKey="day" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
                   <YAxis domain={[0, 100]} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} tickFormatter={v => `${v}%`} />
