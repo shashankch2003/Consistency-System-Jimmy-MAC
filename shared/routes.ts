@@ -145,7 +145,7 @@ export const api = {
   hourlyEntries: {
     list: {
       method: 'GET' as const, path: '/api/hourly-entries' as const,
-      input: z.object({ date: z.string().optional() }).optional(),
+      input: z.object({ date: z.string().optional(), month: z.string().optional() }).optional(),
       responses: { 200: z.array(z.custom<typeof hourlyEntries.$inferSelect>()) }
     },
     createOrUpdate: {

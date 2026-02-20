@@ -51,6 +51,7 @@ export interface IStorage extends IAuthStorage {
   upsertBadHabitEntry(entry: InsertBadHabitEntry): Promise<typeof badHabitEntries.$inferSelect>;
 
   getHourlyEntries(userId: string, date?: string): Promise<(typeof hourlyEntries.$inferSelect)[]>;
+  getHourlyEntriesByMonth(userId: string, month: string): Promise<(typeof hourlyEntries.$inferSelect)[]>;
   upsertHourlyEntry(entry: InsertHourlyEntry): Promise<typeof hourlyEntries.$inferSelect>;
 
   createPayment(payment: InsertPayment): Promise<typeof payments.$inferSelect>;
@@ -203,6 +204,9 @@ export class DatabaseStorage implements IStorage {
       return await db.select().from(hourlyEntries).where(and(eq(hourlyEntries.userId, userId), eq(hourlyEntries.date, date)));
     }
     return await db.select().from(hourlyEntries).where(eq(hourlyEntries.userId, userId));
+  }
+  async getHourlyEntriesByMonth(userId: string, month: string) {
+    return await db.select().from(hourlyEntries).where(and(eq(hourlyEntries.userId, userId), like(hourlyEntries.date, `${month}%`))).orderBy(asc(hourlyEntries.date));
   }
   async upsertHourlyEntry(entry: InsertHourlyEntry) {
     const existing = await db.select().from(hourlyEntries).where(and(eq(hourlyEntries.userId, entry.userId), eq(hourlyEntries.date, entry.date), eq(hourlyEntries.hour, entry.hour)));

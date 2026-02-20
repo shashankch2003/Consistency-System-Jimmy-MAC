@@ -17,6 +17,18 @@ export function useHourlyEntries(date: string) {
   });
 }
 
+export function useHourlyEntriesByMonth(month: string) {
+  return useQuery({
+    queryKey: [api.hourlyEntries.list.path, "month", month],
+    queryFn: async () => {
+      const url = `${api.hourlyEntries.list.path}?month=${month}`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch monthly entries");
+      return api.hourlyEntries.list.responses[200].parse(await res.json());
+    },
+  });
+}
+
 export function useUpdateHourlyEntry() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -34,6 +46,9 @@ export function useUpdateHourlyEntry() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ 
         queryKey: [api.hourlyEntries.list.path, variables.date] 
+      });
+      queryClient.invalidateQueries({
+        queryKey: [api.hourlyEntries.list.path, "month"],
       });
     },
   });

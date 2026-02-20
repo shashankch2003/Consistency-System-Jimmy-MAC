@@ -183,8 +183,14 @@ export async function registerRoutes(
   // Hourly Entries
   app.get(api.hourlyEntries.list.path, isAuthenticated, async (req: any, res) => {
     const date = req.query.date as string | undefined;
-    const entries = await storage.getHourlyEntries(req.user.claims.sub, date);
-    res.json(entries);
+    const month = req.query.month as string | undefined;
+    if (month) {
+      const entries = await storage.getHourlyEntriesByMonth(req.user.claims.sub, month);
+      res.json(entries);
+    } else {
+      const entries = await storage.getHourlyEntries(req.user.claims.sub, date);
+      res.json(entries);
+    }
   });
   app.post(api.hourlyEntries.createOrUpdate.path, isAuthenticated, async (req: any, res) => {
     try {
