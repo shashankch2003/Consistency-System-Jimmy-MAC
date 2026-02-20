@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { format, addDays, subDays, startOfMonth, endOfMonth, eachDayOfInterval, getYear } from "date-fns";
+import { format, addDays, subDays, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getDay, addMonths, subMonths, isSameDay, isToday } from "date-fns";
 import { useTasks, useTasksByMonth, useTasksByYear, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/use-tasks";
 
 import { Button } from "@/components/ui/button";
@@ -49,8 +49,12 @@ export default function TasksPage() {
   const dateStr = format(date, "yyyy-MM-dd");
   const analyticsMonthStr = format(analyticsMonth, "yyyy-MM");
 
+  const [calMonth, setCalMonth] = useState(new Date());
+  const calMonthStr = format(calMonth, "yyyy-MM");
+
   const { data: tasks, isLoading } = useTasks(dateStr);
   const { data: monthTasks } = useTasksByMonth(analyticsMonthStr);
+  const { data: calMonthTasks } = useTasksByMonth(calMonthStr);
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
   const deleteTask = useDeleteTask();
@@ -160,73 +164,166 @@ export default function TasksPage() {
         </div>
       </div>
 
-      <div className="bg-card rounded-xl border border-border overflow-hidden">
-        <div className="p-4 border-b border-border flex items-center gap-3">
-          <Calendar className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-semibold">Tasks for {format(date, "MMMM d")}</h2>
-          <span className="text-sm text-muted-foreground ml-auto">{tasks?.length || 0} tasks</span>
-        </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[40%]">Task</TableHead>
-              {COMPLETION_LEVELS.map(level => (
-                <TableHead key={level} className="text-center w-[10%]">{level}%</TableHead>
-              ))}
-              <TableHead className="w-[60px] text-center">Del</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
+        <div className="bg-card rounded-xl border border-border overflow-hidden">
+          <div className="p-4 border-b border-border flex items-center gap-3">
+            <Calendar className="w-5 h-5 text-primary" />
+            <h2 className="text-lg font-semibold">Tasks for {format(date, "MMMM d")}</h2>
+            <span className="text-sm text-muted-foreground ml-auto">{tasks?.length || 0} tasks</span>
+          </div>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Loading tasks...</TableCell>
+                <TableHead className="w-[40%]">Task</TableHead>
+                {COMPLETION_LEVELS.map(level => (
+                  <TableHead key={level} className="text-center w-[10%]">{level}%</TableHead>
+                ))}
+                <TableHead className="w-[60px] text-center">Del</TableHead>
               </TableRow>
-            ) : tasks?.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No tasks for this day. Add one below.</TableCell>
-              </TableRow>
-            ) : (
-              tasks?.map(task => (
-                <TableRow key={task.id} data-testid={`row-task-${task.id}`}>
-                  <TableCell className="font-medium" data-testid={`text-task-title-${task.id}`}>{task.title}</TableCell>
-                  {COMPLETION_LEVELS.map(level => (
-                    <TableCell key={level} className="text-center">
-                      <div className="flex justify-center">
-                        <ProgressDot
-                          active={(task.completionPercentage || 0) === level}
-                          level={level}
-                          onClick={() => updateTask.mutate({ id: task.id, completionPercentage: level })}
-                          testId={`dot-completion-${level}-${task.id}`}
-                        />
-                      </div>
-                    </TableCell>
-                  ))}
-                  <TableCell className="text-center">
-                    <Button size="icon" variant="ghost" onClick={() => deleteTask.mutate(task.id)} data-testid={`button-delete-task-${task.id}`}>
-                      <Trash2 className="w-4 h-4 text-muted-foreground" />
-                    </Button>
-                  </TableCell>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Loading tasks...</TableCell>
                 </TableRow>
-              ))
-            )}
-            <TableRow>
-              <TableCell colSpan={7}>
-                <form onSubmit={handleCreate} className="flex gap-2">
-                  <Input
-                    value={newTaskTitle}
-                    onChange={(e) => setNewTaskTitle(e.target.value)}
-                    placeholder="Add new task..."
-                    className="h-9"
-                    data-testid="input-new-task-title"
-                  />
-                  <Button type="submit" size="sm" className="h-9 gap-1" disabled={!newTaskTitle.trim()} data-testid="button-add-task">
-                    <Plus className="w-4 h-4" /> Add
-                  </Button>
-                </form>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+              ) : tasks?.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No tasks for this day. Add one below.</TableCell>
+                </TableRow>
+              ) : (
+                tasks?.map(task => (
+                  <TableRow key={task.id} data-testid={`row-task-${task.id}`}>
+                    <TableCell className="font-medium" data-testid={`text-task-title-${task.id}`}>{task.title}</TableCell>
+                    {COMPLETION_LEVELS.map(level => (
+                      <TableCell key={level} className="text-center">
+                        <div className="flex justify-center">
+                          <ProgressDot
+                            active={(task.completionPercentage || 0) === level}
+                            level={level}
+                            onClick={() => updateTask.mutate({ id: task.id, completionPercentage: level })}
+                            testId={`dot-completion-${level}-${task.id}`}
+                          />
+                        </div>
+                      </TableCell>
+                    ))}
+                    <TableCell className="text-center">
+                      <Button size="icon" variant="ghost" onClick={() => deleteTask.mutate(task.id)} data-testid={`button-delete-task-${task.id}`}>
+                        <Trash2 className="w-4 h-4 text-muted-foreground" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+              <TableRow>
+                <TableCell colSpan={7}>
+                  <form onSubmit={handleCreate} className="flex gap-2">
+                    <Input
+                      value={newTaskTitle}
+                      onChange={(e) => setNewTaskTitle(e.target.value)}
+                      placeholder="Add new task..."
+                      className="h-9"
+                      data-testid="input-new-task-title"
+                    />
+                    <Button type="submit" size="sm" className="h-9 gap-1" disabled={!newTaskTitle.trim()} data-testid="button-add-task">
+                      <Plus className="w-4 h-4" /> Add
+                    </Button>
+                  </form>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="bg-card rounded-xl border border-border overflow-hidden" data-testid="calendar-view">
+          <div className="p-4 border-b border-border">
+            <div className="flex items-center justify-between">
+              <Button variant="ghost" size="icon" onClick={() => setCalMonth(subMonths(calMonth, 1))} data-testid="button-cal-prev-month">
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <span className="font-semibold text-sm" data-testid="text-cal-month">{format(calMonth, "MMMM yyyy")}</span>
+              <Button variant="ghost" size="icon" onClick={() => setCalMonth(addMonths(calMonth, 1))} data-testid="button-cal-next-month">
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+          <div className="p-3">
+            <div className="grid grid-cols-7 mb-1">
+              {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(d => (
+                <div key={d} className="text-center text-xs font-medium text-muted-foreground py-1">{d}</div>
+              ))}
+            </div>
+            {(() => {
+              const calStart = startOfMonth(calMonth);
+              const calEnd = endOfMonth(calMonth);
+              const calDays = eachDayOfInterval({ start: calStart, end: calEnd });
+              const startDayOfWeek = (getDay(calStart) + 6) % 7;
+              const cells: (Date | null)[] = Array(startDayOfWeek).fill(null).concat(calDays);
+              while (cells.length % 7 !== 0) cells.push(null);
+              const rows: (Date | null)[][] = [];
+              for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+              return rows.map((row, ri) => (
+                <div key={ri} className="grid grid-cols-7">
+                  {row.map((day, ci) => {
+                    if (!day) return <div key={ci} className="p-1" />;
+                    const dayStr = format(day, "yyyy-MM-dd");
+                    const dayTaskCount = calMonthTasks?.filter(t => t.date === dayStr).length || 0;
+                    const isSelected = isSameDay(day, date);
+                    const today = isToday(day);
+                    return (
+                      <button
+                        key={ci}
+                        onClick={() => { setDate(day); }}
+                        className={cn(
+                          "p-1 rounded-lg text-center transition-all hover:bg-white/10 relative",
+                          isSelected && "bg-white text-black font-bold",
+                          today && !isSelected && "ring-1 ring-white/40"
+                        )}
+                        data-testid={`cal-day-${dayStr}`}
+                      >
+                        <span className="text-xs block">{format(day, "d")}</span>
+                        {dayTaskCount > 0 && (
+                          <div className={cn(
+                            "w-1.5 h-1.5 rounded-full mx-auto mt-0.5",
+                            isSelected ? "bg-black/60" : "bg-white/60"
+                          )} />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ));
+            })()}
+          </div>
+          {(() => {
+            const selTasks = tasks || [];
+            return (
+              <div className="border-t border-border p-3">
+                <p className="text-xs font-semibold text-muted-foreground mb-2" data-testid="text-cal-selected-date">
+                  {format(date, "MMMM d, yyyy")}
+                </p>
+                {selTasks.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No tasks</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+                    {selTasks.map((t: any) => (
+                      <div key={t.id} className="flex items-center gap-2 text-xs" data-testid={`cal-task-${t.id}`}>
+                        <div className={cn(
+                          "w-2 h-2 rounded-full shrink-0",
+                          (t.completionPercentage || 0) === 100 ? "bg-green-500"
+                          : (t.completionPercentage || 0) >= 50 ? "bg-yellow-500"
+                          : (t.completionPercentage || 0) > 0 ? "bg-red-500"
+                          : "bg-zinc-500"
+                        )} />
+                        <span className="truncate">{t.title}</span>
+                        <span className="ml-auto text-muted-foreground shrink-0">{t.completionPercentage || 0}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
       </div>
 
       <div className="space-y-6">
