@@ -40,8 +40,8 @@ export function AppSidebar() {
     <Sidebar className="border-r border-border bg-card/95 backdrop-blur-xl">
       <SidebarHeader className="p-4 border-b border-border/50">
         <Link href="/dashboard" className="flex items-center gap-2 px-2">
-          <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-            <LayoutDashboard className="w-5 h-5 text-primary" />
+          <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+            <LayoutDashboard className="w-5 h-5 text-white" />
           </div>
           <span className="font-display font-bold text-lg">Consistency System</span>
         </Link>
@@ -59,7 +59,7 @@ export function AppSidebar() {
                   <SidebarMenuButton 
                     asChild 
                     isActive={location === item.url}
-                    className="data-[active=true]:bg-primary/10 data-[active=true]:text-primary"
+                    className="data-[active=true]:bg-white/10 data-[active=true]:text-white"
                   >
                     <Link href={item.url} className="flex items-center gap-3 px-3 py-2">
                       <item.icon className="w-4 h-4" />

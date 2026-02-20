@@ -225,7 +225,7 @@ export default function GoodHabitsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-card border border-border rounded-xl p-6">
               <h3 className="text-lg font-semibold mb-1 flex items-center gap-2">
-                <Target className="w-5 h-5 text-green-400" />
+                <Target className="w-5 h-5 text-white" />
                 Per-Habit Completion Rate
               </h3>
               <p className="text-sm text-muted-foreground mb-4">How consistently each habit was done this month</p>
@@ -247,7 +247,7 @@ export default function GoodHabitsPage() {
 
             <div className="bg-card border border-border rounded-xl p-6">
               <h3 className="text-lg font-semibold mb-1 flex items-center gap-2">
-                <Award className="w-5 h-5 text-emerald-400" />
+                <Award className="w-5 h-5 text-white" />
                 Done vs Not Done — Per Habit
               </h3>
               <p className="text-sm text-muted-foreground mb-4">Days completed out of {daysPassed} days in the month</p>

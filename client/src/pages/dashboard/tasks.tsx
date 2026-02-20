@@ -312,7 +312,7 @@ export default function TasksPage() {
 
         <div className="bg-card rounded-xl border border-border p-6">
           <div className="flex items-center gap-2 mb-4">
-            <TrendingUp className="w-5 h-5 text-emerald-500" />
+            <TrendingUp className="w-5 h-5 text-white" />
             <h3 className="text-lg font-semibold">Weekly Average — {format(analyticsMonth, "MMMM yyyy")}</h3>
           </div>
           <p className="text-sm text-muted-foreground mb-4">Average task completion grouped by week</p>
@@ -347,7 +347,7 @@ export default function TasksPage() {
 
         <div className="bg-card rounded-xl border border-border p-6">
           <div className="flex items-center gap-2 mb-4">
-            <Calendar className="w-5 h-5 text-green-500" />
+            <Calendar className="w-5 h-5 text-white" />
             <h3 className="text-lg font-semibold">Monthly Trend — {currentYear}</h3>
           </div>
           <p className="text-sm text-muted-foreground mb-4">Average task completion for each month of the year</p>

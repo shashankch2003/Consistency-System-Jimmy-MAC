@@ -5,34 +5,34 @@
 @tailwind utilities;
 
 :root {
-  /* Premium Dark Theme Palette */
-  --background: 224 71% 4%;
-  --foreground: 210 40% 98%;
+  /* Black & White Theme */
+  --background: 0 0% 4%;
+  --foreground: 0 0% 98%;
 
-  --card: 222 47% 11%;
-  --card-foreground: 210 40% 98%;
+  --card: 0 0% 9%;
+  --card-foreground: 0 0% 98%;
 
-  --popover: 222 47% 11%;
-  --popover-foreground: 210 40% 98%;
+  --popover: 0 0% 9%;
+  --popover-foreground: 0 0% 98%;
 
-  --primary: 160 84% 39%;
-  --primary-foreground: 0 0% 100%;
+  --primary: 0 0% 98%;
+  --primary-foreground: 0 0% 4%;
 
-  --secondary: 160 15% 20%;
-  --secondary-foreground: 210 40% 98%;
+  --secondary: 0 0% 15%;
+  --secondary-foreground: 0 0% 98%;
 
-  --muted: 160 10% 22%;
-  --muted-foreground: 160 10% 60%;
+  --muted: 0 0% 15%;
+  --muted-foreground: 0 0% 55%;
 
-  --accent: 160 84% 39%;
-  --accent-foreground: 0 0% 100%;
+  --accent: 0 0% 20%;
+  --accent-foreground: 0 0% 98%;
 
   --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive-foreground: 0 0% 98%;
 
-  --border: 160 10% 22%;
-  --input: 160 10% 22%;
-  --ring: 160 84% 39%;
+  --border: 0 0% 18%;
+  --input: 0 0% 18%;
+  --ring: 0 0% 60%;
 
   --radius: 0.75rem;
 
@@ -46,7 +46,7 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground antialiased font-sans selection:bg-primary/30;
+    @apply bg-background text-foreground antialiased font-sans selection:bg-white/20;
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-sans tracking-tight;
@@ -63,6 +63,6 @@
   }
 
   .text-gradient-primary {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-emerald-300;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-white to-white/50;
   }
 }

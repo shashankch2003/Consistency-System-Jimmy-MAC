@@ -290,8 +290,8 @@ function MonthlyOverviewTable({ year, onOpenDescription }: { year: number; onOpe
       <div className="p-5 border-b border-border/50">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-              <Calendar className="w-5 h-5 text-emerald-400" />
+            <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center">
+              <Calendar className="w-5 h-5 text-white" />
             </div>
             <div>
               <h3 className="text-lg font-semibold">Month-Wise Overview Goals</h3>
@@ -395,8 +395,8 @@ function DynamicMonthGoalsTable({ year, onOpenDescription }: { year: number; onO
       <div className="p-5 border-b border-border/50">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-green-500/10 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-green-400" />
+            <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center">
+              <TrendingUp className="w-5 h-5 text-white" />
             </div>
             <div>
               <h3 className="text-lg font-semibold">Dynamic Month Goals</h3>

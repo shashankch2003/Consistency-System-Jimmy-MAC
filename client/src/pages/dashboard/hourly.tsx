@@ -155,9 +155,9 @@ export default function HourlyPage() {
               <span className="text-sm text-muted-foreground">Avg: </span>
               <span className="text-lg font-bold text-primary">{dailyAvg}/10</span>
             </div>
-            <div className="px-4 py-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20" data-testid="badge-tracked-hours">
+            <div className="px-4 py-2 bg-white/10 rounded-lg border border-white/20" data-testid="badge-tracked-hours">
               <span className="text-sm text-muted-foreground">Hours: </span>
-              <span className="text-lg font-bold text-emerald-400">{trackedHours}</span>
+              <span className="text-lg font-bold text-white">{trackedHours}</span>
             </div>
           </div>
         </div>
@@ -249,7 +249,7 @@ export default function HourlyPage() {
               </div>
               <div className="bg-card rounded-xl border border-border p-5 text-center">
                 <p className="text-sm text-muted-foreground mb-1">Total Hours</p>
-                <p className="text-3xl font-bold text-emerald-400" data-testid="text-total-hours">{analytics.totalTrackedHours}</p>
+                <p className="text-3xl font-bold text-white" data-testid="text-total-hours">{analytics.totalTrackedHours}</p>
                 <p className="text-xs text-muted-foreground">tracked this month</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-5 text-center">
@@ -298,7 +298,7 @@ export default function HourlyPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="bg-card rounded-xl border border-border p-6">
                 <div className="flex items-center gap-2 mb-1">
-                  <TrendingUp className="w-5 h-5 text-emerald-500" />
+                  <TrendingUp className="w-5 h-5 text-white" />
                   <h3 className="text-lg font-semibold">Weekly Average — {format(analyticsMonth, "MMMM yyyy")}</h3>
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">Average productivity grouped by week</p>
@@ -385,7 +385,7 @@ export default function HourlyPage() {
 
             <div className="bg-card rounded-xl border border-border p-6">
               <div className="flex items-center gap-2 mb-4">
-                <BarChart3 className="w-5 h-5 text-green-500" />
+                <BarChart3 className="w-5 h-5 text-white" />
                 <h3 className="text-lg font-semibold">Productivity Heatmap — {format(analyticsMonth, "MMMM yyyy")}</h3>
               </div>
               <p className="text-sm text-muted-foreground mb-4">Score breakdown for every day at a glance</p>

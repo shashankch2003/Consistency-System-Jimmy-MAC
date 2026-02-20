@@ -8,13 +8,13 @@ export default function LandingPage() {
   const { user } = useAuth();
 
   return (
-    <div className="min-h-screen bg-background selection:bg-primary/20">
+    <div className="min-h-screen bg-background selection:bg-white/20">
       {/* Navigation */}
       <nav className="fixed w-full z-50 bg-background/80 backdrop-blur-md border-b border-border/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-              <LayoutDashboard className="w-5 h-5 text-primary" />
+            <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+              <LayoutDashboard className="w-5 h-5 text-white" />
             </div>
             <span className="text-xl font-display font-bold">Consistency System</span>
           </div>
@@ -35,7 +35,7 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden">
         <div className="absolute inset-0 bg-grid-white/[0.02] -z-10" />
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[500px] bg-primary/20 blur-[120px] rounded-full opacity-30 -z-10" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[500px] bg-white/5 blur-[120px] rounded-full opacity-30 -z-10" />
         
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.h1 
@@ -100,10 +100,10 @@ export default function LandingPage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.1 }}
-                className="p-8 rounded-2xl bg-card border border-border hover:border-primary/50 transition-colors"
+                className="p-8 rounded-2xl bg-card border border-border hover:border-white/30 transition-colors"
               >
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-6">
-                  <feature.icon className="w-6 h-6 text-primary" />
+                <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center mb-6">
+                  <feature.icon className="w-6 h-6 text-white" />
                 </div>
                 <h3 className="text-xl font-bold mb-2">{feature.title}</h3>
                 <p className="text-muted-foreground">{feature.desc}</p>
@@ -117,7 +117,7 @@ export default function LandingPage() {
       <section className="py-24">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="relative rounded-3xl overflow-hidden bg-gradient-to-b from-card to-background border border-border p-12 text-center">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary to-transparent" />
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white/40 to-transparent" />
             
             <h2 className="text-4xl font-display font-bold mb-4">Lifetime Access</h2>
             <p className="text-muted-foreground mb-8">One payment. No subscriptions. Own your data.</p>
@@ -130,7 +130,7 @@ export default function LandingPage() {
             <ul className="text-left max-w-xs mx-auto space-y-3 mb-10">
               {['Unlimited Goals', 'Advanced Analytics', 'Priority Support', 'Cloud Sync'].map((item) => (
                 <li key={item} className="flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-primary" />
+                  <CheckCircle2 className="w-5 h-5 text-white" />
                   <span>{item}</span>
                 </li>
               ))}
