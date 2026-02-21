@@ -74,7 +74,7 @@ export default function LandingPage() {
               </Link>
             ) : (
               <a href="#pricing">
-                <Button size="sm" className="bg-emerald-500 text-white font-semibold rounded-md" data-testid="button-book-call-nav">
+                <Button size="sm" variant="outline" className="border-emerald-500 text-emerald-400 font-semibold rounded-md bg-transparent" data-testid="button-book-call-nav">
                   Book a Call <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
                 </Button>
               </a>
@@ -89,106 +89,130 @@ export default function LandingPage() {
           <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
         </div>
 
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 w-full py-20">
-          <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-20">
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          variants={fadeUp}
+          custom={3}
+          className="absolute bottom-16 left-6 lg:left-16 hidden lg:block z-10"
+          data-testid="widget-focus-score"
+        >
+          <div className="w-48 rounded-2xl border border-white/[0.08] bg-[#0d0d14]/90 backdrop-blur-sm p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span className="text-[10px] text-white/40 uppercase tracking-[0.2em]">Focus Score</span>
+            </div>
+            <div className="text-4xl font-display font-bold text-emerald-400 mb-0.5">87%</div>
+            <div className="text-[11px] text-white/30">+12% from last week</div>
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          variants={fadeUp}
+          custom={2}
+          className="absolute top-28 right-6 lg:right-16 hidden lg:block z-10"
+          data-testid="widget-daily-tracker"
+        >
+          <div className="w-52 rounded-2xl border border-white/[0.08] bg-[#0d0d14]/90 backdrop-blur-sm p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span className="text-[10px] text-white/40 uppercase tracking-[0.2em]">Daily Tracker</span>
+            </div>
+            <div className="space-y-2">
+              <div className="h-2 rounded-full bg-white/[0.06]">
+                <div className="h-full w-[85%] rounded-full bg-emerald-500/60" />
+              </div>
+              <div className="h-2 rounded-full bg-white/[0.06]">
+                <div className="h-full w-[65%] rounded-full bg-emerald-500/40" />
+              </div>
+              <div className="h-2 rounded-full bg-white/[0.06]">
+                <div className="h-full w-[45%] rounded-full bg-emerald-500/25" />
+              </div>
+            </div>
+          </div>
+          <div className="absolute -right-10 top-1/2 -translate-y-1/2 flex flex-col gap-2">
+            <div className="w-8 h-8 rounded-lg border border-white/[0.08] bg-[#0d0d14]/90 flex items-center justify-center">
+              <Target className="w-3.5 h-3.5 text-white/30" />
+            </div>
+            <div className="w-8 h-8 rounded-lg border border-white/[0.08] bg-[#0d0d14]/90 flex items-center justify-center">
+              <BarChart3 className="w-3.5 h-3.5 text-white/30" />
+            </div>
+            <div className="w-8 h-8 rounded-lg border border-white/[0.08] bg-[#0d0d14]/90 flex items-center justify-center">
+              <Calendar className="w-3.5 h-3.5 text-white/30" />
+            </div>
+          </div>
+        </motion.div>
+
+        <div className="max-w-5xl mx-auto px-6 lg:px-8 w-full py-20">
+          <motion.div
+            style={{ opacity: heroOpacity, scale: heroScale }}
+            className="flex flex-col items-center"
+          >
             <motion.div
-              style={{ opacity: heroOpacity, scale: heroScale }}
-              className="flex-1 text-center lg:text-left"
+              initial="hidden"
+              animate="visible"
+              variants={fadeUp}
+              custom={0}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-emerald-500/20 bg-emerald-500/[0.05] text-sm text-emerald-400 mb-10"
             >
-              <motion.div
-                initial="hidden"
-                animate="visible"
-                variants={fadeUp}
-                custom={0}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-emerald-500/20 bg-emerald-500/[0.05] text-sm text-emerald-400 mb-8"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                QUATTRO FOR A DISTRACTED WORLD
-              </motion.div>
-
-              <motion.h1
-                initial="hidden"
-                animate="visible"
-                variants={fadeUp}
-                custom={1}
-                className="text-4xl sm:text-5xl md:text-6xl font-display font-bold tracking-tight leading-[1.1] mb-6"
-              >
-                Helping You be{" "}
-                <span className="text-emerald-400 italic">Productive</span> &
-                <br />
-                Reach Your <span className="text-emerald-400 italic">Goals</span> Through
-                <br />
-                Systems in a Distracted World
-              </motion.h1>
-
-              <motion.p
-                initial="hidden"
-                animate="visible"
-                variants={fadeUp}
-                custom={2}
-                className="text-base md:text-lg text-white/40 max-w-xl mb-10 leading-relaxed"
-              >
-                If you can't see where your time is going, you'll never be consistent with where your life is going
-              </motion.p>
-
-              <motion.div
-                initial="hidden"
-                animate="visible"
-                variants={fadeUp}
-                custom={3}
-                className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start items-center"
-              >
-                <Button
-                  size="lg"
-                  className="bg-emerald-500 text-white rounded-md font-semibold"
-                  onClick={() => window.location.href = "/api/login"}
-                  data-testid="button-get-system"
-                >
-                  Get the System <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-                <a href="#clarity-call">
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="border-white/15 text-white/70 rounded-md bg-transparent"
-                    data-testid="button-book-clarity"
-                  >
-                    Book a Clarity Call <ArrowRight className="w-4 h-4 ml-2" />
-                  </Button>
-                </a>
-              </motion.div>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              SYSTEMS FOR A DISTRACTED WORLD
             </motion.div>
+
+            <motion.h1
+              initial="hidden"
+              animate="visible"
+              variants={fadeUp}
+              custom={1}
+              className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-display font-bold tracking-tight leading-[1.15] mb-6 text-left"
+            >
+              Helping You be{" "}
+              <span className="text-emerald-400 italic">Productive</span> &
+              <br />
+              Reach Your <span className="text-emerald-400 italic">Goals</span> Through
+              <br />
+              <span className="underline decoration-emerald-500 underline-offset-[6px] decoration-[3px]">Systems</span> in a Distracted World
+            </motion.h1>
+
+            <motion.p
+              initial="hidden"
+              animate="visible"
+              variants={fadeUp}
+              custom={2}
+              className="text-base md:text-lg text-white/40 max-w-2xl mb-10 leading-relaxed text-center"
+            >
+              If you can't see where your time is going, you'll never be consistent with where your life is going
+            </motion.p>
 
             <motion.div
               initial="hidden"
               animate="visible"
               variants={fadeUp}
-              custom={2}
-              className="flex-shrink-0 hidden lg:block"
+              custom={3}
+              className="flex flex-col sm:flex-row gap-4 justify-center items-center"
             >
-              <div className="relative">
-                <div className="w-64 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                    <span className="text-xs text-white/40 uppercase tracking-widest">Daily Score</span>
-                  </div>
-                  <div className="text-5xl font-display font-bold text-emerald-400 mb-1">87%</div>
-                  <div className="text-xs text-white/30">+1.2% from last week</div>
-                  <div className="mt-4 h-1.5 rounded-full bg-white/[0.06]">
-                    <div className="h-full w-[87%] rounded-full bg-emerald-500" />
-                  </div>
-                </div>
-                <div className="absolute -top-4 -right-8 w-48 rounded-xl border border-white/[0.06] bg-white/[0.03] p-3">
-                  <div className="text-[10px] text-white/30 uppercase tracking-widest mb-2">Weekly Progress</div>
-                  <div className="flex items-end gap-1 h-8">
-                    {[60, 75, 45, 90, 80, 70, 85].map((h, i) => (
-                      <div key={i} className="flex-1 rounded-sm bg-emerald-500/40" style={{ height: `${h}%` }} />
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <Button
+                size="lg"
+                className="bg-emerald-500 text-white rounded-md font-semibold"
+                onClick={() => window.location.href = "/api/login"}
+                data-testid="button-get-system"
+              >
+                Get the System <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+              <a href="#clarity-call">
+                <Button
+                  size="lg"
+                  variant="ghost"
+                  className="text-white/70 rounded-md bg-transparent"
+                  data-testid="button-book-clarity"
+                >
+                  Book a Clarity Call <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </a>
             </motion.div>
-          </div>
+          </motion.div>
         </div>
       </section>
 
