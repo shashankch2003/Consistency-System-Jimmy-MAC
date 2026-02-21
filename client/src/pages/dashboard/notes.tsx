@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNotes, useCreateNote, useUpdateNote, useDeleteNote } from "@/hooks/use-notes";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, FileText, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
+import { Plus, Trash2, FileText, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import RichEditor from "@/components/rich-editor";
 
 const EMOJI_OPTIONS = ["📄", "📝", "📋", "📌", "⭐", "🎯", "💡", "🔥", "📊", "🎨", "💼", "🏠", "📱", "🎬", "🎵", "📚", "🌟", "🚀", "💰", "🔑"];
 
@@ -127,7 +128,6 @@ export default function NotesPage() {
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const contentRef = useRef<HTMLTextAreaElement>(null);
 
   const notesList = (notes as Note[]) || [];
   const rootNotes = notesList.filter(n => !n.parentId);
@@ -185,7 +185,7 @@ export default function NotesPage() {
         if (parentId) {
           setExpandedIds(prev => new Set([...prev, parentId]));
         }
-        setTimeout(() => contentRef.current?.focus(), 100);
+        setTimeout(() => {}, 100);
       }
     });
   };
@@ -322,13 +322,11 @@ export default function NotesPage() {
                 </div>
               </div>
 
-              <textarea
-                ref={contentRef}
-                value={editContent}
-                onChange={e => handleContentChange(e.target.value)}
-                placeholder="Start writing..."
-                className="w-full min-h-[60vh] bg-transparent border-none outline-none resize-none text-base leading-relaxed placeholder:text-muted-foreground/30"
-                data-testid="textarea-note-content"
+              <RichEditor
+                key={selectedId}
+                content={editContent}
+                onChange={handleContentChange}
+                onAddPage={() => handleAddPage(selectedId!)}
               />
             </div>
           </div>

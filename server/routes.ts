@@ -5,6 +5,27 @@ import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integra
 import { api } from "@shared/routes";
 import { z } from "zod";
 import crypto from "crypto";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+
+const uploadDir = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: uploadDir,
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      cb(null, `${crypto.randomBytes(12).toString("hex")}${ext}`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) cb(null, true);
+    else cb(new Error("Only image files are allowed"));
+  },
+});
 
 export async function registerRoutes(
   httpServer: Server,
@@ -441,6 +462,20 @@ export async function registerRoutes(
       });
       res.json({ success: true });
     } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
+  // Image upload
+  app.use("/uploads", (await import("express")).default.static(uploadDir));
+  app.post("/api/upload-image", isAuthenticated, (req: any, res, next) => {
+    upload.single("image")(req, res, (err: any) => {
+      if (err) {
+        if (err.code === "LIMIT_FILE_SIZE") return res.status(400).json({ message: "Image must be less than 5MB" });
+        return res.status(400).json({ message: err.message || "Upload failed" });
+      }
+      if (!req.file) return res.status(400).json({ message: "No image provided" });
+      const url = `/uploads/${req.file.filename}`;
+      res.json({ url });
+    });
   });
 
   return httpServer;
