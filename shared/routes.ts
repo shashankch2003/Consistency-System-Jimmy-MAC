@@ -238,7 +238,7 @@ export const api = {
     },
     update: {
       method: 'PUT' as const, path: '/api/notes/:id' as const,
-      input: z.object({ title: z.string().optional(), content: z.string().optional(), icon: z.string().optional() }),
+      input: z.object({ title: z.string().optional(), content: z.string().optional(), icon: z.string().optional(), parentId: z.number().nullable().optional() }),
       responses: { 200: z.custom<typeof notes.$inferSelect>(), 400: errorSchemas.validation }
     },
     delete: {

@@ -408,7 +408,20 @@ export async function registerRoutes(
     } catch (e: any) { res.status(400).json({ message: e.message }); }
   });
   app.delete(api.notes.delete.path, isAuthenticated, async (req: any, res) => {
-    await storage.deleteNote(parseInt(req.params.id), req.user.claims.sub);
+    const noteId = parseInt(req.params.id);
+    const userId = req.user.claims.sub;
+    const allNotes = await storage.getNotes(userId);
+    const deleteIds = [noteId];
+    const findChildren = (parentId: number) => {
+      allNotes.filter(n => n.parentId === parentId).forEach(child => {
+        deleteIds.push(child.id);
+        findChildren(child.id);
+      });
+    };
+    findChildren(noteId);
+    for (const id of deleteIds) {
+      await storage.deleteNote(id, userId);
+    }
     res.status(204).end();
   });
 

@@ -28,7 +28,7 @@ export function useNote(id: number | null) {
 export function useCreateNote() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input?: { title?: string; icon?: string }) => {
+    mutationFn: async (input?: { title?: string; icon?: string; parentId?: number | null }) => {
       const res = await apiRequest("POST", api.notes.create.path, input || {});
       return await res.json() as Note;
     },
@@ -39,7 +39,7 @@ export function useCreateNote() {
 export function useUpdateNote() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...updates }: { id: number; title?: string; content?: string; icon?: string }) => {
+    mutationFn: async ({ id, ...updates }: { id: number; title?: string; content?: string; icon?: string; parentId?: number | null }) => {
       const url = buildUrl(api.notes.update.path, { id });
       const res = await apiRequest("PUT", url, updates);
       return await res.json() as Note;

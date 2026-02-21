@@ -124,6 +124,7 @@ export const taskBankItems = pgTable("task_bank_items", {
 export const notes = pgTable("notes", {
   id: serial("id").primaryKey(),
   userId: varchar("user_id").notNull(),
+  parentId: integer("parent_id"),
   title: text("title").notNull().default("Untitled"),
   content: text("content").default(""),
   icon: text("icon").default("📄"),
