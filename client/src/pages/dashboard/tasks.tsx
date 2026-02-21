@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ChevronLeft, ChevronRight, Plus, Trash2, BarChart3, Calendar, TrendingUp, Clock, AlertTriangle, AlertCircle, FileText, X, Pencil } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, BarChart3, Calendar, TrendingUp, Clock, AlertTriangle, AlertCircle, FileText, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, AreaChart, Area } from "recharts";
 
@@ -51,7 +51,7 @@ function ProgressDot({ active, level, onClick, testId }: { active: boolean; leve
   );
 }
 
-function TimeInput({ value, onChange, testId }: { value: string; onChange: (v: string) => void; testId?: string }) {
+function TimeInput({ value, onChange, testId, onBlur, autoFocus }: { value: string; onChange: (v: string) => void; testId?: string; onBlur?: () => void; autoFocus?: boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -74,8 +74,14 @@ function TimeInput({ value, onChange, testId }: { value: string; onChange: (v: s
         type="text"
         value={value}
         onChange={handleChange}
+        onBlur={onBlur}
+        onKeyDown={e => {
+          if (e.key === "Enter" && onBlur) { e.currentTarget.blur(); }
+          if (e.key === "Escape" && onBlur) { onBlur(); }
+        }}
         placeholder="HH:MM"
         maxLength={5}
+        autoFocus={autoFocus}
         className={cn(
           "flex rounded-md border bg-background px-2 py-1.5 pl-7 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring w-[90px]",
           value && !isValid ? "border-red-500/50" : "border-input"
@@ -127,74 +133,6 @@ function DescriptionDialog({ task, onSave, onClose }: {
   );
 }
 
-function EditTaskDialog({ task, onSave, onClose }: {
-  task: { id: number; title: string; time: string; priority: string };
-  onSave: (updates: { title: string; time: string | null; priority: string }) => void;
-  onClose: () => void;
-}) {
-  const [title, setTitle] = useState(task.title);
-  const [time, setTime] = useState(task.time || "");
-  const [priority, setPriority] = useState(task.priority || "Normal");
-
-  return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="sm:max-w-[450px]" data-testid="dialog-edit-task">
-        <DialogHeader>
-          <DialogTitle className="text-lg" data-testid="text-edit-dialog-title">Edit Task</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-2">
-          <div className="space-y-1.5">
-            <label className="text-sm text-muted-foreground">Task Name</label>
-            <Input
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="Task name..."
-              className="bg-transparent border-border"
-              data-testid="input-edit-task-title"
-              autoFocus
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm text-muted-foreground">Time</label>
-            <TimeInput value={time} onChange={setTime} />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm text-muted-foreground">Priority</label>
-            <Select value={priority} onValueChange={setPriority}>
-              <SelectTrigger className="bg-transparent border-border" data-testid="select-edit-task-priority">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Normal">Normal</SelectItem>
-                <SelectItem value="Important">Important</SelectItem>
-                <SelectItem value="Very Important">Very Important</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose} data-testid="button-cancel-edit">Cancel</Button>
-          <Button
-            onClick={() => {
-              if (!title.trim()) return;
-              onSave({
-                title: title.trim(),
-                time: time || null,
-                priority,
-              });
-              onClose();
-            }}
-            disabled={!title.trim()}
-            data-testid="button-save-edit"
-          >
-            Save
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 function ProgressBar({ value }: { value: number }) {
   const color = value === 0 ? "bg-zinc-500" : value <= 25 ? "bg-red-500" : value <= 50 ? "bg-yellow-500" : value <= 75 ? "bg-emerald-500" : "bg-green-500";
   return (
@@ -217,7 +155,9 @@ export default function TasksPage() {
   const [newTaskTime, setNewTaskTime] = useState("");
   const [newTaskPriority, setNewTaskPriority] = useState<string>("Normal");
   const [descTask, setDescTask] = useState<{ id: number; title: string; description: string | null } | null>(null);
-  const [editTask, setEditTask] = useState<{ id: number; title: string; time: string; priority: string } | null>(null);
+  const [editingTitle, setEditingTitle] = useState<{ id: number; value: string } | null>(null);
+  const [editingTime, setEditingTime] = useState<{ id: number; value: string } | null>(null);
+  const [editingPriority, setEditingPriority] = useState<number | null>(null);
   const [analyticsMonth, setAnalyticsMonth] = useState(new Date());
   const [viewMode, setViewMode] = useState<"task" | "calendar">("task");
   const [calViewMode, setCalViewMode] = useState<"day" | "week" | "month" | "year">("month");
@@ -347,8 +287,34 @@ export default function TasksPage() {
             tasks?.map(task => (
               <div key={task.id} className="px-4 py-3 flex items-center gap-3" data-testid={`cal-day-row-task-${task.id}`}>
                 <div className="flex-1 min-w-0">
-                  <span className="font-medium text-sm" data-testid={`cal-day-text-task-title-${task.id}`}>{task.title}</span>
-                  {task.description && (
+                  {editingTitle?.id === task.id ? (
+                    <Input
+                      value={editingTitle.value}
+                      onChange={e => setEditingTitle({ id: task.id, value: e.target.value })}
+                      onBlur={() => {
+                        if (editingTitle.value.trim() && editingTitle.value.trim() !== task.title) {
+                          updateTask.mutate({ id: task.id, title: editingTitle.value.trim() });
+                        }
+                        setEditingTitle(null);
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") { e.currentTarget.blur(); }
+                        if (e.key === "Escape") { setEditingTitle(null); }
+                      }}
+                      className="h-7 text-sm bg-transparent border-border px-2 py-1"
+                      data-testid={`cal-day-input-inline-title-${task.id}`}
+                      autoFocus
+                    />
+                  ) : (
+                    <span
+                      className="font-medium text-sm cursor-pointer hover:text-primary transition-colors"
+                      onClick={() => setEditingTitle({ id: task.id, value: task.title })}
+                      data-testid={`cal-day-text-task-title-${task.id}`}
+                    >
+                      {task.title}
+                    </span>
+                  )}
+                  {task.description && editingTitle?.id !== task.id && (
                     <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[250px]">
                       {task.description}
                     </p>
@@ -365,11 +331,73 @@ export default function TasksPage() {
                 >
                   <FileText className="w-3.5 h-3.5" />
                 </button>
-                <PriorityBadge priority={task.priority || "Normal"} />
-                {task.time && (
-                  <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded shrink-0">
-                    <Clock className="w-2.5 h-2.5" />{task.time}
-                  </span>
+                {editingPriority === task.id ? (
+                  <Select
+                    value={task.priority || "Normal"}
+                    onValueChange={val => {
+                      updateTask.mutate({ id: task.id, priority: val });
+                      setEditingPriority(null);
+                    }}
+                    open={true}
+                    onOpenChange={open => { if (!open) setEditingPriority(null); }}
+                  >
+                    <SelectTrigger className="w-[130px] h-7 bg-transparent border-border text-xs" data-testid={`cal-day-select-inline-priority-${task.id}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Normal">Normal</SelectItem>
+                      <SelectItem value="Important">Important</SelectItem>
+                      <SelectItem value="Very Important">Very Important</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <button
+                    onClick={() => setEditingPriority(task.id)}
+                    className="shrink-0 cursor-pointer"
+                    title="Click to change priority"
+                    data-testid={`cal-day-button-priority-${task.id}`}
+                  >
+                    {(task.priority === "Very Important" || task.priority === "Important") ? (
+                      <PriorityBadge priority={task.priority} />
+                    ) : (
+                      <span className="inline-flex items-center text-[10px] text-muted-foreground/40 hover:text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded transition-colors">
+                        Priority
+                      </span>
+                    )}
+                  </button>
+                )}
+                {editingTime?.id === task.id ? (
+                  <div className="shrink-0">
+                    <TimeInput
+                      value={editingTime.value}
+                      onChange={val => setEditingTime({ id: task.id, value: val })}
+                      onBlur={() => {
+                        const newTime = editingTime.value || null;
+                        if (newTime !== (task.time || null)) {
+                          updateTask.mutate({ id: task.id, time: newTime });
+                        }
+                        setEditingTime(null);
+                      }}
+                      autoFocus
+                    />
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setEditingTime({ id: task.id, value: task.time || "" })}
+                    className="shrink-0 cursor-pointer"
+                    title="Click to change time"
+                    data-testid={`cal-day-button-time-${task.id}`}
+                  >
+                    {task.time ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded hover:bg-white/10 transition-colors">
+                        <Clock className="w-2.5 h-2.5" />{task.time}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/40 hover:text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded transition-colors">
+                        <Clock className="w-2.5 h-2.5" />Time
+                      </span>
+                    )}
+                  </button>
                 )}
                 <div className="flex items-center gap-2 shrink-0">
                   {COMPLETION_LEVELS.map(level => (
@@ -384,14 +412,6 @@ export default function TasksPage() {
                     </div>
                   ))}
                 </div>
-                <button
-                  onClick={() => setEditTask({ id: task.id, title: task.title, time: task.time || "", priority: task.priority || "Normal" })}
-                  className="p-1.5 rounded-md text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted transition-colors shrink-0"
-                  title="Edit task"
-                  data-testid={`cal-day-button-edit-${task.id}`}
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
                 <button
                   onClick={() => deleteTask.mutate(task.id)}
                   className="p-1.5 rounded-md text-muted-foreground/40 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
@@ -718,8 +738,34 @@ export default function TasksPage() {
                 tasks?.map(task => (
                   <div key={task.id} className="px-4 py-3 flex items-center gap-3" data-testid={`row-task-${task.id}`}>
                     <div className="flex-1 min-w-0">
-                      <span className="font-medium text-sm" data-testid={`text-task-title-${task.id}`}>{task.title}</span>
-                      {task.description && (
+                      {editingTitle?.id === task.id ? (
+                        <Input
+                          value={editingTitle.value}
+                          onChange={e => setEditingTitle({ id: task.id, value: e.target.value })}
+                          onBlur={() => {
+                            if (editingTitle.value.trim() && editingTitle.value.trim() !== task.title) {
+                              updateTask.mutate({ id: task.id, title: editingTitle.value.trim() });
+                            }
+                            setEditingTitle(null);
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") { e.currentTarget.blur(); }
+                            if (e.key === "Escape") { setEditingTitle(null); }
+                          }}
+                          className="h-7 text-sm bg-transparent border-border px-2 py-1"
+                          data-testid={`input-inline-title-${task.id}`}
+                          autoFocus
+                        />
+                      ) : (
+                        <span
+                          className="font-medium text-sm cursor-pointer hover:text-primary transition-colors"
+                          onClick={() => setEditingTitle({ id: task.id, value: task.title })}
+                          data-testid={`text-task-title-${task.id}`}
+                        >
+                          {task.title}
+                        </span>
+                      )}
+                      {task.description && editingTitle?.id !== task.id && (
                         <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[250px]" data-testid={`text-task-desc-preview-${task.id}`}>
                           {task.description}
                         </p>
@@ -736,11 +782,73 @@ export default function TasksPage() {
                     >
                       <FileText className="w-3.5 h-3.5" />
                     </button>
-                    <PriorityBadge priority={task.priority || "Normal"} />
-                    {task.time && (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded shrink-0" data-testid={`badge-time-${task.id}`}>
-                        <Clock className="w-2.5 h-2.5" />{task.time}
-                      </span>
+                    {editingPriority === task.id ? (
+                      <Select
+                        value={task.priority || "Normal"}
+                        onValueChange={val => {
+                          updateTask.mutate({ id: task.id, priority: val });
+                          setEditingPriority(null);
+                        }}
+                        open={true}
+                        onOpenChange={open => { if (!open) setEditingPriority(null); }}
+                      >
+                        <SelectTrigger className="w-[130px] h-7 bg-transparent border-border text-xs" data-testid={`select-inline-priority-${task.id}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Normal">Normal</SelectItem>
+                          <SelectItem value="Important">Important</SelectItem>
+                          <SelectItem value="Very Important">Very Important</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <button
+                        onClick={() => setEditingPriority(task.id)}
+                        className="shrink-0 cursor-pointer"
+                        title="Click to change priority"
+                        data-testid={`button-priority-${task.id}`}
+                      >
+                        {(task.priority === "Very Important" || task.priority === "Important") ? (
+                          <PriorityBadge priority={task.priority} />
+                        ) : (
+                          <span className="inline-flex items-center text-[10px] text-muted-foreground/40 hover:text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded transition-colors">
+                            Priority
+                          </span>
+                        )}
+                      </button>
+                    )}
+                    {editingTime?.id === task.id ? (
+                      <div className="shrink-0">
+                        <TimeInput
+                          value={editingTime.value}
+                          onChange={val => setEditingTime({ id: task.id, value: val })}
+                          onBlur={() => {
+                            const newTime = editingTime.value || null;
+                            if (newTime !== (task.time || null)) {
+                              updateTask.mutate({ id: task.id, time: newTime });
+                            }
+                            setEditingTime(null);
+                          }}
+                          autoFocus
+                        />
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setEditingTime({ id: task.id, value: task.time || "" })}
+                        className="shrink-0 cursor-pointer"
+                        title="Click to change time"
+                        data-testid={`button-time-${task.id}`}
+                      >
+                        {task.time ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded hover:bg-white/10 transition-colors">
+                            <Clock className="w-2.5 h-2.5" />{task.time}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/40 hover:text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded transition-colors">
+                            <Clock className="w-2.5 h-2.5" />Time
+                          </span>
+                        )}
+                      </button>
                     )}
                     <div className="flex items-center gap-2 shrink-0">
                       {COMPLETION_LEVELS.map(level => (
@@ -755,14 +863,6 @@ export default function TasksPage() {
                         </div>
                       ))}
                     </div>
-                    <button
-                      onClick={() => setEditTask({ id: task.id, title: task.title, time: task.time || "", priority: task.priority || "Normal" })}
-                      className="p-1.5 rounded-md text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted transition-colors shrink-0"
-                      title="Edit task"
-                      data-testid={`button-edit-task-${task.id}`}
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
                     <button
                       onClick={() => deleteTask.mutate(task.id)}
                       className="p-1.5 rounded-md text-muted-foreground/40 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
@@ -1072,13 +1172,6 @@ export default function TasksPage() {
         />
       )}
 
-      {editTask && (
-        <EditTaskDialog
-          task={editTask}
-          onSave={(updates) => updateTask.mutate({ id: editTask.id, title: updates.title, time: updates.time, priority: updates.priority })}
-          onClose={() => setEditTask(null)}
-        />
-      )}
     </div>
   );
 }
