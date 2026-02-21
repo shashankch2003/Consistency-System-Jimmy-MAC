@@ -66,6 +66,8 @@ export const tasks = pgTable("tasks", {
   date: text("date").notNull(), // YYYY-MM-DD
   title: text("title").notNull(),
   completionPercentage: integer("completion_percentage").default(0),
+  time: text("time"), // optional HH:MM
+  priority: text("priority").default("Normal"), // Very Important, Important, Normal
 });
 
 export const goodHabits = pgTable("good_habits", {
