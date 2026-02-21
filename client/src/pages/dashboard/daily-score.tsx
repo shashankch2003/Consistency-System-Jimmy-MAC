@@ -125,20 +125,18 @@ export default function DailyScorePage() {
             <div className="text-center py-12 text-muted-foreground">Calculating your score...</div>
           ) : score ? (
             <>
-              <div className="bg-card/50 border border-border rounded-xl p-6" data-testid="score-overview-card">
-                <div className="flex items-start gap-8">
-                  <div className="flex flex-col items-center shrink-0">
-                    <ScoreRing score={score.totalScore} />
-                    <p className="text-xs text-muted-foreground mt-2">{format(date, "MMMM d, yyyy")}</p>
-                  </div>
+              <div className="grid grid-cols-[1fr_3fr] gap-4">
+                <div className="bg-card/50 border border-border rounded-xl p-6 flex flex-col items-center justify-center" data-testid="score-ring-card">
+                  <ScoreRing score={score.totalScore} />
+                  <p className="text-xs text-muted-foreground mt-2">{format(date, "MMMM d, yyyy")}</p>
+                </div>
 
-                  <div className="flex-1 space-y-3 pt-2" data-testid="section-breakdown">
-                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Breakdown</h3>
-                    <SectionBar label="Tasks Completion" score={score.taskScore} count={score.taskCount} testId="bar-tasks" />
-                    <SectionBar label="Good Habits Done" score={score.goodHabitScore} count={score.goodHabitCount} testId="bar-good-habits" />
-                    <SectionBar label="Bad Habits Avoided" score={score.badHabitScore} count={score.badHabitCount} testId="bar-bad-habits" />
-                    <SectionBar label="Hourly Productivity" score={score.hourlyScore} count={score.hourlyCount} testId="bar-hourly" />
-                  </div>
+                <div className="bg-card/50 border border-border rounded-xl p-6 space-y-3" data-testid="section-breakdown">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Breakdown</h3>
+                  <SectionBar label="Tasks Completion" score={score.taskScore} count={score.taskCount} testId="bar-tasks" />
+                  <SectionBar label="Good Habits Done" score={score.goodHabitScore} count={score.goodHabitCount} testId="bar-good-habits" />
+                  <SectionBar label="Bad Habits Avoided" score={score.badHabitScore} count={score.badHabitCount} testId="bar-bad-habits" />
+                  <SectionBar label="Hourly Productivity" score={score.hourlyScore} count={score.hourlyCount} testId="bar-hourly" />
                 </div>
               </div>
 
@@ -269,11 +267,11 @@ export default function DailyScorePage() {
                 <div className="w-full h-1.5 bg-muted/30 rounded-full overflow-hidden">
                   <div className={cn("h-full rounded-full", getScoreColor(score.totalScore))} style={{ width: `${score.totalScore}%` }} />
                 </div>
-                <div className="grid grid-cols-2 gap-2 mt-3">
-                  <div className="text-xs text-muted-foreground">Tasks: <span className="text-foreground font-medium">{score.taskScore}%</span></div>
-                  <div className="text-xs text-muted-foreground">Good Habits: <span className="text-foreground font-medium">{score.goodHabitScore}%</span></div>
-                  <div className="text-xs text-muted-foreground">Bad Habits: <span className="text-foreground font-medium">{score.badHabitScore}%</span></div>
-                  <div className="text-xs text-muted-foreground">Hourly: <span className="text-foreground font-medium">{score.hourlyScore}%</span></div>
+                <div className="space-y-1.5 mt-3">
+                  <div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">Tasks</span><span className="text-foreground font-medium">{score.taskScore}%</span></div>
+                  <div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">Good Habits</span><span className="text-foreground font-medium">{score.goodHabitScore}%</span></div>
+                  <div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">Bad Habits</span><span className="text-foreground font-medium">{score.badHabitScore}%</span></div>
+                  <div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">Hourly</span><span className="text-foreground font-medium">{score.hourlyScore}%</span></div>
                 </div>
                 {reason?.reason && (
                   <div className="mt-3 pt-3 border-t border-border">
