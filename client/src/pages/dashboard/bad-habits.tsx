@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { format, eachDayOfInterval, startOfMonth, endOfMonth, isSameDay, addMonths, subMonths, getDaysInMonth } from "date-fns";
-import { useBadHabits, useCreateBadHabit, useDeleteBadHabit, useBadHabitEntries, useToggleBadHabitEntry } from "@/hooks/use-bad-habits";
+import { useBadHabits, useCreateBadHabit, useUpdateBadHabit, useDeleteBadHabit, useBadHabitEntries, useToggleBadHabitEntry } from "@/hooks/use-bad-habits";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,8 +23,10 @@ export default function BadHabitsPage() {
   const { data: entries } = useBadHabitEntries(monthStr);
 
   const createHabit = useCreateBadHabit();
+  const updateHabit = useUpdateBadHabit();
   const deleteHabit = useDeleteBadHabit();
   const toggleEntry = useToggleBadHabitEntry();
+  const [editingName, setEditingName] = useState<{ id: number; value: string } | null>(null);
 
   const handleCreate = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -144,10 +146,36 @@ export default function BadHabitsPage() {
           <div className="w-64 shrink-0 space-y-2 pt-12">
             {habits?.map(habit => (
               <div key={habit.id} className="h-10 flex items-center justify-between px-2 group" data-testid={`row-bad-habit-${habit.id}`}>
-                <span className="font-medium truncate" data-testid={`text-bad-habit-name-${habit.id}`}>{habit.name}</span>
+                {editingName?.id === habit.id ? (
+                  <Input
+                    value={editingName.value}
+                    onChange={e => setEditingName({ id: habit.id, value: e.target.value })}
+                    onBlur={() => {
+                      if (editingName.value.trim() && editingName.value.trim() !== habit.name) {
+                        updateHabit.mutate({ id: habit.id, name: editingName.value.trim() });
+                      }
+                      setEditingName(null);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                      if (e.key === "Escape") setEditingName(null);
+                    }}
+                    autoFocus
+                    className="h-7 text-sm font-medium"
+                    data-testid={`input-edit-bad-habit-name-${habit.id}`}
+                  />
+                ) : (
+                  <span
+                    className="font-medium truncate cursor-pointer hover:underline"
+                    onClick={() => setEditingName({ id: habit.id, value: habit.name })}
+                    data-testid={`text-bad-habit-name-${habit.id}`}
+                  >
+                    {habit.name}
+                  </span>
+                )}
                 <button
                   onClick={() => deleteHabit.mutate(habit.id)}
-                  className="opacity-0 group-hover:opacity-100 text-destructive hover:bg-destructive/10 p-1 rounded"
+                  className="opacity-0 group-hover:opacity-100 text-destructive hover:bg-destructive/10 p-1 rounded shrink-0"
                   data-testid={`button-delete-bad-habit-${habit.id}`}
                 >
                   <Trash2 className="w-4 h-4" />

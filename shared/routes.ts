@@ -98,6 +98,11 @@ export const api = {
       input: insertGoodHabitSchema.omit({ userId: true }),
       responses: { 201: z.custom<typeof goodHabits.$inferSelect>(), 400: errorSchemas.validation }
     },
+    update: {
+      method: 'PUT' as const, path: '/api/good-habits/:id' as const,
+      input: z.object({ name: z.string().min(1) }),
+      responses: { 200: z.custom<typeof goodHabits.$inferSelect>(), 400: errorSchemas.validation }
+    },
     delete: {
       method: 'DELETE' as const, path: '/api/good-habits/:id' as const,
       responses: { 204: z.void(), 404: errorSchemas.notFound }
@@ -124,6 +129,11 @@ export const api = {
       method: 'POST' as const, path: '/api/bad-habits' as const,
       input: insertBadHabitSchema.omit({ userId: true }),
       responses: { 201: z.custom<typeof badHabits.$inferSelect>(), 400: errorSchemas.validation }
+    },
+    update: {
+      method: 'PUT' as const, path: '/api/bad-habits/:id' as const,
+      input: z.object({ name: z.string().min(1) }),
+      responses: { 200: z.custom<typeof badHabits.$inferSelect>(), 400: errorSchemas.validation }
     },
     delete: {
       method: 'DELETE' as const, path: '/api/bad-habits/:id' as const,

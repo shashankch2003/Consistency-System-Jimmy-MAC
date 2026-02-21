@@ -126,6 +126,15 @@ export async function registerRoutes(
       res.status(201).json(habit);
     } catch (e: any) { res.status(400).json({ message: e.message }); }
   });
+  app.put(api.goodHabits.update.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const input = api.goodHabits.update.input.parse(req.body);
+      const habits = await storage.getGoodHabits(req.user.claims.sub);
+      if (!habits.find(h => h.id === parseInt(req.params.id))) return res.status(403).json({ message: "Unauthorized" });
+      const habit = await storage.updateGoodHabit(parseInt(req.params.id), input.name);
+      res.json(habit);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
   app.delete(api.goodHabits.delete.path, isAuthenticated, async (req, res) => {
     await storage.deleteGoodHabit(parseInt(req.params.id));
     res.status(204).end();
@@ -157,6 +166,15 @@ export async function registerRoutes(
       const input = api.badHabits.create.input.parse(req.body);
       const habit = await storage.createBadHabit({ ...input, userId: req.user.claims.sub });
       res.status(201).json(habit);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+  app.put(api.badHabits.update.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const input = api.badHabits.update.input.parse(req.body);
+      const habits = await storage.getBadHabits(req.user.claims.sub);
+      if (!habits.find(h => h.id === parseInt(req.params.id))) return res.status(403).json({ message: "Unauthorized" });
+      const habit = await storage.updateBadHabit(parseInt(req.params.id), input.name);
+      res.json(habit);
     } catch (e: any) { res.status(400).json({ message: e.message }); }
   });
   app.delete(api.badHabits.delete.path, isAuthenticated, async (req, res) => {

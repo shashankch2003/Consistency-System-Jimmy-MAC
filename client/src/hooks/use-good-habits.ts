@@ -35,6 +35,24 @@ export function useCreateGoodHabit() {
   });
 }
 
+export function useUpdateGoodHabit() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, name }: { id: number; name: string }) => {
+      const url = buildUrl(api.goodHabits.update.path, { id });
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to update habit");
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [api.goodHabits.list.path] }),
+  });
+}
+
 export function useDeleteGoodHabit() {
   const queryClient = useQueryClient();
   return useMutation({

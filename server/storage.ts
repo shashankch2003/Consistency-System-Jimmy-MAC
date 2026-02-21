@@ -42,12 +42,14 @@ export interface IStorage extends IAuthStorage {
 
   getGoodHabits(userId: string): Promise<(typeof goodHabits.$inferSelect)[]>;
   createGoodHabit(habit: InsertGoodHabit): Promise<typeof goodHabits.$inferSelect>;
+  updateGoodHabit(id: number, name: string): Promise<typeof goodHabits.$inferSelect>;
   deleteGoodHabit(id: number): Promise<void>;
   getGoodHabitEntries(habitIds: number[], month?: string): Promise<(typeof goodHabitEntries.$inferSelect)[]>;
   upsertGoodHabitEntry(entry: InsertGoodHabitEntry): Promise<typeof goodHabitEntries.$inferSelect>;
 
   getBadHabits(userId: string): Promise<(typeof badHabits.$inferSelect)[]>;
   createBadHabit(habit: InsertBadHabit): Promise<typeof badHabits.$inferSelect>;
+  updateBadHabit(id: number, name: string): Promise<typeof badHabits.$inferSelect>;
   deleteBadHabit(id: number): Promise<void>;
   getBadHabitEntries(habitIds: number[], month?: string): Promise<(typeof badHabitEntries.$inferSelect)[]>;
   upsertBadHabitEntry(entry: InsertBadHabitEntry): Promise<typeof badHabitEntries.$inferSelect>;
@@ -159,6 +161,10 @@ export class DatabaseStorage implements IStorage {
     const [created] = await db.insert(goodHabits).values(habit).returning();
     return created;
   }
+  async updateGoodHabit(id: number, name: string) {
+    const [updated] = await db.update(goodHabits).set({ name }).where(eq(goodHabits.id, id)).returning();
+    return updated;
+  }
   async deleteGoodHabit(id: number) {
     await db.delete(goodHabitEntries).where(eq(goodHabitEntries.habitId, id));
     await db.delete(goodHabits).where(eq(goodHabits.id, id));
@@ -186,6 +192,10 @@ export class DatabaseStorage implements IStorage {
   async createBadHabit(habit: InsertBadHabit) {
     const [created] = await db.insert(badHabits).values(habit).returning();
     return created;
+  }
+  async updateBadHabit(id: number, name: string) {
+    const [updated] = await db.update(badHabits).set({ name }).where(eq(badHabits.id, id)).returning();
+    return updated;
   }
   async deleteBadHabit(id: number) {
     await db.delete(badHabitEntries).where(eq(badHabitEntries.habitId, id));

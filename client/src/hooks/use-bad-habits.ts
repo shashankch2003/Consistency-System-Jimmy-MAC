@@ -35,6 +35,24 @@ export function useCreateBadHabit() {
   });
 }
 
+export function useUpdateBadHabit() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, name }: { id: number; name: string }) => {
+      const url = buildUrl(api.badHabits.update.path, { id });
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to update habit");
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [api.badHabits.list.path] }),
+  });
+}
+
 export function useDeleteBadHabit() {
   const queryClient = useQueryClient();
   return useMutation({
