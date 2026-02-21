@@ -241,10 +241,39 @@
   padding: 0;
 }
 .tiptap mark {
-  background-color: rgba(255, 255, 255, 0.15);
   color: inherit;
   border-radius: 2px;
   padding: 1px 2px;
+}
+.tiptap a.notion-link {
+  color: rgb(51, 126, 169);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color 150ms;
+}
+.tiptap a.notion-link:hover {
+  color: rgb(81, 156, 199);
+}
+.block-handle {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.15);
+  cursor: grab;
+  z-index: 10;
+  border-radius: 4px;
+  transition: all 150ms;
+  padding: 0;
+}
+.block-handle:hover {
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.08);
 }
 .bubble-btn {
   padding: 6px 10px;
