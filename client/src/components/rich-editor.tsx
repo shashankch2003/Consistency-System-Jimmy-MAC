@@ -770,7 +770,9 @@ function FloatingToolbar({ editor, containerRef }: { editor: Editor; containerRe
 
       const topY = Math.min(startCoords.top, endCoords.top);
       const midX = (startCoords.left + endCoords.right) / 2 - containerRect.left;
-      const top = topY - containerRect.top + scrollTop - 44;
+      const toolbarHeight = 48;
+      const gap = 8;
+      const top = topY - containerRect.top + scrollTop - toolbarHeight - gap;
       const toolbarWidth = 240;
       const maxLeft = containerRect.width - toolbarWidth - 8;
 
