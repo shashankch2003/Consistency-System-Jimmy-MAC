@@ -357,11 +357,13 @@ export default function NotesPage() {
         {selectedNote ? (
           <div className="flex-1 overflow-y-auto">
             {selectedNote.parentId && (
-              <Breadcrumbs
-                noteId={selectedNote.id}
-                allNotes={notesList}
-                onNavigate={handleSelectNote}
-              />
+              <div className={cn(!sidebarOpen && "pl-9")}>
+                <Breadcrumbs
+                  noteId={selectedNote.id}
+                  allNotes={notesList}
+                  onNavigate={handleSelectNote}
+                />
+              </div>
             )}
             <div className="max-w-3xl mx-auto px-10 py-10">
               <div className="flex items-start gap-3 mb-4">
