@@ -639,16 +639,36 @@ function ColorPicker({ editor, onClose, mode, position }: { editor: Editor; onCl
 function BlockMenu({ editor, position, onClose }: { editor: Editor; position: { x: number; y: number }; onClose: () => void }) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [subMenu, setSubMenu] = useState<"turnInto" | "color" | null>(null);
+  const [search, setSearch] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setTimeout(() => searchRef.current?.focus(), 50);
+  }, []);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
     };
-    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") { if (subMenu) setSubMenu(null); else onClose(); } };
     document.addEventListener("mousedown", handleClick);
     document.addEventListener("keydown", handleKey);
     return () => { document.removeEventListener("mousedown", handleClick); document.removeEventListener("keydown", handleKey); };
-  }, [onClose]);
+  }, [onClose, subMenu]);
+
+  const getBlockTypeLabel = () => {
+    if (editor.isActive("heading", { level: 1 })) return "Heading 1";
+    if (editor.isActive("heading", { level: 2 })) return "Heading 2";
+    if (editor.isActive("heading", { level: 3 })) return "Heading 3";
+    if (editor.isActive("bulletList")) return "Bulleted list";
+    if (editor.isActive("orderedList")) return "Numbered list";
+    if (editor.isActive("taskList")) return "To-do list";
+    if (editor.isActive("blockquote")) return "Quote";
+    if (editor.isActive("codeBlock")) return "Code";
+    if (editor.isActive("table")) return "Table";
+    if (editor.isActive("image")) return "Image";
+    return "Text";
+  };
 
   const handleDelete = () => {
     const { state } = editor;
@@ -670,6 +690,15 @@ function BlockMenu({ editor, position, onClose }: { editor: Editor; position: { 
     onClose();
   };
 
+  const handleCopyLink = () => {
+    const { state } = editor;
+    const { from } = state.selection;
+    const blockId = `block-${from}`;
+    const url = `${window.location.href}#${blockId}`;
+    navigator.clipboard.writeText(url).catch(() => {});
+    onClose();
+  };
+
   if (subMenu === "turnInto") {
     return <TurnIntoMenu editor={editor} onClose={onClose} position={position} />;
   }
@@ -678,7 +707,7 @@ function BlockMenu({ editor, position, onClose }: { editor: Editor; position: { 
     return (
       <div
         ref={menuRef}
-        className="fixed bg-[#252525] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-[100] min-w-[200px] py-1"
+        className="fixed bg-[#252525] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-[100] min-w-[200px] py-1 max-h-[70vh] overflow-y-auto"
         style={{ top: position.y, left: position.x }}
         data-testid="block-color-menu"
       >
@@ -720,68 +749,94 @@ function BlockMenu({ editor, position, onClose }: { editor: Editor; position: { 
     );
   }
 
+  const allActions = [
+    { id: "turn-into", label: "Turn into", icon: AlignLeft, shortcut: "", hasArrow: true, action: () => setSubMenu("turnInto") },
+    { id: "color", label: "Color", icon: Palette, shortcut: "", hasArrow: true, action: () => setSubMenu("color") },
+    { id: "separator-1", type: "separator" as const },
+    { id: "copy-link", label: "Copy link to block", icon: LinkIcon, shortcut: "", action: handleCopyLink },
+    { id: "duplicate", label: "Duplicate", icon: Copy, shortcut: "Ctrl+D", action: handleDuplicate },
+    { id: "separator-2", type: "separator" as const },
+    { id: "delete", label: "Delete", icon: Trash2, shortcut: "Del", danger: true, action: handleDelete },
+  ];
+
+  const filteredActions = search
+    ? allActions.filter(a => "label" in a && a.label.toLowerCase().includes(search.toLowerCase()))
+    : allActions;
+
   return (
     <div
       ref={menuRef}
-      className="fixed bg-[#252525] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-[100] min-w-[220px] py-1"
+      className="fixed bg-[#252525] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-[100] min-w-[260px] py-1"
       style={{ top: position.y, left: position.x }}
       data-testid="block-menu"
     >
-      <button
-        className="w-full flex items-center gap-3 px-3 py-2 text-sm text-white/80 hover:bg-white/10 transition-colors text-left"
-        onClick={handleDelete}
-        data-testid="block-menu-delete"
-      >
-        <Trash2 className="w-4 h-4" />
-        <span>Delete</span>
-      </button>
-      <button
-        className="w-full flex items-center gap-3 px-3 py-2 text-sm text-white/80 hover:bg-white/10 transition-colors text-left"
-        onClick={handleDuplicate}
-        data-testid="block-menu-duplicate"
-      >
-        <Copy className="w-4 h-4" />
-        <span>Duplicate</span>
-      </button>
-      <div className="h-px bg-white/10 my-1" />
-      <button
-        className="w-full flex items-center gap-3 px-3 py-2 text-sm text-white/80 hover:bg-white/10 transition-colors text-left justify-between"
-        onClick={() => setSubMenu("turnInto")}
-        data-testid="block-menu-turn-into"
-      >
-        <span className="flex items-center gap-3"><AlignLeft className="w-4 h-4" /> Turn into</span>
-        <ChevronDown className="w-3 h-3 -rotate-90" />
-      </button>
-      <button
-        className="w-full flex items-center gap-3 px-3 py-2 text-sm text-white/80 hover:bg-white/10 transition-colors text-left justify-between"
-        onClick={() => setSubMenu("color")}
-        data-testid="block-menu-color"
-      >
-        <span className="flex items-center gap-3"><Palette className="w-4 h-4" /> Color</span>
-        <ChevronDown className="w-3 h-3 -rotate-90" />
-      </button>
+      <div className="px-2 py-1.5 border-b border-white/[0.06]">
+        <input
+          ref={searchRef}
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search actions..."
+          className="w-full bg-white/[0.05] border border-white/10 rounded-md px-2.5 py-1.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/20"
+          data-testid="input-block-menu-search"
+        />
+      </div>
+      <div className="px-3 py-1.5 text-[11px] font-medium text-white/30">{getBlockTypeLabel()}</div>
+      <div className="max-h-[50vh] overflow-y-auto py-0.5">
+        {filteredActions.map((item) => {
+          if ("type" in item && item.type === "separator") return <div key={item.id} className="h-px bg-white/10 my-1" />;
+          const menuItem = item as { id: string; label: string; icon: any; shortcut?: string; hasArrow?: boolean; danger?: boolean; action: () => void };
+          const Icon = menuItem.icon;
+          return (
+            <button
+              key={menuItem.id}
+              className={cn(
+                "w-full flex items-center gap-3 px-3 py-1.5 text-sm transition-colors text-left",
+                menuItem.danger ? "text-white/70 hover:bg-white/[0.06]" : "text-white/70 hover:bg-white/[0.06]"
+              )}
+              onClick={menuItem.action}
+              data-testid={`block-menu-${menuItem.id}`}
+            >
+              <Icon className="w-4 h-4 text-white/50" />
+              <span className="flex-1">{menuItem.label}</span>
+              {menuItem.hasArrow && <ChevronDown className="w-3 h-3 -rotate-90 text-white/30" />}
+              {menuItem.shortcut && <span className="text-xs text-white/25 ml-2">{menuItem.shortcut}</span>}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function BlockHandle({ editor, containerRef }: { editor: Editor; containerRef: React.RefObject<HTMLDivElement | null> }) {
-  const [handlePos, setHandlePos] = useState<{ top: number; left: number; pos: number } | null>(null);
+function BlockHandle({ editor, containerRef, onOpenSlashAt }: { editor: Editor; containerRef: React.RefObject<HTMLDivElement | null>; onOpenSlashAt?: (pos: number) => void }) {
+  const [handlePos, setHandlePos] = useState<{ top: number; left: number; pos: number; blockEl: Element } | null>(null);
   const [blockMenu, setBlockMenu] = useState<{ x: number; y: number } | null>(null);
-  const handleRef = useRef<HTMLButtonElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const dragStartPosRef = useRef<number | null>(null);
+  const dragOverIndexRef = useRef<number | null>(null);
+  const dragGhostRef = useRef<HTMLDivElement | null>(null);
+
+  const getBlockNodes = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return [];
+    const editorEl = container.querySelector('.tiptap') as HTMLElement;
+    if (!editorEl) return [];
+    return Array.from(editorEl.querySelectorAll(':scope > p, :scope > h1, :scope > h2, :scope > h3, :scope > ul, :scope > ol, :scope > blockquote, :scope > pre, :scope > hr, :scope > .tableWrapper, :scope > ul[data-type="taskList"], :scope > div'));
+  }, [containerRef]);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-
     const editorEl = container.querySelector('.tiptap') as HTMLElement;
     if (!editorEl) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (blockMenu) return;
+      if (blockMenu || isDragging) return;
       const containerRect = container.getBoundingClientRect();
       const mouseY = e.clientY;
 
-      const blockNodes = editorEl.querySelectorAll(':scope > p, :scope > h1, :scope > h2, :scope > h3, :scope > ul, :scope > ol, :scope > blockquote, :scope > pre, :scope > hr, :scope > .tableWrapper, :scope > ul[data-type="taskList"], :scope > div');
+      const blockNodes = getBlockNodes();
       let closestEl: Element | null = null;
       let closestRect: DOMRect | null = null;
       let closestDist = Infinity;
@@ -798,12 +853,12 @@ function BlockHandle({ editor, containerRef }: { editor: Editor; containerRef: R
       });
 
       if (closestEl && closestRect && closestDist < 60) {
-        const c = { el: closestEl as Element, rect: closestRect as DOMRect };
-        const pos = editor.view.posAtDOM(c.el, 0);
+        const pos = editor.view.posAtDOM(closestEl, 0);
         setHandlePos({
-          top: c.rect.top - containerRect.top + container.scrollTop + c.rect.height / 2 - 12,
-          left: c.rect.left - containerRect.left - 28,
+          top: closestRect.top - containerRect.top + container.scrollTop,
+          left: closestRect.left - containerRect.left - 56,
           pos,
+          blockEl: closestEl,
         });
       } else {
         setHandlePos(null);
@@ -811,41 +866,181 @@ function BlockHandle({ editor, containerRef }: { editor: Editor; containerRef: R
     };
 
     const handleMouseLeave = () => {
-      if (!blockMenu) setHandlePos(null);
+      if (!blockMenu && !isDragging) setHandlePos(null);
     };
 
     editorEl.addEventListener("mousemove", handleMouseMove);
     editorEl.addEventListener("mouseleave", handleMouseLeave);
-
     return () => {
       editorEl.removeEventListener("mousemove", handleMouseMove);
       editorEl.removeEventListener("mouseleave", handleMouseLeave);
     };
-  }, [editor, containerRef, blockMenu]);
+  }, [editor, containerRef, blockMenu, isDragging, getBlockNodes]);
 
-  const handleClick = (e: React.MouseEvent) => {
+  const handlePlusClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!handlePos) return;
+    const { state } = editor;
+    const resolvedPos = state.doc.resolve(handlePos.pos);
+    const blockEnd = resolvedPos.end(resolvedPos.depth);
+    editor.chain().focus().insertContentAt(blockEnd + 1, { type: "paragraph" }).setTextSelection(blockEnd + 2).run();
+    setTimeout(() => {
+      const newPos = editor.state.selection.from;
+      editor.chain().insertContentAt(newPos, "/").run();
+      if (onOpenSlashAt) {
+        setTimeout(() => onOpenSlashAt(editor.state.selection.from), 30);
+      }
+    }, 50);
+  };
+
+  const handleDragStart = (e: React.PointerEvent) => {
+    if (!handlePos) return;
     e.preventDefault();
     e.stopPropagation();
 
-    if (handlePos) {
-      editor.chain().focus().setTextSelection(handlePos.pos).run();
-      setBlockMenu({ x: e.clientX, y: e.clientY });
-    }
+    const blockNodes = getBlockNodes();
+    const blockIndex = blockNodes.indexOf(handlePos.blockEl);
+    if (blockIndex === -1) return;
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let hasDragged = false;
+
+    dragStartPosRef.current = blockIndex;
+
+    const blockEl = handlePos.blockEl as HTMLElement;
+
+    const moveHandler = (ev: PointerEvent) => {
+      const dx = Math.abs(ev.clientX - startX);
+      const dy = Math.abs(ev.clientY - startY);
+      if (!hasDragged && (dx > 4 || dy > 4)) {
+        hasDragged = true;
+        setIsDragging(true);
+        blockEl.style.opacity = "0.4";
+        const ghost = document.createElement("div");
+        ghost.className = "block-drag-ghost";
+        ghost.textContent = blockEl.textContent?.slice(0, 60) || "Block";
+        document.body.appendChild(ghost);
+        dragGhostRef.current = ghost;
+      }
+      if (!hasDragged) return;
+      if (dragGhostRef.current) {
+        dragGhostRef.current.style.top = `${ev.clientY - 16}px`;
+        dragGhostRef.current.style.left = `${ev.clientX + 12}px`;
+      }
+      const currentBlocks = getBlockNodes();
+      let closestIdx = -1;
+      let closestDist = Infinity;
+      currentBlocks.forEach((node, idx) => {
+        const rect = node.getBoundingClientRect();
+        const centerY = rect.top + rect.height / 2;
+        const dist = Math.abs(ev.clientY - centerY);
+        if (dist < closestDist) { closestIdx = idx; closestDist = dist; }
+      });
+      const newOverIdx = closestIdx !== dragStartPosRef.current ? closestIdx : null;
+      dragOverIndexRef.current = newOverIdx;
+      setDragOverIndex(newOverIdx);
+    };
+
+    const upHandler = (ev: PointerEvent) => {
+      document.removeEventListener("pointermove", moveHandler);
+      document.removeEventListener("pointerup", upHandler);
+
+      if (!hasDragged) {
+        dragStartPosRef.current = null;
+        if (handlePos) {
+          editor.chain().focus().setTextSelection(handlePos.pos).run();
+          setBlockMenu({ x: ev.clientX, y: ev.clientY });
+        }
+        return;
+      }
+
+      blockEl.style.opacity = "";
+      if (dragGhostRef.current) {
+        dragGhostRef.current.remove();
+        dragGhostRef.current = null;
+      }
+
+      const fromIndex = dragStartPosRef.current;
+      const toIndex = dragOverIndexRef.current;
+
+      setIsDragging(false);
+      setDragOverIndex(null);
+      dragStartPosRef.current = null;
+      dragOverIndexRef.current = null;
+
+      if (fromIndex !== null && toIndex !== null && fromIndex !== toIndex) {
+        const { doc, tr } = editor.state;
+        const topLevel = doc.content;
+        if (fromIndex < topLevel.childCount && toIndex < topLevel.childCount) {
+          let fromStart = 0;
+          for (let i = 0; i < fromIndex; i++) fromStart += topLevel.child(i).nodeSize;
+          const fromNode = topLevel.child(fromIndex);
+          const fromEnd = fromStart + fromNode.nodeSize;
+          const slice = doc.slice(fromStart, fromEnd);
+          const deleteTr = tr.delete(fromStart, fromEnd);
+          let insertAt = 0;
+          const adjustedTo = toIndex > fromIndex ? toIndex - 1 : toIndex;
+          const newDoc = deleteTr.doc;
+          for (let i = 0; i < adjustedTo; i++) insertAt += newDoc.content.child(i).nodeSize;
+          deleteTr.insert(insertAt, slice.content);
+          editor.view.dispatch(deleteTr);
+        }
+      }
+    };
+
+    document.addEventListener("pointermove", moveHandler);
+    document.addEventListener("pointerup", upHandler);
   };
+
+  const blockNodes = isDragging ? getBlockNodes() : [];
 
   return (
     <>
-      {handlePos && !blockMenu && (
-        <button
-          ref={handleRef}
-          className="block-handle"
+      {handlePos && !blockMenu && !isDragging && (
+        <div
+          className="block-handle-container"
           style={{ top: handlePos.top, left: Math.max(0, handlePos.left) }}
-          onMouseDown={handleClick}
-          data-testid="block-handle"
+          data-testid="block-handle-container"
         >
-          <GripVertical className="w-4 h-4" />
-        </button>
+          <button
+            className="block-handle-btn block-handle-plus"
+            onClick={handlePlusClick}
+            data-testid="block-handle-plus"
+            title="Click to add below"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+          <button
+            className="block-handle-btn block-handle-grip"
+            onPointerDown={handleDragStart}
+            data-testid="block-handle-grip"
+            title="Drag to move. Click to open menu."
+          >
+            <GripVertical className="w-3.5 h-3.5" />
+          </button>
+        </div>
       )}
+      {isDragging && blockNodes.map((node, idx) => {
+        if (dragOverIndex !== idx) return null;
+        const container = containerRef.current;
+        if (!container) return null;
+        const containerRect = container.getBoundingClientRect();
+        const rect = node.getBoundingClientRect();
+        const isBelow = dragStartPosRef.current !== null && idx > dragStartPosRef.current;
+        return (
+          <div
+            key={`drop-${idx}`}
+            className="block-drop-indicator"
+            style={{
+              top: (isBelow ? rect.bottom : rect.top) - containerRect.top + container.scrollTop,
+              left: rect.left - containerRect.left,
+              width: rect.width,
+            }}
+          />
+        );
+      })}
       {blockMenu && (
         <BlockMenu
           editor={editor}
@@ -1206,9 +1401,18 @@ export default function RichEditor({ content, onChange, onAddPage }: RichEditorP
   if (!editor) return null;
 
   return (
-    <div ref={editorContainerRef} className="relative" data-testid="rich-editor">
+    <div ref={editorContainerRef} className="relative rich-editor-wrapper" data-testid="rich-editor">
       <EditorContent editor={editor} />
-      <BlockHandle editor={editor} containerRef={editorContainerRef} />
+      <BlockHandle editor={editor} containerRef={editorContainerRef} onOpenSlashAt={(pos) => {
+        const coords = editor.view.coordsAtPos(pos);
+        const containerRect = editorContainerRef.current?.getBoundingClientRect();
+        if (containerRect) {
+          setSlashMenu({
+            top: coords.bottom - containerRect.top + (editorContainerRef.current?.scrollTop || 0) + 4,
+            left: coords.left - containerRect.left,
+          });
+        }
+      }} />
       <FloatingToolbar editor={editor} containerRef={editorContainerRef} />
       {editor.isActive("table") && (
         <NotionTableControls editor={editor} containerRef={editorContainerRef} />
