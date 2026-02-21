@@ -166,13 +166,10 @@ export default function LandingPage() {
               animate="visible"
               variants={fadeUp}
               custom={1}
-              className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-display font-bold tracking-tight leading-[1.15] mb-6 text-left"
+              className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-display font-bold tracking-tight leading-[1.15] mb-6 text-center"
             >
-              Helping You be{" "}
-              <span className="text-emerald-400 italic">Productive</span> &
-              <br />
-              Reach Your <span className="text-emerald-400 italic">Goals</span> Through
-              <br />
+              Helping You be <span className="text-emerald-400 italic">Productive</span> &<br />
+              Reach Your <span className="text-emerald-400 italic">Goals</span> Through<br />
               <span className="underline decoration-emerald-500 underline-offset-[6px] decoration-[3px]">Systems</span> in a Distracted World
             </motion.h1>
 
