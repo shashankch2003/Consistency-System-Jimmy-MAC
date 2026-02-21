@@ -53,6 +53,7 @@ The frontend lives in `client/src/` with pages under `client/src/pages/`, reusab
   - `good_habits` / `good_habit_entries` — Good habit tracking with daily entries
   - `bad_habits` / `bad_habit_entries` — Bad habit tracking with daily entries
   - `hourly_entries` — Hourly time tracking
+  - `notes` — Notion-like notes/pages with title, content, and emoji icons
 
 ### Shared Code
 The `shared/` directory contains code used by both frontend and backend:

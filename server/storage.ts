@@ -2,7 +2,7 @@ import { db } from "./db";
 import { eq, and, asc, like } from "drizzle-orm";
 import {
   yearlyGoals, monthlyOverviewGoals, monthlyDynamicGoals,
-  tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, payments, taskBankItems, dailyReasons,
+  tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, payments, taskBankItems, dailyReasons, notes,
 } from "@shared/schema";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
 
@@ -18,6 +18,7 @@ type InsertHourlyEntry = typeof hourlyEntries.$inferInsert;
 type InsertPayment = typeof payments.$inferInsert;
 type InsertTaskBankItem = typeof taskBankItems.$inferInsert;
 type InsertDailyReason = typeof dailyReasons.$inferInsert;
+type InsertNote = typeof notes.$inferInsert;
 
 export interface IStorage extends IAuthStorage {
   getYearlyGoals(userId: string, year?: number): Promise<(typeof yearlyGoals.$inferSelect)[]>;
@@ -66,6 +67,12 @@ export interface IStorage extends IAuthStorage {
 
   getDailyReason(userId: string, date: string): Promise<(typeof dailyReasons.$inferSelect) | undefined>;
   upsertDailyReason(reason: InsertDailyReason): Promise<typeof dailyReasons.$inferSelect>;
+
+  getNotes(userId: string): Promise<(typeof notes.$inferSelect)[]>;
+  getNote(id: number, userId: string): Promise<(typeof notes.$inferSelect) | undefined>;
+  createNote(note: InsertNote): Promise<typeof notes.$inferSelect>;
+  updateNote(id: number, userId: string, updates: Partial<InsertNote>): Promise<typeof notes.$inferSelect>;
+  deleteNote(id: number, userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -265,6 +272,24 @@ export class DatabaseStorage implements IStorage {
     }
     const [created] = await db.insert(dailyReasons).values(reason).returning();
     return created;
+  }
+  async getNotes(userId: string) {
+    return await db.select().from(notes).where(eq(notes.userId, userId)).orderBy(asc(notes.id));
+  }
+  async getNote(id: number, userId: string) {
+    const [note] = await db.select().from(notes).where(and(eq(notes.id, id), eq(notes.userId, userId)));
+    return note;
+  }
+  async createNote(note: InsertNote) {
+    const [created] = await db.insert(notes).values(note).returning();
+    return created;
+  }
+  async updateNote(id: number, userId: string, updates: Partial<InsertNote>) {
+    const [updated] = await db.update(notes).set({ ...updates, updatedAt: new Date() }).where(and(eq(notes.id, id), eq(notes.userId, userId))).returning();
+    return updated;
+  }
+  async deleteNote(id: number, userId: string) {
+    await db.delete(notes).where(and(eq(notes.id, id), eq(notes.userId, userId)));
   }
 }
 

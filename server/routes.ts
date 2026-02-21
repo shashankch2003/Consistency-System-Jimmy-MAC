@@ -382,6 +382,36 @@ export async function registerRoutes(
     } catch (e: any) { res.status(400).json({ message: e.message }); }
   });
 
+  // Notes
+  app.get(api.notes.list.path, isAuthenticated, async (req: any, res) => {
+    const notesList = await storage.getNotes(req.user.claims.sub);
+    res.json(notesList);
+  });
+  app.get(api.notes.get.path, isAuthenticated, async (req: any, res) => {
+    const note = await storage.getNote(parseInt(req.params.id), req.user.claims.sub);
+    if (!note) return res.status(404).json({ message: "Not found" });
+    res.json(note);
+  });
+  app.post(api.notes.create.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const input = api.notes.create.input.parse(req.body);
+      const note = await storage.createNote({ ...input, userId: req.user.claims.sub });
+      res.status(201).json(note);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+  app.put(api.notes.update.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const input = api.notes.update.input.parse(req.body);
+      const note = await storage.updateNote(parseInt(req.params.id), req.user.claims.sub, input);
+      if (!note) return res.status(404).json({ message: "Not found" });
+      res.json(note);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+  app.delete(api.notes.delete.path, isAuthenticated, async (req: any, res) => {
+    await storage.deleteNote(parseInt(req.params.id), req.user.claims.sub);
+    res.status(204).end();
+  });
+
   // Payments
   app.post(api.payments.createOrder.path, isAuthenticated, async (req: any, res) => {
     const orderId = `order_${crypto.randomBytes(8).toString('hex')}`;

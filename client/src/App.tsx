@@ -13,6 +13,7 @@ import BadHabitsPage from "@/pages/dashboard/bad-habits";
 import HourlyPage from "@/pages/dashboard/hourly";
 import TaskBankPage from "@/pages/dashboard/task-bank";
 import DailyScorePage from "@/pages/dashboard/daily-score";
+import NotesPage from "@/pages/dashboard/notes";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -59,6 +60,11 @@ function Router() {
       <Route path="/dashboard/hourly">
         <DashboardLayout>
           <HourlyPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/notes">
+        <DashboardLayout>
+          <NotesPage />
         </DashboardLayout>
       </Route>
 

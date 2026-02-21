@@ -2,8 +2,8 @@ import { z } from 'zod';
 import { 
   insertPaymentSchema, insertYearlyGoalSchema, insertMonthlyOverviewGoalSchema, insertMonthlyDynamicGoalSchema,
   insertTaskSchema, insertGoodHabitSchema, insertGoodHabitEntrySchema, 
-  insertBadHabitSchema, insertBadHabitEntrySchema, insertHourlyEntrySchema, insertTaskBankItemSchema, insertDailyReasonSchema,
-  payments, yearlyGoals, monthlyOverviewGoals, monthlyDynamicGoals, tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, taskBankItems, dailyReasons 
+  insertBadHabitSchema, insertBadHabitEntrySchema, insertHourlyEntrySchema, insertTaskBankItemSchema, insertDailyReasonSchema, insertNoteSchema,
+  payments, yearlyGoals, monthlyOverviewGoals, monthlyDynamicGoals, tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, taskBankItems, dailyReasons, notes 
 } from './schema';
 
 export const errorSchemas = {
@@ -220,6 +220,30 @@ export const api = {
       method: 'POST' as const, path: '/api/task-bank/:id/assign' as const,
       input: z.object({ date: z.string() }),
       responses: { 201: z.custom<typeof tasks.$inferSelect>(), 400: errorSchemas.validation }
+    }
+  },
+  notes: {
+    list: {
+      method: 'GET' as const, path: '/api/notes' as const,
+      responses: { 200: z.array(z.custom<typeof notes.$inferSelect>()) }
+    },
+    get: {
+      method: 'GET' as const, path: '/api/notes/:id' as const,
+      responses: { 200: z.custom<typeof notes.$inferSelect>(), 404: errorSchemas.notFound }
+    },
+    create: {
+      method: 'POST' as const, path: '/api/notes' as const,
+      input: insertNoteSchema.omit({ userId: true }).partial(),
+      responses: { 201: z.custom<typeof notes.$inferSelect>(), 400: errorSchemas.validation }
+    },
+    update: {
+      method: 'PUT' as const, path: '/api/notes/:id' as const,
+      input: z.object({ title: z.string().optional(), content: z.string().optional(), icon: z.string().optional() }),
+      responses: { 200: z.custom<typeof notes.$inferSelect>(), 400: errorSchemas.validation }
+    },
+    delete: {
+      method: 'DELETE' as const, path: '/api/notes/:id' as const,
+      responses: { 204: z.void(), 404: errorSchemas.notFound }
     }
   },
   payments: {

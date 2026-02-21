@@ -22,7 +22,8 @@ import {
   User,
   LayoutDashboard,
   Lightbulb,
-  Gauge
+  Gauge,
+  FileText
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -34,6 +35,7 @@ const menuItems = [
   { title: "Bad Habits", icon: XCircle, url: "/dashboard/bad-habits" },
   { title: "Hourly Tracker", icon: Clock, url: "/dashboard/hourly" },
   { title: "Daily Score", icon: Gauge, url: "/dashboard/daily-score" },
+  { title: "Notes", icon: FileText, url: "/dashboard/notes" },
 ];
 
 export function AppSidebar() {
