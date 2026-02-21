@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ChevronLeft, ChevronRight, Plus, Trash2, BarChart3, Calendar, TrendingUp, Clock, AlertTriangle, AlertCircle, FileText, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, BarChart3, Calendar, TrendingUp, Clock, AlertTriangle, AlertCircle, FileText, X, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, AreaChart, Area } from "recharts";
 
@@ -127,6 +127,74 @@ function DescriptionDialog({ task, onSave, onClose }: {
   );
 }
 
+function EditTaskDialog({ task, onSave, onClose }: {
+  task: { id: number; title: string; time: string; priority: string };
+  onSave: (updates: { title: string; time: string | null; priority: string }) => void;
+  onClose: () => void;
+}) {
+  const [title, setTitle] = useState(task.title);
+  const [time, setTime] = useState(task.time || "");
+  const [priority, setPriority] = useState(task.priority || "Normal");
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="sm:max-w-[450px]" data-testid="dialog-edit-task">
+        <DialogHeader>
+          <DialogTitle className="text-lg" data-testid="text-edit-dialog-title">Edit Task</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <label className="text-sm text-muted-foreground">Task Name</label>
+            <Input
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="Task name..."
+              className="bg-transparent border-border"
+              data-testid="input-edit-task-title"
+              autoFocus
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm text-muted-foreground">Time</label>
+            <TimeInput value={time} onChange={setTime} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm text-muted-foreground">Priority</label>
+            <Select value={priority} onValueChange={setPriority}>
+              <SelectTrigger className="bg-transparent border-border" data-testid="select-edit-task-priority">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Normal">Normal</SelectItem>
+                <SelectItem value="Important">Important</SelectItem>
+                <SelectItem value="Very Important">Very Important</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} data-testid="button-cancel-edit">Cancel</Button>
+          <Button
+            onClick={() => {
+              if (!title.trim()) return;
+              onSave({
+                title: title.trim(),
+                time: time || null,
+                priority,
+              });
+              onClose();
+            }}
+            disabled={!title.trim()}
+            data-testid="button-save-edit"
+          >
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ProgressBar({ value }: { value: number }) {
   const color = value === 0 ? "bg-zinc-500" : value <= 25 ? "bg-red-500" : value <= 50 ? "bg-yellow-500" : value <= 75 ? "bg-emerald-500" : "bg-green-500";
   return (
@@ -149,6 +217,7 @@ export default function TasksPage() {
   const [newTaskTime, setNewTaskTime] = useState("");
   const [newTaskPriority, setNewTaskPriority] = useState<string>("Normal");
   const [descTask, setDescTask] = useState<{ id: number; title: string; description: string | null } | null>(null);
+  const [editTask, setEditTask] = useState<{ id: number; title: string; time: string; priority: string } | null>(null);
   const [analyticsMonth, setAnalyticsMonth] = useState(new Date());
   const [viewMode, setViewMode] = useState<"task" | "calendar">("task");
   const [calViewMode, setCalViewMode] = useState<"day" | "week" | "month" | "year">("month");
@@ -315,6 +384,14 @@ export default function TasksPage() {
                     </div>
                   ))}
                 </div>
+                <button
+                  onClick={() => setEditTask({ id: task.id, title: task.title, time: task.time || "", priority: task.priority || "Normal" })}
+                  className="p-1.5 rounded-md text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted transition-colors shrink-0"
+                  title="Edit task"
+                  data-testid={`cal-day-button-edit-${task.id}`}
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
                 <button
                   onClick={() => deleteTask.mutate(task.id)}
                   className="p-1.5 rounded-md text-muted-foreground/40 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
@@ -679,6 +756,14 @@ export default function TasksPage() {
                       ))}
                     </div>
                     <button
+                      onClick={() => setEditTask({ id: task.id, title: task.title, time: task.time || "", priority: task.priority || "Normal" })}
+                      className="p-1.5 rounded-md text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted transition-colors shrink-0"
+                      title="Edit task"
+                      data-testid={`button-edit-task-${task.id}`}
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
                       onClick={() => deleteTask.mutate(task.id)}
                       className="p-1.5 rounded-md text-muted-foreground/40 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
                       data-testid={`button-delete-task-${task.id}`}
@@ -984,6 +1069,14 @@ export default function TasksPage() {
           task={descTask}
           onSave={(desc) => updateTask.mutate({ id: descTask.id, description: desc.trim() || null })}
           onClose={() => setDescTask(null)}
+        />
+      )}
+
+      {editTask && (
+        <EditTaskDialog
+          task={editTask}
+          onSave={(updates) => updateTask.mutate({ id: editTask.id, title: updates.title, time: updates.time, priority: updates.priority })}
+          onClose={() => setEditTask(null)}
         />
       )}
     </div>
