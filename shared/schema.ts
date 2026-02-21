@@ -121,6 +121,16 @@ export const taskBankItems = pgTable("task_bank_items", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const notes = pgTable("notes", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  title: text("title").notNull().default("Untitled"),
+  content: text("content").default(""),
+  icon: text("icon").default("📄"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
 export const insertYearlyGoalSchema = createInsertSchema(yearlyGoals).omit({ id: true, createdAt: true });
 export const insertMonthlyOverviewGoalSchema = createInsertSchema(monthlyOverviewGoals).omit({ id: true, createdAt: true });
@@ -133,3 +143,4 @@ export const insertBadHabitEntrySchema = createInsertSchema(badHabitEntries).omi
 export const insertHourlyEntrySchema = createInsertSchema(hourlyEntries).omit({ id: true });
 export const insertDailyReasonSchema = createInsertSchema(dailyReasons).omit({ id: true });
 export const insertTaskBankItemSchema = createInsertSchema(taskBankItems).omit({ id: true, createdAt: true });
+export const insertNoteSchema = createInsertSchema(notes).omit({ id: true, createdAt: true, updatedAt: true });
