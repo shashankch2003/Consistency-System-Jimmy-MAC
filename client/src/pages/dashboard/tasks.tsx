@@ -290,6 +290,17 @@ export default function TasksPage() {
                       </p>
                     )}
                   </div>
+                  <button
+                    onClick={() => setDescTask({ id: task.id, title: task.title, description: task.description })}
+                    className={cn(
+                      "p-1.5 rounded-md transition-colors shrink-0",
+                      task.description ? "text-primary hover:bg-primary/10" : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted"
+                    )}
+                    title="Description"
+                    data-testid={`button-desc-${task.id}`}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                  </button>
                   <PriorityBadge priority={task.priority || "Normal"} />
                   {task.time && (
                     <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded shrink-0" data-testid={`badge-time-${task.id}`}>
@@ -309,17 +320,6 @@ export default function TasksPage() {
                       </div>
                     ))}
                   </div>
-                  <button
-                    onClick={() => setDescTask({ id: task.id, title: task.title, description: task.description })}
-                    className={cn(
-                      "p-1.5 rounded-md transition-colors shrink-0",
-                      task.description ? "text-primary hover:bg-primary/10" : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted"
-                    )}
-                    title="Description"
-                    data-testid={`button-desc-${task.id}`}
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                  </button>
                   <button
                     onClick={() => deleteTask.mutate(task.id)}
                     className="p-1.5 rounded-md text-muted-foreground/40 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
