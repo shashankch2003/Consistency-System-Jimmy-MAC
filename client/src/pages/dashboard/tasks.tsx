@@ -4,13 +4,29 @@ import { useTasks, useTasksByMonth, useTasksByYear, useCreateTask, useUpdateTask
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ChevronLeft, ChevronRight, Plus, Trash2, BarChart3, Calendar, TrendingUp } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, BarChart3, Calendar, TrendingUp, Clock, AlertTriangle, AlertCircle, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, AreaChart, Area } from "recharts";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const COMPLETION_LEVELS = [0, 25, 50, 75, 100];
+const PRIORITIES = ["Very Important", "Important", "Normal"] as const;
+
+function PriorityBadge({ priority }: { priority: string }) {
+  if (priority === "Very Important") return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">
+      <AlertTriangle className="w-2.5 h-2.5" />VI
+    </span>
+  );
+  if (priority === "Important") return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-yellow-400 bg-yellow-500/10 px-1.5 py-0.5 rounded">
+      <AlertCircle className="w-2.5 h-2.5" />IMP
+    </span>
+  );
+  return null;
+}
 
 function ProgressDot({ active, level, onClick, testId }: { active: boolean; level: number; onClick: () => void; testId?: string }) {
   const colors: Record<number, string> = {
@@ -45,6 +61,8 @@ function ProgressBar({ value }: { value: number }) {
 export default function TasksPage() {
   const [date, setDate] = useState(new Date());
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskTime, setNewTaskTime] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState<string>("Normal");
   const [analyticsMonth, setAnalyticsMonth] = useState(new Date());
   const dateStr = format(date, "yyyy-MM-dd");
   const analyticsMonthStr = format(analyticsMonth, "yyyy-MM");
@@ -66,8 +84,14 @@ export default function TasksPage() {
       title: newTaskTitle.trim(),
       date: dateStr,
       completionPercentage: 0,
+      ...(newTaskTime ? { time: newTaskTime } : {}),
+      priority: newTaskPriority,
     }, {
-      onSuccess: () => setNewTaskTitle(""),
+      onSuccess: () => {
+        setNewTaskTitle("");
+        setNewTaskTime("");
+        setNewTaskPriority("Normal");
+      },
     });
   };
 
@@ -174,38 +198,49 @@ export default function TasksPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[40%]">Task</TableHead>
-                {COMPLETION_LEVELS.map(level => (
-                  <TableHead key={level} className="text-center w-[10%]">{level}%</TableHead>
-                ))}
-                <TableHead className="w-[60px] text-center">Del</TableHead>
+                <TableHead className="min-w-[200px]">Task</TableHead>
+                <TableHead className="text-center w-[220px]">Completion</TableHead>
+                <TableHead className="w-[50px] text-center">Del</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Loading tasks...</TableCell>
+                  <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">Loading tasks...</TableCell>
                 </TableRow>
               ) : tasks?.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No tasks for this day. Add one below.</TableCell>
+                  <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No tasks for this day. Add one below.</TableCell>
                 </TableRow>
               ) : (
                 tasks?.map(task => (
                   <TableRow key={task.id} data-testid={`row-task-${task.id}`}>
-                    <TableCell className="font-medium" data-testid={`text-task-title-${task.id}`}>{task.title}</TableCell>
-                    {COMPLETION_LEVELS.map(level => (
-                      <TableCell key={level} className="text-center">
-                        <div className="flex justify-center">
-                          <ProgressDot
-                            active={(task.completionPercentage || 0) === level}
-                            level={level}
-                            onClick={() => updateTask.mutate({ id: task.id, completionPercentage: level })}
-                            testId={`dot-completion-${level}-${task.id}`}
-                          />
-                        </div>
-                      </TableCell>
-                    ))}
+                    <TableCell data-testid={`text-task-title-${task.id}`}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{task.title}</span>
+                        <PriorityBadge priority={task.priority || "Normal"} />
+                        {task.time && (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded">
+                            <Clock className="w-2.5 h-2.5" />{task.time}
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-center gap-3">
+                        {COMPLETION_LEVELS.map(level => (
+                          <div key={level} className="flex flex-col items-center gap-0.5">
+                            <span className="text-[9px] text-muted-foreground/60">{level}%</span>
+                            <ProgressDot
+                              active={(task.completionPercentage || 0) === level}
+                              level={level}
+                              onClick={() => updateTask.mutate({ id: task.id, completionPercentage: level })}
+                              testId={`dot-completion-${level}-${task.id}`}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-center">
                       <Button size="icon" variant="ghost" onClick={() => deleteTask.mutate(task.id)} data-testid={`button-delete-task-${task.id}`}>
                         <Trash2 className="w-4 h-4 text-muted-foreground" />
@@ -215,16 +250,33 @@ export default function TasksPage() {
                 ))
               )}
               <TableRow>
-                <TableCell colSpan={7}>
-                  <form onSubmit={handleCreate} className="flex gap-2">
+                <TableCell colSpan={3}>
+                  <form onSubmit={handleCreate} className="flex gap-2 items-center">
                     <Input
                       value={newTaskTitle}
                       onChange={(e) => setNewTaskTitle(e.target.value)}
                       placeholder="Add new task..."
-                      className="h-9"
+                      className="h-9 flex-1"
                       data-testid="input-new-task-title"
                     />
-                    <Button type="submit" size="sm" className="h-9 gap-1" disabled={!newTaskTitle.trim()} data-testid="button-add-task">
+                    <Input
+                      type="time"
+                      value={newTaskTime}
+                      onChange={(e) => setNewTaskTime(e.target.value)}
+                      className="h-9 w-[100px] text-xs"
+                      data-testid="input-new-task-time"
+                    />
+                    <Select value={newTaskPriority} onValueChange={setNewTaskPriority}>
+                      <SelectTrigger className="h-9 w-[130px] text-xs" data-testid="select-new-task-priority">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PRIORITIES.map(p => (
+                          <SelectItem key={p} value={p}>{p}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button type="submit" size="sm" className="h-9 gap-1 shrink-0" disabled={!newTaskTitle.trim()} data-testid="button-add-task">
                       <Plus className="w-4 h-4" /> Add
                     </Button>
                   </form>
