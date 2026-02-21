@@ -435,7 +435,7 @@ export default function LandingPage() {
             whileInView="visible"
             viewport={{ once: true, margin: "-100px" }}
             variants={fadeUp}
-            className="text-center mb-6"
+            className="text-center mb-16"
           >
             <span className="text-xs uppercase tracking-[0.3em] text-emerald-400 mb-4 block">PRIVATE ADVISORY</span>
             <h2 className="text-4xl md:text-5xl font-display font-bold tracking-tight">Clarity Call</h2>
@@ -446,68 +446,83 @@ export default function LandingPage() {
             whileInView="visible"
             viewport={{ once: true, margin: "-50px" }}
             variants={stagger}
-            className="flex flex-col md:flex-row gap-12 mt-16"
+            className="flex flex-col lg:flex-row gap-12"
           >
-            <motion.div variants={fadeUp} className="md:w-1/2 space-y-5">
-              <p className="text-white/50 leading-relaxed text-sm">
+            <motion.div variants={fadeUp} className="lg:w-1/2 space-y-5">
+              <p className="text-white/50 leading-relaxed text-[15px]">
                 You've been trying to change for a while now. Weeks turned into months but there is no change.
               </p>
-              <p className="text-white/50 leading-relaxed text-sm">
+              <p className="text-white/50 leading-relaxed text-[15px]">
                 You sit down to plan, but distractions pull you in different directions. Some days you feel motivated, other days completely lost. You want focus and clarity, but you're not sure what to fix first or how to stay consistent.
               </p>
-              <p className="text-white/50 leading-relaxed text-sm">
+              <p className="text-white/50 leading-relaxed text-[15px]">
                 If this feels familiar, you're not alone — I was in the same place before.
               </p>
-              <p className="text-white/50 leading-relaxed text-sm">
+              <p className="text-white/50 leading-relaxed text-[15px]">
                 In this one-to-one call, we'll create a clear plan for what to focus on, how to build structure into your days, and how to slowly reduce the habits and addictions that keep pulling you off track — so you leave with direction, not confusion.
               </p>
-              <div className="flex flex-wrap gap-3 pt-2">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/10 text-xs text-white/50">
-                  <Search className="w-3 h-3" /> 45 Minutes 1-on-1
+              <div className="flex flex-wrap gap-3 pt-4">
+                <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-white/10 text-xs text-white/50">
+                  <svg className="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  45 Minutes 1-on-1
                 </span>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/10 text-xs text-white/50">
-                  <Layout className="w-3 h-3" /> Private & Confidential
+                <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-white/10 text-xs text-white/50">
+                  <svg className="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="m7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  Private & Confidential
                 </span>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/10 text-xs text-white/50">
-                  <Zap className="w-3 h-3" /> Actionable Clarity
+                <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-white/10 text-xs text-white/50">
+                  <svg className="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                  Actionable Clarity
                 </span>
               </div>
-              <div className="flex items-center gap-2 pt-2">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-white/10 text-xs text-white/40">
-                  <CheckCircle2 className="w-3 h-3" /> Limited Slots Available
-                  <span className="text-[10px] text-white/25 ml-1">Book before they run out</span>
-                </span>
+              <div className="flex items-center gap-3 pt-4">
+                <div className="flex -space-x-1.5">
+                  <div className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center border-2 border-[#0a0a0f]">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  <div className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center border-2 border-[#0a0a0f]">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  <div className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center border-2 border-[#0a0a0f]">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-semibold">Limited Slots Available</div>
+                  <div className="text-[11px] text-white/30">Book before they fill up</div>
+                </div>
               </div>
             </motion.div>
 
-            <motion.div variants={fadeUp} custom={1} className="md:w-1/2">
+            <motion.div variants={fadeUp} custom={1} className="lg:w-1/2">
               <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-8">
                 <h3 className="text-xl font-display font-bold mb-8">The Process</h3>
                 <div className="space-y-8">
                   {[
-                    { step: "STEP 1", icon: Search, title: "Diagnose", desc: "Identify what's really holding you back" },
-                    { step: "STEP 2", icon: Layout, title: "Plan", desc: "Create a clear roadmap for your goals" },
-                    { step: "STEP 3", icon: Zap, title: "Build", desc: "Implement systems that work for your life" },
+                    { step: "STEP 01", icon: Search, title: "Diagnose", desc: "Identify what's really holding you back" },
+                    { step: "STEP 02", icon: Layout, title: "Plan", desc: "Create a clear roadmap for your goals" },
+                    { step: "STEP 03", icon: Zap, title: "Build", desc: "Implement systems that work for your life" },
                   ].map((item) => (
                     <div key={item.step} className="flex items-start gap-4">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+                      <div className="w-11 h-11 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">
                         <item.icon className="w-5 h-5 text-emerald-400" />
                       </div>
                       <div>
-                        <div className="text-[10px] uppercase tracking-widest text-emerald-400 mb-1">{item.step}</div>
-                        <div className="font-semibold text-sm mb-1">{item.title}</div>
-                        <div className="text-xs text-white/40">{item.desc}</div>
+                        <div className="text-[10px] uppercase tracking-[0.2em] text-emerald-400 mb-1">{item.step}</div>
+                        <div className="font-bold text-base mb-1">{item.title}</div>
+                        <div className="text-sm text-white/40">{item.desc}</div>
                       </div>
                     </div>
                   ))}
                 </div>
                 <Button
-                  className="w-full bg-emerald-500 text-white rounded-md font-semibold mt-8"
+                  className="w-full bg-emerald-500 text-white rounded-xl font-semibold mt-10"
+                  size="lg"
                   data-testid="button-book-clarity-call"
                 >
                   Book Your Clarity Call <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
-                <p className="text-xs text-white/25 text-center mt-3">No commitment required. 100% Confidential</p>
+                <p className="text-xs text-white/30 text-center mt-3">No commitment required • 100% Confidential</p>
               </div>
             </motion.div>
           </motion.div>
