@@ -221,9 +221,9 @@ export default function NotesPage() {
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden" data-testid="notes-page">
       {sidebarOpen && (
         <div className="w-72 border-r border-border bg-card/50 flex flex-col shrink-0" data-testid="notes-sidebar">
-          <div className="flex flex-col border-b border-border/50">
-            <div className="flex items-center justify-between px-4 pt-3 pb-1">
-              <h2 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">Notes</h2>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
+            <h2 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">Notes</h2>
+            <div className="flex flex-col items-center gap-1">
               <Button
                 size="icon"
                 variant="ghost"
@@ -233,8 +233,6 @@ export default function NotesPage() {
               >
                 <ChevronLeft className="w-4 h-4" />
               </Button>
-            </div>
-            <div className="flex items-center px-4 pb-3">
               <Button
                 size="icon"
                 variant="ghost"
