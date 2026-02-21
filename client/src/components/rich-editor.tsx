@@ -282,6 +282,76 @@ function SlashMenu({ editor, position, onClose, onAddPage }: SlashMenuProps) {
   );
 }
 
+function TableToolbar({ editor }: { editor: Editor }) {
+  if (!editor.isActive("table")) return null;
+
+  return (
+    <div
+      className="flex items-center gap-1 p-1.5 bg-card border border-border rounded-lg shadow-lg mb-2 flex-wrap"
+      data-testid="table-toolbar"
+    >
+      <button
+        onClick={() => editor.chain().focus().addColumnBefore().run()}
+        className="px-2 py-1 text-xs rounded hover:bg-white/10 text-white/70 hover:text-white transition-colors"
+        title="Add column before"
+        data-testid="button-add-col-before"
+      >
+        + Col Before
+      </button>
+      <button
+        onClick={() => editor.chain().focus().addColumnAfter().run()}
+        className="px-2 py-1 text-xs rounded hover:bg-white/10 text-white/70 hover:text-white transition-colors"
+        title="Add column after"
+        data-testid="button-add-col-after"
+      >
+        + Col After
+      </button>
+      <button
+        onClick={() => editor.chain().focus().deleteColumn().run()}
+        className="px-2 py-1 text-xs rounded hover:bg-red-500/20 text-white/70 hover:text-red-400 transition-colors"
+        title="Delete column"
+        data-testid="button-delete-col"
+      >
+        - Col
+      </button>
+      <div className="w-px h-4 bg-border mx-1" />
+      <button
+        onClick={() => editor.chain().focus().addRowBefore().run()}
+        className="px-2 py-1 text-xs rounded hover:bg-white/10 text-white/70 hover:text-white transition-colors"
+        title="Add row before"
+        data-testid="button-add-row-before"
+      >
+        + Row Before
+      </button>
+      <button
+        onClick={() => editor.chain().focus().addRowAfter().run()}
+        className="px-2 py-1 text-xs rounded hover:bg-white/10 text-white/70 hover:text-white transition-colors"
+        title="Add row after"
+        data-testid="button-add-row-after"
+      >
+        + Row After
+      </button>
+      <button
+        onClick={() => editor.chain().focus().deleteRow().run()}
+        className="px-2 py-1 text-xs rounded hover:bg-red-500/20 text-white/70 hover:text-red-400 transition-colors"
+        title="Delete row"
+        data-testid="button-delete-row"
+      >
+        - Row
+      </button>
+      <div className="w-px h-4 bg-border mx-1" />
+      <button
+        onClick={() => editor.chain().focus().deleteTable().run()}
+        className="px-2 py-1 text-xs rounded hover:bg-red-500/20 text-white/70 hover:text-red-400 transition-colors"
+        title="Delete table"
+        data-testid="button-delete-table"
+      >
+        Delete Table
+      </button>
+    </div>
+  );
+}
+
 interface RichEditorProps {
   content: string;
   onChange: (html: string) => void;
@@ -370,6 +440,7 @@ export default function RichEditor({ content, onChange, onAddPage }: RichEditorP
 
   return (
     <div ref={editorContainerRef} className="relative" data-testid="rich-editor">
+      <TableToolbar editor={editor} />
       <EditorContent editor={editor} />
       {slashMenu && (
         <SlashMenu
