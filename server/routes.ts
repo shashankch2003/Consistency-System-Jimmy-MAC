@@ -200,6 +200,142 @@ export async function registerRoutes(
     } catch (e: any) { res.status(400).json({ message: e.message }); }
   });
 
+  // Daily Score (computed from tasks, good habits, bad habits, hourly entries)
+  app.get(api.dailyScore.get.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const date = req.query.date as string;
+      if (!date) return res.status(400).json({ message: "date required" });
+      const userId = req.user.claims.sub;
+
+      const dayTasks = await storage.getTasks(userId, date);
+      const taskScore = dayTasks.length > 0
+        ? dayTasks.reduce((sum, t) => sum + (t.completionPercentage || 0), 0) / dayTasks.length
+        : 0;
+
+      const gHabits = await storage.getGoodHabits(userId);
+      let goodHabitScore = 0;
+      if (gHabits.length > 0) {
+        const gEntries = await storage.getGoodHabitEntries(gHabits.map(h => h.id));
+        const dayGoodEntries = gEntries.filter(e => e.date === date);
+        const completedCount = dayGoodEntries.filter(e => e.completed).length;
+        goodHabitScore = (completedCount / gHabits.length) * 100;
+      }
+
+      const bHabits = await storage.getBadHabits(userId);
+      let badHabitScore = 100;
+      if (bHabits.length > 0) {
+        const bEntries = await storage.getBadHabitEntries(bHabits.map(h => h.id));
+        const dayBadEntries = bEntries.filter(e => e.date === date);
+        const occurredCount = dayBadEntries.filter(e => e.occurred).length;
+        badHabitScore = ((bHabits.length - occurredCount) / bHabits.length) * 100;
+      }
+
+      const hEntries = await storage.getHourlyEntries(userId, date);
+      const hourlyScore = hEntries.length > 0
+        ? Math.min((hEntries.reduce((sum, e) => sum + e.productivityScore, 0) / hEntries.length) * 10, 100)
+        : 0;
+
+      const weights = { task: 0.3, goodHabit: 0.25, badHabit: 0.2, hourly: 0.25 };
+      const activeSections: string[] = [];
+      if (dayTasks.length > 0) activeSections.push('task');
+      if (gHabits.length > 0) activeSections.push('goodHabit');
+      if (bHabits.length > 0) activeSections.push('badHabit');
+      if (hEntries.length > 0) activeSections.push('hourly');
+
+      let totalScore = 0;
+      if (activeSections.length > 0) {
+        const totalWeight = activeSections.reduce((sum, s) => sum + weights[s as keyof typeof weights], 0);
+        const scores: Record<string, number> = { task: taskScore, goodHabit: goodHabitScore, badHabit: badHabitScore, hourly: hourlyScore };
+        totalScore = activeSections.reduce((sum, s) => sum + (scores[s] * weights[s as keyof typeof weights] / totalWeight), 0);
+      }
+
+      res.json({
+        date,
+        taskScore: Math.round(taskScore),
+        goodHabitScore: Math.round(goodHabitScore),
+        badHabitScore: Math.round(badHabitScore),
+        hourlyScore: Math.round(hourlyScore),
+        totalScore: Math.round(totalScore),
+        taskCount: dayTasks.length,
+        goodHabitCount: gHabits.length,
+        badHabitCount: bHabits.length,
+        hourlyCount: hEntries.length,
+      });
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
+  app.get(api.dailyScore.range.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+      if (!startDate || !endDate) return res.status(400).json({ message: "startDate and endDate required" });
+      const userId = req.user.claims.sub;
+
+      const gHabits = await storage.getGoodHabits(userId);
+      const bHabits = await storage.getBadHabits(userId);
+      const allGoodEntries = gHabits.length > 0 ? await storage.getGoodHabitEntries(gHabits.map(h => h.id)) : [];
+      const allBadEntries = bHabits.length > 0 ? await storage.getBadHabitEntries(bHabits.map(h => h.id)) : [];
+
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const results: { date: string; totalScore: number }[] = [];
+
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().split('T')[0];
+        const dayTasks = await storage.getTasks(userId, dateStr);
+        const taskScore = dayTasks.length > 0 ? dayTasks.reduce((sum, t) => sum + (t.completionPercentage || 0), 0) / dayTasks.length : 0;
+
+        let goodHabitScore = 0;
+        if (gHabits.length > 0) {
+          const dayGoodEntries = allGoodEntries.filter(e => e.date === dateStr);
+          goodHabitScore = (dayGoodEntries.filter(e => e.completed).length / gHabits.length) * 100;
+        }
+
+        let badHabitScore = 100;
+        if (bHabits.length > 0) {
+          const dayBadEntries = allBadEntries.filter(e => e.date === dateStr);
+          badHabitScore = ((bHabits.length - dayBadEntries.filter(e => e.occurred).length) / bHabits.length) * 100;
+        }
+
+        const hEntries = await storage.getHourlyEntries(userId, dateStr);
+        const hourlyScore = hEntries.length > 0 ? Math.min((hEntries.reduce((sum, e) => sum + e.productivityScore, 0) / hEntries.length) * 10, 100) : 0;
+
+        const weights = { task: 0.3, goodHabit: 0.25, badHabit: 0.2, hourly: 0.25 };
+        const activeSections: string[] = [];
+        if (dayTasks.length > 0) activeSections.push('task');
+        if (gHabits.length > 0) activeSections.push('goodHabit');
+        if (bHabits.length > 0) activeSections.push('badHabit');
+        if (hEntries.length > 0) activeSections.push('hourly');
+
+        let totalScore = 0;
+        if (activeSections.length > 0) {
+          const totalWeight = activeSections.reduce((sum, s) => sum + weights[s as keyof typeof weights], 0);
+          const scores: Record<string, number> = { task: taskScore, goodHabit: goodHabitScore, badHabit: badHabitScore, hourly: hourlyScore };
+          totalScore = activeSections.reduce((sum, s) => sum + (scores[s] * weights[s as keyof typeof weights] / totalWeight), 0);
+        }
+
+        results.push({ date: dateStr, totalScore: Math.round(totalScore) });
+      }
+
+      res.json(results);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
+  // Daily Reasons
+  app.get(api.dailyReasons.get.path, isAuthenticated, async (req: any, res) => {
+    const date = req.query.date as string;
+    if (!date) return res.status(400).json({ message: "date required" });
+    const reason = await storage.getDailyReason(req.user.claims.sub, date);
+    res.json(reason || null);
+  });
+  app.post(api.dailyReasons.upsert.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const input = api.dailyReasons.upsert.input.parse(req.body);
+      const reason = await storage.upsertDailyReason({ ...input, userId: req.user.claims.sub });
+      res.json(reason);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
   // Task Bank
   app.get(api.taskBank.list.path, isAuthenticated, async (req: any, res) => {
     const items = await storage.getTaskBankItems(req.user.claims.sub);

@@ -2,8 +2,8 @@ import { z } from 'zod';
 import { 
   insertPaymentSchema, insertYearlyGoalSchema, insertMonthlyOverviewGoalSchema, insertMonthlyDynamicGoalSchema,
   insertTaskSchema, insertGoodHabitSchema, insertGoodHabitEntrySchema, 
-  insertBadHabitSchema, insertBadHabitEntrySchema, insertHourlyEntrySchema, insertTaskBankItemSchema,
-  payments, yearlyGoals, monthlyOverviewGoals, monthlyDynamicGoals, tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, taskBankItems 
+  insertBadHabitSchema, insertBadHabitEntrySchema, insertHourlyEntrySchema, insertTaskBankItemSchema, insertDailyReasonSchema,
+  payments, yearlyGoals, monthlyOverviewGoals, monthlyDynamicGoals, tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, taskBankItems, dailyReasons 
 } from './schema';
 
 export const errorSchemas = {
@@ -152,6 +152,44 @@ export const api = {
       method: 'POST' as const, path: '/api/hourly-entries' as const,
       input: insertHourlyEntrySchema.omit({ userId: true }),
       responses: { 200: z.custom<typeof hourlyEntries.$inferSelect>(), 400: errorSchemas.validation }
+    }
+  },
+  dailyScore: {
+    get: {
+      method: 'GET' as const, path: '/api/daily-score' as const,
+      input: z.object({ date: z.string() }),
+      responses: { 200: z.object({
+        date: z.string(),
+        taskScore: z.number(),
+        goodHabitScore: z.number(),
+        badHabitScore: z.number(),
+        hourlyScore: z.number(),
+        totalScore: z.number(),
+        taskCount: z.number(),
+        goodHabitCount: z.number(),
+        badHabitCount: z.number(),
+        hourlyCount: z.number(),
+      }) }
+    },
+    range: {
+      method: 'GET' as const, path: '/api/daily-score/range' as const,
+      input: z.object({ startDate: z.string(), endDate: z.string() }),
+      responses: { 200: z.array(z.object({
+        date: z.string(),
+        totalScore: z.number(),
+      })) }
+    }
+  },
+  dailyReasons: {
+    get: {
+      method: 'GET' as const, path: '/api/daily-reasons' as const,
+      input: z.object({ date: z.string() }),
+      responses: { 200: z.custom<typeof dailyReasons.$inferSelect | null>() }
+    },
+    upsert: {
+      method: 'POST' as const, path: '/api/daily-reasons' as const,
+      input: insertDailyReasonSchema.omit({ userId: true }),
+      responses: { 200: z.custom<typeof dailyReasons.$inferSelect>(), 400: errorSchemas.validation }
     }
   },
   taskBank: {

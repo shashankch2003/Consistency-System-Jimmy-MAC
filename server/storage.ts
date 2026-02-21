@@ -2,7 +2,7 @@ import { db } from "./db";
 import { eq, and, asc, like } from "drizzle-orm";
 import {
   yearlyGoals, monthlyOverviewGoals, monthlyDynamicGoals,
-  tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, payments, taskBankItems,
+  tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, payments, taskBankItems, dailyReasons,
 } from "@shared/schema";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
 
@@ -17,6 +17,7 @@ type InsertBadHabitEntry = typeof badHabitEntries.$inferInsert;
 type InsertHourlyEntry = typeof hourlyEntries.$inferInsert;
 type InsertPayment = typeof payments.$inferInsert;
 type InsertTaskBankItem = typeof taskBankItems.$inferInsert;
+type InsertDailyReason = typeof dailyReasons.$inferInsert;
 
 export interface IStorage extends IAuthStorage {
   getYearlyGoals(userId: string, year?: number): Promise<(typeof yearlyGoals.$inferSelect)[]>;
@@ -60,6 +61,9 @@ export interface IStorage extends IAuthStorage {
   getTaskBankItems(userId: string): Promise<(typeof taskBankItems.$inferSelect)[]>;
   createTaskBankItem(item: InsertTaskBankItem): Promise<typeof taskBankItems.$inferSelect>;
   deleteTaskBankItem(id: number, userId: string): Promise<void>;
+
+  getDailyReason(userId: string, date: string): Promise<(typeof dailyReasons.$inferSelect) | undefined>;
+  upsertDailyReason(reason: InsertDailyReason): Promise<typeof dailyReasons.$inferSelect>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -237,6 +241,20 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteTaskBankItem(id: number, userId: string) {
     await db.delete(taskBankItems).where(and(eq(taskBankItems.id, id), eq(taskBankItems.userId, userId)));
+  }
+
+  async getDailyReason(userId: string, date: string) {
+    const [reason] = await db.select().from(dailyReasons).where(and(eq(dailyReasons.userId, userId), eq(dailyReasons.date, date)));
+    return reason;
+  }
+  async upsertDailyReason(reason: InsertDailyReason) {
+    const existing = await db.select().from(dailyReasons).where(and(eq(dailyReasons.userId, reason.userId), eq(dailyReasons.date, reason.date)));
+    if (existing.length > 0) {
+      const [updated] = await db.update(dailyReasons).set({ reason: reason.reason }).where(eq(dailyReasons.id, existing[0].id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(dailyReasons).values(reason).returning();
+    return created;
   }
 }
 
