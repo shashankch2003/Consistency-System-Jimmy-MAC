@@ -326,6 +326,38 @@ export default function TasksPage() {
             ))
           )}
         </div>
+        <form
+          onSubmit={handleCreate}
+          className="p-4 border-t border-border flex items-center gap-3"
+        >
+          <Input
+            placeholder="Add a task..."
+            value={newTaskTitle}
+            onChange={e => setNewTaskTitle(e.target.value)}
+            className="flex-1 bg-transparent border-border text-sm"
+            data-testid="cal-day-input-new-task"
+          />
+          <TimeInput value={newTaskTime} onChange={setNewTaskTime} />
+          <Select value={newTaskPriority} onValueChange={setNewTaskPriority}>
+            <SelectTrigger className="w-[120px] bg-transparent border-border text-xs h-9" data-testid="cal-day-select-priority">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Normal">Normal</SelectItem>
+              <SelectItem value="Important">Important</SelectItem>
+              <SelectItem value="Very Important">Very Important</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={!newTaskTitle.trim() || createTask.isPending}
+            className="bg-white text-black hover:bg-white/90 text-xs px-4"
+            data-testid="cal-day-button-add-task"
+          >
+            <Plus className="w-3.5 h-3.5 mr-1" />Add
+          </Button>
+        </form>
       </div>
     );
   };
