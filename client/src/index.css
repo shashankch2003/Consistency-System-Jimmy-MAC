@@ -240,3 +240,38 @@
   background: none;
   padding: 0;
 }
+.tiptap mark {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: inherit;
+  border-radius: 2px;
+  padding: 1px 2px;
+}
+.bubble-btn {
+  padding: 6px 10px;
+  color: rgba(255, 255, 255, 0.7);
+  transition: all 150ms;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bubble-btn:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+}
+.bubble-btn-active {
+  color: white;
+  background: rgba(255, 255, 255, 0.15);
+}
+.notes-sidebar-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.notes-sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.notes-sidebar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+.notes-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}

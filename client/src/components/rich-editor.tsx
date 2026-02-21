@@ -9,9 +9,10 @@ import { TableRow } from "@tiptap/extension-table-row";
 import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
 import Highlight from "@tiptap/extension-highlight";
+import Underline from "@tiptap/extension-underline";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Copy, XCircle, Trash2, Plus, GripVertical, Table2 } from "lucide-react";
+import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Copy, XCircle, Trash2, Plus, GripVertical, Table2, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, Highlighter } from "lucide-react";
 
 const SLASH_ITEMS = [
   { section: "Suggested", items: [
@@ -748,6 +749,105 @@ function NotionTableControls({ editor, containerRef }: { editor: Editor; contain
   );
 }
 
+function FloatingToolbar({ editor, containerRef }: { editor: Editor; containerRef: React.RefObject<HTMLDivElement | null> }) {
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const updatePosition = () => {
+      const { from, to } = editor.state.selection;
+      const hasSelection = from !== to && !editor.state.selection.empty;
+
+      if (!hasSelection || !containerRef.current) {
+        setPosition(null);
+        return;
+      }
+
+      const startCoords = editor.view.coordsAtPos(from);
+      const endCoords = editor.view.coordsAtPos(to);
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const scrollTop = containerRef.current.scrollTop || 0;
+
+      const topY = Math.min(startCoords.top, endCoords.top);
+      const midX = (startCoords.left + endCoords.right) / 2 - containerRect.left;
+      const top = topY - containerRect.top + scrollTop - 44;
+      const toolbarWidth = 240;
+      const maxLeft = containerRect.width - toolbarWidth - 8;
+
+      setPosition({
+        top: Math.max(0, top),
+        left: Math.max(8, Math.min(midX - toolbarWidth / 2, maxLeft)),
+      });
+    };
+
+    editor.on("selectionUpdate", updatePosition);
+    return () => { editor.off("selectionUpdate", updatePosition); };
+  }, [editor, containerRef]);
+
+  if (!position) return null;
+
+  return (
+    <div
+      ref={toolbarRef}
+      className="absolute z-50"
+      style={{ top: position.top, left: position.left }}
+      data-testid="floating-toolbar"
+    >
+      <div className="flex items-center bg-[#1e1e1e] border border-white/15 rounded-lg shadow-2xl overflow-hidden">
+        <button
+          onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleBold().run(); }}
+          className={cn("bubble-btn", editor.isActive("bold") && "bubble-btn-active")}
+          data-testid="bubble-bold"
+          title="Bold"
+        >
+          <Bold className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleItalic().run(); }}
+          className={cn("bubble-btn", editor.isActive("italic") && "bubble-btn-active")}
+          data-testid="bubble-italic"
+          title="Italic"
+        >
+          <Italic className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleUnderline().run(); }}
+          className={cn("bubble-btn", editor.isActive("underline") && "bubble-btn-active")}
+          data-testid="bubble-underline"
+          title="Underline"
+        >
+          <UnderlineIcon className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleStrike().run(); }}
+          className={cn("bubble-btn", editor.isActive("strike") && "bubble-btn-active")}
+          data-testid="bubble-strikethrough"
+          title="Strikethrough"
+        >
+          <Strikethrough className="w-3.5 h-3.5" />
+        </button>
+        <div className="w-px h-5 bg-white/15" />
+        <button
+          onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleCode().run(); }}
+          className={cn("bubble-btn", editor.isActive("code") && "bubble-btn-active")}
+          data-testid="bubble-code"
+          title="Code"
+        >
+          <Code className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleHighlight().run(); }}
+          className={cn("bubble-btn", editor.isActive("highlight") && "bubble-btn-active")}
+          data-testid="bubble-highlight"
+          title="Highlight"
+        >
+          <Highlighter className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 interface RichEditorProps {
   content: string;
   onChange: (html: string) => void;
@@ -772,6 +872,7 @@ export default function RichEditor({ content, onChange, onAddPage }: RichEditorP
       TableCell,
       TableHeader,
       Highlight,
+      Underline,
     ],
     content: content || "",
     onUpdate: ({ editor }) => {
@@ -837,6 +938,7 @@ export default function RichEditor({ content, onChange, onAddPage }: RichEditorP
   return (
     <div ref={editorContainerRef} className="relative" data-testid="rich-editor">
       <EditorContent editor={editor} />
+      <FloatingToolbar editor={editor} containerRef={editorContainerRef} />
       {editor.isActive("table") && (
         <NotionTableControls editor={editor} containerRef={editorContainerRef} />
       )}

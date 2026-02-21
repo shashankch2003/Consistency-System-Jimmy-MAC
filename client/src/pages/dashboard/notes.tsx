@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNotes, useCreateNote, useUpdateNote, useDeleteNote } from "@/hooks/use-notes";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, FileText, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Trash2, FileText, ChevronRight, ChevronDown, MoreHorizontal, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import RichEditor from "@/components/rich-editor";
 
@@ -42,17 +42,18 @@ function NoteTreeItem({
   const children = allNotes.filter(n => n.parentId === note.id);
   const hasChildren = children.length > 0;
   const isExpanded = expandedIds.has(note.id);
+  const isSelected = selectedId === note.id;
 
   return (
     <div data-testid={`note-tree-${note.id}`}>
       <div
         className={cn(
-          "flex items-center py-1.5 cursor-pointer group transition-colors",
-          selectedId === note.id
-            ? "bg-white/10 text-white"
-            : "hover:bg-white/5 text-muted-foreground"
+          "flex items-center h-8 cursor-pointer group transition-all duration-100 rounded-sm mx-1",
+          isSelected
+            ? "bg-white/10"
+            : "hover:bg-white/[0.04]"
         )}
-        style={{ paddingLeft: `${depth * 16 + 8}px`, paddingRight: "8px" }}
+        style={{ paddingLeft: `${depth * 12 + 4}px`, paddingRight: "4px" }}
         onClick={() => onSelect(note.id)}
         data-testid={`note-item-${note.id}`}
       >
@@ -62,34 +63,45 @@ function NoteTreeItem({
             toggleExpand(note.id);
           }}
           className={cn(
-            "w-5 h-5 flex items-center justify-center shrink-0 rounded hover:bg-white/10 transition-colors mr-1",
-            !hasChildren && "invisible"
+            "w-5 h-5 flex items-center justify-center shrink-0 rounded-sm hover:bg-white/10 transition-colors",
+            !hasChildren && "opacity-0 pointer-events-none"
           )}
           data-testid={`button-toggle-note-${note.id}`}
         >
-          <ChevronRight className={cn("w-3.5 h-3.5 transition-transform", isExpanded && "rotate-90")} />
+          {isExpanded ? (
+            <ChevronDown className="w-3 h-3 text-white/40" />
+          ) : (
+            <ChevronRight className="w-3 h-3 text-white/40" />
+          )}
         </button>
 
-        <span className="text-sm shrink-0 mr-1.5">{note.icon || "📄"}</span>
-        <span className="text-sm font-medium truncate flex-1">{note.title}</span>
+        <span className="text-sm shrink-0 mr-1">{note.icon || "📄"}</span>
+        <span className={cn(
+          "text-[13px] truncate flex-1",
+          isSelected ? "text-white" : "text-white/70"
+        )}>
+          {note.title || "Untitled"}
+        </span>
 
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onAddChild(note.id);
-          }}
-          className="opacity-0 group-hover:opacity-100 hover:bg-white/10 p-1 rounded shrink-0 transition-opacity"
-          data-testid={`button-add-subnote-${note.id}`}
-        >
-          <Plus className="w-3 h-3" />
-        </button>
-        <button
-          onClick={(e) => onDelete(note.id, e)}
-          className="opacity-0 group-hover:opacity-100 text-destructive hover:bg-destructive/10 p-1 rounded shrink-0 transition-opacity"
-          data-testid={`button-delete-note-${note.id}`}
-        >
-          <Trash2 className="w-3 h-3" />
-        </button>
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={(e) => onDelete(note.id, e)}
+            className="w-5 h-5 flex items-center justify-center rounded-sm hover:bg-white/10 text-white/40 hover:text-red-400 transition-colors"
+            data-testid={`button-delete-note-${note.id}`}
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddChild(note.id);
+            }}
+            className="w-5 h-5 flex items-center justify-center rounded-sm hover:bg-white/10 text-white/40 hover:text-white transition-colors"
+            data-testid={`button-add-subnote-${note.id}`}
+          >
+            <Plus className="w-3 h-3" />
+          </button>
+        </div>
       </div>
 
       {isExpanded && hasChildren && (
@@ -110,6 +122,46 @@ function NoteTreeItem({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function Breadcrumbs({
+  noteId,
+  allNotes,
+  onNavigate,
+}: {
+  noteId: number;
+  allNotes: Note[];
+  onNavigate: (id: number) => void;
+}) {
+  const path: Note[] = [];
+  let current = allNotes.find(n => n.id === noteId);
+  while (current) {
+    path.unshift(current);
+    current = current.parentId ? allNotes.find(n => n.id === current!.parentId) : undefined;
+  }
+
+  if (path.length <= 1) return null;
+
+  return (
+    <div className="flex items-center gap-1 px-2 py-1.5 text-xs text-white/40 overflow-x-auto" data-testid="breadcrumbs">
+      {path.map((note, i) => (
+        <span key={note.id} className="flex items-center gap-1 shrink-0">
+          {i > 0 && <span className="text-white/20">/</span>}
+          <button
+            onClick={() => onNavigate(note.id)}
+            className={cn(
+              "hover:text-white/70 transition-colors flex items-center gap-1 max-w-[120px]",
+              i === path.length - 1 ? "text-white/60" : "text-white/40"
+            )}
+            data-testid={`breadcrumb-${note.id}`}
+          >
+            <span className="text-[11px]">{note.icon || "📄"}</span>
+            <span className="truncate">{note.title || "Untitled"}</span>
+          </button>
+        </span>
+      ))}
     </div>
   );
 }
@@ -177,15 +229,18 @@ export default function NotesPage() {
 
   const handleAddPage = (parentId?: number) => {
     createNote.mutate(parentId ? { parentId } : {}, {
-      onSuccess: (newNote: Note) => {
+      onSuccess: (newNote: any) => {
         setSelectedId(newNote.id);
         setEditTitle(newNote.title);
         setEditContent(newNote.content || "");
         setEditIcon(newNote.icon || "📄");
         if (parentId) {
-          setExpandedIds(prev => new Set([...prev, parentId]));
+          setExpandedIds(prev => {
+            const next = new Set(prev);
+            next.add(parentId);
+            return next;
+          });
         }
-        setTimeout(() => {}, 100);
       }
     });
   };
@@ -207,6 +262,22 @@ export default function NotesPage() {
       }
     }
     setSelectedId(id);
+    const note = notesList.find(n => n.id === id);
+    if (note?.parentId) {
+      const ancestors: number[] = [];
+      let cur = notesList.find(n => n.id === note.parentId);
+      while (cur) {
+        ancestors.push(cur.id);
+        cur = cur.parentId ? notesList.find(n => n.id === cur!.parentId) : undefined;
+      }
+      if (ancestors.length > 0) {
+        setExpandedIds(prev => {
+          const next = new Set(prev);
+          ancestors.forEach(a => next.add(a));
+          return next;
+        });
+      }
+    }
   };
 
   if (isLoading) {
@@ -219,85 +290,91 @@ export default function NotesPage() {
 
   return (
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden" data-testid="notes-page">
-      {sidebarOpen && (
-        <div className="w-72 border-r border-border bg-card/50 flex flex-col shrink-0" data-testid="notes-sidebar">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
-            <h2 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">Notes</h2>
-            <div className="flex flex-col items-center gap-1">
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7"
-                onClick={() => setSidebarOpen(false)}
-                data-testid="button-close-notes-sidebar"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7"
-                onClick={() => handleAddPage()}
-                disabled={createNote.isPending}
-                data-testid="button-add-note"
-              >
-                <Plus className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto py-1">
-            {notesList.length === 0 ? (
-              <div className="px-4 py-8 text-center text-muted-foreground text-sm">
-                <FileText className="w-8 h-8 mx-auto mb-3 opacity-40" />
-                <p>No pages yet</p>
-                <p className="text-xs mt-1">Click + to add a page</p>
-              </div>
-            ) : (
-              rootNotes.map(note => (
-                <NoteTreeItem
-                  key={note.id}
-                  note={note}
-                  allNotes={notesList}
-                  selectedId={selectedId}
-                  expandedIds={expandedIds}
-                  toggleExpand={toggleExpand}
-                  onSelect={handleSelectNote}
-                  onDelete={handleDelete}
-                  onAddChild={(parentId) => handleAddPage(parentId)}
-                  depth={0}
-                />
-              ))
-            )}
+      <div
+        className={cn(
+          "border-r border-white/[0.06] bg-[#191919] flex flex-col shrink-0 transition-all duration-200 relative",
+          sidebarOpen ? "w-60" : "w-0 border-r-0 overflow-hidden"
+        )}
+        data-testid="notes-sidebar"
+      >
+        <div className="flex items-center justify-between px-3 py-2 h-10">
+          <span className="text-xs font-medium text-white/40 uppercase tracking-widest">Pages</span>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => handleAddPage()}
+              disabled={createNote.isPending}
+              className="w-6 h-6 flex items-center justify-center rounded-sm hover:bg-white/10 text-white/40 hover:text-white transition-colors"
+              data-testid="button-add-note"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="w-6 h-6 flex items-center justify-center rounded-sm hover:bg-white/10 text-white/40 hover:text-white transition-colors"
+              data-testid="button-close-notes-sidebar"
+            >
+              <ChevronsLeft className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
-      )}
 
-      <div className="flex-1 flex flex-col min-w-0 relative">
+        <div className="flex-1 overflow-y-auto py-0.5 notes-sidebar-scroll">
+          {notesList.length === 0 ? (
+            <div className="px-4 py-8 text-center text-white/30 text-sm">
+              <FileText className="w-6 h-6 mx-auto mb-2 opacity-40" />
+              <p className="text-xs">No pages yet</p>
+            </div>
+          ) : (
+            rootNotes.map(note => (
+              <NoteTreeItem
+                key={note.id}
+                note={note}
+                allNotes={notesList}
+                selectedId={selectedId}
+                expandedIds={expandedIds}
+                toggleExpand={toggleExpand}
+                onSelect={handleSelectNote}
+                onDelete={handleDelete}
+                onAddChild={(parentId) => handleAddPage(parentId)}
+                depth={0}
+              />
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col min-w-0 relative bg-[#111]">
         {!sidebarOpen && (
           <button
             onClick={() => setSidebarOpen(true)}
-            className="absolute top-4 left-4 z-10 p-1.5 rounded bg-card border border-border hover:bg-white/10 transition-colors"
+            className="absolute top-2 left-2 z-10 w-7 h-7 flex items-center justify-center rounded-sm hover:bg-white/10 text-white/40 hover:text-white transition-colors"
             data-testid="button-open-notes-sidebar"
           >
-            <ChevronRight className="w-4 h-4" />
+            <ChevronsRight className="w-4 h-4" />
           </button>
         )}
 
         {selectedNote ? (
           <div className="flex-1 overflow-y-auto">
-            <div className="max-w-3xl mx-auto px-8 py-12">
-              <div className="flex items-start gap-4 mb-6">
+            {selectedNote.parentId && (
+              <Breadcrumbs
+                noteId={selectedNote.id}
+                allNotes={notesList}
+                onNavigate={handleSelectNote}
+              />
+            )}
+            <div className="max-w-3xl mx-auto px-10 py-10">
+              <div className="flex items-start gap-3 mb-4">
                 <div className="relative">
                   <button
                     onClick={() => setShowIconPicker(!showIconPicker)}
-                    className="text-4xl hover:bg-white/5 rounded-lg p-2 transition-colors"
+                    className="text-4xl hover:bg-white/5 rounded-lg p-1 transition-colors"
                     data-testid="button-note-icon"
                   >
                     {editIcon}
                   </button>
                   {showIconPicker && (
-                    <div className="absolute top-full left-0 mt-1 bg-card border border-border rounded-xl p-3 shadow-xl z-20 grid grid-cols-5 gap-1 w-52" data-testid="icon-picker">
+                    <div className="absolute top-full left-0 mt-1 bg-[#252525] border border-white/10 rounded-xl p-3 shadow-xl z-20 grid grid-cols-5 gap-1 w-52" data-testid="icon-picker">
                       {EMOJI_OPTIONS.map(emoji => (
                         <button
                           key={emoji}
@@ -311,12 +388,12 @@ export default function NotesPage() {
                     </div>
                   )}
                 </div>
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 pt-1">
                   <input
                     value={editTitle}
                     onChange={e => handleTitleChange(e.target.value)}
                     placeholder="Untitled"
-                    className="w-full text-4xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/40"
+                    className="w-full text-[2.5rem] leading-tight font-bold bg-transparent border-none outline-none placeholder:text-white/20 text-white"
                     data-testid="input-note-title"
                   />
                 </div>
@@ -332,13 +409,19 @@ export default function NotesPage() {
           </div>
         ) : (
           <div className="flex-1 flex items-center justify-center">
-            <div className="text-center text-muted-foreground">
-              <FileText className="w-16 h-16 mx-auto mb-4 opacity-20" />
-              <p className="text-lg font-medium mb-2">No page selected</p>
-              <p className="text-sm mb-6">Select a page from the sidebar or create a new one</p>
-              <Button onClick={() => handleAddPage()} disabled={createNote.isPending} data-testid="button-add-first-note">
+            <div className="text-center text-white/30">
+              <FileText className="w-12 h-12 mx-auto mb-4 opacity-20" />
+              <p className="text-base font-medium mb-1 text-white/40">No page selected</p>
+              <p className="text-sm mb-6 text-white/25">Select a page or create a new one</p>
+              <Button
+                onClick={() => handleAddPage()}
+                disabled={createNote.isPending}
+                variant="outline"
+                className="border-white/10 hover:bg-white/5 text-white/60"
+                data-testid="button-add-first-note"
+              >
                 <Plus className="w-4 h-4 mr-2" />
-                Add a page
+                New page
               </Button>
             </div>
           </div>
