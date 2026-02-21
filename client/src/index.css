@@ -101,7 +101,8 @@
 }
 .tiptap .tableWrapper {
   overflow-x: auto;
-  margin: 0.6em 0;
+  margin: 1.5em 0 1em 0;
+  padding-left: 28px;
   position: relative;
 }
 .tiptap table {
@@ -150,27 +151,54 @@
 .tiptap.resize-cursor {
   cursor: col-resize;
 }
-.tiptap table .grip-column {
+.table-grip {
   position: absolute;
-  top: -12px;
-  left: 0;
-  right: 0;
-  height: 12px;
-  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  z-index: 10;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  padding: 0;
 }
-.tiptap table .grip-row {
+.table-grip:hover {
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.08);
+}
+.table-grip-row {
+  width: 20px;
+}
+.table-grip-col {
+  height: 20px;
+}
+.table-add-btn {
   position: absolute;
-  left: -12px;
-  top: 0;
-  bottom: 0;
-  width: 12px;
-  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: transparent;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  z-index: 10;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+.table-add-btn:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.04);
+}
+.table-add-row-btn {
+  height: 20px;
+}
+.table-add-col-btn {
+  width: 20px;
 }
 .tiptap ul[data-type="taskList"] {
   list-style: none;

@@ -11,6 +11,7 @@ import { TableHeader } from "@tiptap/extension-table-header";
 import Highlight from "@tiptap/extension-highlight";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
+import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Copy, XCircle, Trash2, Plus, GripVertical, Table2 } from "lucide-react";
 
 const SLASH_ITEMS = [
   { section: "Suggested", items: [
@@ -282,73 +283,468 @@ function SlashMenu({ editor, position, onClose, onAddPage }: SlashMenuProps) {
   );
 }
 
-function TableToolbar({ editor }: { editor: Editor }) {
-  if (!editor.isActive("table")) return null;
+function getActiveTableEl(editor: Editor): HTMLTableElement | null {
+  const { selection } = editor.state;
+  const domAtPos = editor.view.domAtPos(selection.from);
+  let node: Node | null = domAtPos.node;
+  while (node) {
+    if (node instanceof HTMLTableElement) return node;
+    if (node instanceof HTMLElement && node.querySelector("table")) {
+      const tableWrapper = node.closest(".tableWrapper");
+      if (tableWrapper) {
+        const t = tableWrapper.querySelector("table");
+        if (t) return t;
+      }
+    }
+    node = node.parentNode;
+  }
+  const tables = editor.view.dom.querySelectorAll("table");
+  if (tables.length === 1) return tables[0] as HTMLTableElement;
+  return null;
+}
+
+interface ContextMenuState {
+  type: "row" | "column";
+  index: number;
+  x: number;
+  y: number;
+  tableEl?: HTMLTableElement;
+}
+
+function TableContextMenu({
+  state,
+  editor,
+  onClose,
+}: {
+  state: ContextMenuState;
+  editor: Editor;
+  onClose: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [onClose]);
+
+  const tableEl = state.tableEl || getActiveTableEl(editor);
+
+  const focusCellAt = (rowIdx: number, colIdx: number) => {
+    if (!tableEl) return;
+    const rows = tableEl.querySelectorAll("tr");
+    const targetRow = rows[rowIdx];
+    if (!targetRow) return;
+    const cells = targetRow.querySelectorAll("th, td");
+    const targetCell = cells[colIdx];
+    if (!targetCell) return;
+    const pos = editor.view.posAtDOM(targetCell, 0);
+    editor.chain().focus().setTextSelection(pos).run();
+  };
+
+  const deleteTableAction = {
+    label: "Delete table",
+    icon: <Table2 className="w-4 h-4" />,
+    danger: true,
+    action: () => {
+      editor.chain().focus().deleteTable().run();
+    },
+  };
+
+  const items = state.type === "row"
+    ? [
+        {
+          label: "Insert above",
+          icon: <ArrowUp className="w-4 h-4" />,
+          action: () => {
+            focusCellAt(state.index, 0);
+            setTimeout(() => editor.chain().focus().addRowBefore().run(), 10);
+          },
+        },
+        {
+          label: "Insert below",
+          icon: <ArrowDown className="w-4 h-4" />,
+          action: () => {
+            focusCellAt(state.index, 0);
+            setTimeout(() => editor.chain().focus().addRowAfter().run(), 10);
+          },
+        },
+        {
+          label: "Duplicate",
+          icon: <Copy className="w-4 h-4" />,
+          action: () => {
+            focusCellAt(state.index, 0);
+            setTimeout(() => {
+              const row = tableEl?.querySelectorAll("tr")[state.index];
+              editor.chain().focus().addRowAfter().run();
+              if (row && tableEl) {
+                setTimeout(() => {
+                  const newRows = tableEl.querySelectorAll("tr");
+                  const newRow = newRows[state.index + 1];
+                  if (newRow) {
+                    const srcCells = row.querySelectorAll("th, td");
+                    const dstCells = newRow.querySelectorAll("th, td");
+                    srcCells.forEach((srcCell, ci) => {
+                      const dstCell = dstCells[ci];
+                      if (dstCell && srcCell.textContent) {
+                        const pos = editor.view.posAtDOM(dstCell, 0);
+                        editor.chain().setTextSelection(pos).insertContent(srcCell.textContent).run();
+                      }
+                    });
+                  }
+                }, 50);
+              }
+            }, 10);
+          },
+        },
+        { type: "separator" as const },
+        {
+          label: "Clear contents",
+          icon: <XCircle className="w-4 h-4" />,
+          action: () => {
+            if (!tableEl) return;
+            const rows = tableEl.querySelectorAll("tr");
+            const row = rows[state.index];
+            if (!row) return;
+            const cells = row.querySelectorAll("th, td");
+            cells.forEach(cell => {
+              const pos = editor.view.posAtDOM(cell, 0);
+              const resolvedPos = editor.state.doc.resolve(pos);
+              const cellNode = resolvedPos.parent;
+              if (cellNode) {
+                editor.chain().setTextSelection(pos).deleteNode("paragraph").insertContentAt(pos, { type: "paragraph" }).run();
+              }
+            });
+          },
+        },
+        {
+          label: "Delete",
+          icon: <Trash2 className="w-4 h-4" />,
+          danger: true,
+          action: () => {
+            focusCellAt(state.index, 0);
+            setTimeout(() => editor.chain().focus().deleteRow().run(), 10);
+          },
+        },
+        { type: "separator" as const },
+        deleteTableAction,
+      ]
+    : [
+        {
+          label: "Insert left",
+          icon: <ArrowLeft className="w-4 h-4" />,
+          action: () => {
+            focusCellAt(0, state.index);
+            setTimeout(() => editor.chain().focus().addColumnBefore().run(), 10);
+          },
+        },
+        {
+          label: "Insert right",
+          icon: <ArrowRight className="w-4 h-4" />,
+          action: () => {
+            focusCellAt(0, state.index);
+            setTimeout(() => editor.chain().focus().addColumnAfter().run(), 10);
+          },
+        },
+        {
+          label: "Duplicate",
+          icon: <Copy className="w-4 h-4" />,
+          action: () => {
+            focusCellAt(0, state.index);
+            setTimeout(() => {
+              editor.chain().focus().addColumnAfter().run();
+              if (tableEl) {
+                setTimeout(() => {
+                  const rows = tableEl.querySelectorAll("tr");
+                  rows.forEach(row => {
+                    const cells = row.querySelectorAll("th, td");
+                    const srcCell = cells[state.index];
+                    const dstCell = cells[state.index + 1];
+                    if (srcCell && dstCell && srcCell.textContent) {
+                      const pos = editor.view.posAtDOM(dstCell, 0);
+                      editor.chain().setTextSelection(pos).insertContent(srcCell.textContent).run();
+                    }
+                  });
+                }, 50);
+              }
+            }, 10);
+          },
+        },
+        { type: "separator" as const },
+        {
+          label: "Clear contents",
+          icon: <XCircle className="w-4 h-4" />,
+          action: () => {
+            if (!tableEl) return;
+            const rows = tableEl.querySelectorAll("tr");
+            rows.forEach(row => {
+              const cells = row.querySelectorAll("th, td");
+              const cell = cells[state.index];
+              if (cell) {
+                const pos = editor.view.posAtDOM(cell, 0);
+                editor.chain().setTextSelection(pos).selectNodeBackward().insertContent({ type: "paragraph" }).run();
+              }
+            });
+          },
+        },
+        {
+          label: "Delete",
+          icon: <Trash2 className="w-4 h-4" />,
+          danger: true,
+          action: () => {
+            focusCellAt(0, state.index);
+            setTimeout(() => editor.chain().focus().deleteColumn().run(), 10);
+          },
+        },
+        { type: "separator" as const },
+        deleteTableAction,
+      ];
 
   return (
     <div
-      className="flex items-center gap-1 p-1.5 bg-card border border-border rounded-lg shadow-lg mb-2 flex-wrap"
-      data-testid="table-toolbar"
+      ref={menuRef}
+      className="fixed bg-[#252525] border border-white/10 rounded-lg shadow-2xl overflow-hidden z-[100] min-w-[200px] py-1"
+      style={{ top: state.y, left: state.x }}
+      data-testid="table-context-menu"
     >
-      <button
-        onClick={() => editor.chain().focus().addColumnBefore().run()}
-        className="px-2 py-1 text-xs rounded hover:bg-white/10 text-white/70 hover:text-white transition-colors"
-        title="Add column before"
-        data-testid="button-add-col-before"
-      >
-        + Col Before
-      </button>
-      <button
-        onClick={() => editor.chain().focus().addColumnAfter().run()}
-        className="px-2 py-1 text-xs rounded hover:bg-white/10 text-white/70 hover:text-white transition-colors"
-        title="Add column after"
-        data-testid="button-add-col-after"
-      >
-        + Col After
-      </button>
-      <button
-        onClick={() => editor.chain().focus().deleteColumn().run()}
-        className="px-2 py-1 text-xs rounded hover:bg-red-500/20 text-white/70 hover:text-red-400 transition-colors"
-        title="Delete column"
-        data-testid="button-delete-col"
-      >
-        - Col
-      </button>
-      <div className="w-px h-4 bg-border mx-1" />
-      <button
-        onClick={() => editor.chain().focus().addRowBefore().run()}
-        className="px-2 py-1 text-xs rounded hover:bg-white/10 text-white/70 hover:text-white transition-colors"
-        title="Add row before"
-        data-testid="button-add-row-before"
-      >
-        + Row Before
-      </button>
-      <button
-        onClick={() => editor.chain().focus().addRowAfter().run()}
-        className="px-2 py-1 text-xs rounded hover:bg-white/10 text-white/70 hover:text-white transition-colors"
-        title="Add row after"
-        data-testid="button-add-row-after"
-      >
-        + Row After
-      </button>
-      <button
-        onClick={() => editor.chain().focus().deleteRow().run()}
-        className="px-2 py-1 text-xs rounded hover:bg-red-500/20 text-white/70 hover:text-red-400 transition-colors"
-        title="Delete row"
-        data-testid="button-delete-row"
-      >
-        - Row
-      </button>
-      <div className="w-px h-4 bg-border mx-1" />
-      <button
-        onClick={() => editor.chain().focus().deleteTable().run()}
-        className="px-2 py-1 text-xs rounded hover:bg-red-500/20 text-white/70 hover:text-red-400 transition-colors"
-        title="Delete table"
-        data-testid="button-delete-table"
-      >
-        Delete Table
-      </button>
+      {items.map((item, i) => {
+        if ("type" in item && item.type === "separator") {
+          return <div key={`sep-${i}`} className="h-px bg-white/10 my-1" />;
+        }
+        const menuItem = item as { label: string; icon: JSX.Element; action: () => void; danger?: boolean };
+        return (
+          <button
+            key={menuItem.label}
+            className={cn(
+              "w-full flex items-center gap-3 px-3 py-2 text-sm transition-colors text-left",
+              menuItem.danger
+                ? "text-red-400 hover:bg-red-500/10"
+                : "text-white/80 hover:bg-white/10"
+            )}
+            onClick={() => {
+              menuItem.action();
+              onClose();
+            }}
+            data-testid={`table-ctx-${menuItem.label.toLowerCase().replace(/\s+/g, "-")}`}
+          >
+            {menuItem.icon}
+            <span>{menuItem.label}</span>
+          </button>
+        );
+      })}
     </div>
+  );
+}
+
+function NotionTableControls({ editor, containerRef }: { editor: Editor; containerRef: React.RefObject<HTMLDivElement | null> }) {
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [tableInfo, setTableInfo] = useState<{
+    rows: number;
+    cols: number;
+    tableRect: DOMRect;
+    rowPositions: { top: number; height: number }[];
+    colPositions: { left: number; width: number }[];
+  } | null>(null);
+  const [isTableActive, setIsTableActive] = useState(false);
+
+  const activeTableRef = useRef<HTMLTableElement | null>(null);
+
+  const updateTableInfo = useCallback(() => {
+    if (!containerRef.current) return;
+    const isActive = editor.isActive("table");
+    setIsTableActive(isActive);
+
+    const tableEl = isActive ? getActiveTableEl(editor) : null;
+    activeTableRef.current = tableEl;
+    if (!tableEl) {
+      setTableInfo(null);
+      return;
+    }
+
+    const tableRect = tableEl.getBoundingClientRect();
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const rows = tableEl.querySelectorAll("tr");
+    const firstRow = rows[0];
+    const headerCells = firstRow ? firstRow.querySelectorAll("th, td") : [];
+
+    const rowPositions: { top: number; height: number }[] = [];
+    rows.forEach(row => {
+      const rect = row.getBoundingClientRect();
+      rowPositions.push({
+        top: rect.top - containerRect.top + containerRef.current!.scrollTop,
+        height: rect.height,
+      });
+    });
+
+    const colPositions: { left: number; width: number }[] = [];
+    headerCells.forEach(cell => {
+      const rect = cell.getBoundingClientRect();
+      colPositions.push({
+        left: rect.left - containerRect.left,
+        width: rect.width,
+      });
+    });
+
+    setTableInfo({
+      rows: rows.length,
+      cols: headerCells.length,
+      tableRect: new DOMRect(
+        tableRect.left - containerRect.left,
+        tableRect.top - containerRect.top + containerRef.current!.scrollTop,
+        tableRect.width,
+        tableRect.height
+      ),
+      rowPositions,
+      colPositions,
+    });
+  }, [editor, containerRef]);
+
+  useEffect(() => {
+    updateTableInfo();
+    editor.on("selectionUpdate", updateTableInfo);
+    editor.on("update", updateTableInfo);
+
+    const observer = new MutationObserver(updateTableInfo);
+    if (containerRef.current) {
+      observer.observe(containerRef.current, { childList: true, subtree: true, attributes: true });
+    }
+
+    return () => {
+      editor.off("selectionUpdate", updateTableInfo);
+      editor.off("update", updateTableInfo);
+      observer.disconnect();
+    };
+  }, [editor, updateTableInfo, containerRef]);
+
+  if (!tableInfo || !isTableActive) return null;
+
+  const handleRowGripClick = (e: React.MouseEvent, rowIndex: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      type: "row",
+      index: rowIndex,
+      x: e.clientX,
+      y: e.clientY,
+      tableEl: activeTableRef.current || undefined,
+    });
+  };
+
+  const handleColGripClick = (e: React.MouseEvent, colIndex: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      type: "column",
+      index: colIndex,
+      x: e.clientX,
+      y: e.clientY,
+      tableEl: activeTableRef.current || undefined,
+    });
+  };
+
+  const addRowAtEnd = () => {
+    const tbl = activeTableRef.current;
+    if (!tbl) return;
+    const rows = tbl.querySelectorAll("tr");
+    const lastRow = rows[rows.length - 1];
+    if (!lastRow) return;
+    const lastCell = lastRow.querySelector("td, th");
+    if (!lastCell) return;
+    const pos = editor.view.posAtDOM(lastCell, 0);
+    editor.chain().focus().setTextSelection(pos).addRowAfter().run();
+  };
+
+  const addColAtEnd = () => {
+    const tbl = activeTableRef.current;
+    if (!tbl) return;
+    const firstRow = tbl.querySelector("tr");
+    if (!firstRow) return;
+    const cells = firstRow.querySelectorAll("th, td");
+    const lastCell = cells[cells.length - 1];
+    if (!lastCell) return;
+    const pos = editor.view.posAtDOM(lastCell, 0);
+    editor.chain().focus().setTextSelection(pos).addColumnAfter().run();
+  };
+
+  return (
+    <>
+      {tableInfo.rowPositions.map((pos, i) => (
+        <button
+          key={`row-grip-${i}`}
+          className="table-grip table-grip-row"
+          style={{
+            top: pos.top,
+            left: tableInfo.tableRect.x - 24,
+            height: pos.height,
+          }}
+          onClick={(e) => handleRowGripClick(e, i)}
+          data-testid={`table-row-grip-${i}`}
+        >
+          <GripVertical className="w-3 h-3" />
+        </button>
+      ))}
+
+      {tableInfo.colPositions.map((pos, i) => (
+        <button
+          key={`col-grip-${i}`}
+          className="table-grip table-grip-col"
+          style={{
+            left: pos.left,
+            top: tableInfo.tableRect.y - 24,
+            width: pos.width,
+          }}
+          onClick={(e) => handleColGripClick(e, i)}
+          data-testid={`table-col-grip-${i}`}
+        >
+          <GripVertical className="w-3 h-3 rotate-90" />
+        </button>
+      ))}
+
+      <button
+        className="table-add-btn table-add-row-btn"
+        style={{
+          top: tableInfo.tableRect.y + tableInfo.tableRect.height + 2,
+          left: tableInfo.tableRect.x,
+          width: tableInfo.tableRect.width,
+        }}
+        onClick={addRowAtEnd}
+        data-testid="button-add-row-bottom"
+        title="Add row"
+      >
+        <Plus className="w-3.5 h-3.5" />
+      </button>
+
+      <button
+        className="table-add-btn table-add-col-btn"
+        style={{
+          left: tableInfo.tableRect.x + tableInfo.tableRect.width + 2,
+          top: tableInfo.tableRect.y,
+          height: tableInfo.tableRect.height,
+        }}
+        onClick={addColAtEnd}
+        data-testid="button-add-col-right"
+        title="Add column"
+      >
+        <Plus className="w-3.5 h-3.5" />
+      </button>
+
+      {contextMenu && (
+        <TableContextMenu
+          state={contextMenu}
+          editor={editor}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -440,8 +836,10 @@ export default function RichEditor({ content, onChange, onAddPage }: RichEditorP
 
   return (
     <div ref={editorContainerRef} className="relative" data-testid="rich-editor">
-      <TableToolbar editor={editor} />
       <EditorContent editor={editor} />
+      {editor.isActive("table") && (
+        <NotionTableControls editor={editor} containerRef={editorContainerRef} />
+      )}
       {slashMenu && (
         <SlashMenu
           editor={editor}
