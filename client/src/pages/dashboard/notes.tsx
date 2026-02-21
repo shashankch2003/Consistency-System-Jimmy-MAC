@@ -221,18 +221,31 @@ export default function NotesPage() {
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden" data-testid="notes-page">
       {sidebarOpen && (
         <div className="w-72 border-r border-border bg-card/50 flex flex-col shrink-0" data-testid="notes-sidebar">
-          <div className="flex items-center justify-between p-4 border-b border-border/50">
-            <h2 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">Notes</h2>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7"
-              onClick={() => handleAddPage()}
-              disabled={createNote.isPending}
-              data-testid="button-add-note"
-            >
-              <Plus className="w-4 h-4" />
-            </Button>
+          <div className="flex flex-col border-b border-border/50">
+            <div className="flex items-center justify-between px-4 pt-3 pb-1">
+              <h2 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">Notes</h2>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7"
+                onClick={() => setSidebarOpen(false)}
+                data-testid="button-close-notes-sidebar"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="flex items-center px-4 pb-3">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7"
+                onClick={() => handleAddPage()}
+                disabled={createNote.isPending}
+                data-testid="button-add-note"
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto py-1">
@@ -277,17 +290,6 @@ export default function NotesPage() {
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-3xl mx-auto px-8 py-12">
               <div className="flex items-start gap-4 mb-6">
-                {sidebarOpen && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8 shrink-0 mt-2"
-                    onClick={() => setSidebarOpen(false)}
-                    data-testid="button-close-notes-sidebar"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </Button>
-                )}
                 <div className="relative">
                   <button
                     onClick={() => setShowIconPicker(!showIconPicker)}
