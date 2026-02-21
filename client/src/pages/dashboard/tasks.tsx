@@ -281,88 +281,78 @@ export default function TasksPage() {
               <div className="text-center py-8 text-muted-foreground">No tasks for this day. Add one below.</div>
             ) : (
               tasks?.map(task => (
-                <div key={task.id} className="p-4" data-testid={`row-task-${task.id}`}>
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div className="flex-1 min-w-0">
-                      <span className="font-medium text-sm" data-testid={`text-task-title-${task.id}`}>{task.title}</span>
-                      {task.description && (
-                        <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[300px]" data-testid={`text-task-desc-preview-${task.id}`}>
-                          {task.description}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => setDescTask({ id: task.id, title: task.title, description: task.description })}
-                        className={cn(
-                          "p-1.5 rounded-md transition-colors",
-                          task.description ? "text-primary hover:bg-primary/10" : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted"
-                        )}
-                        title="Description"
-                        data-testid={`button-desc-${task.id}`}
-                      >
-                        <FileText className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => deleteTask.mutate(task.id)}
-                        className="p-1.5 rounded-md text-muted-foreground/40 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                        data-testid={`button-delete-task-${task.id}`}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4 flex-wrap">
-                    <PriorityBadge priority={task.priority || "Normal"} />
-                    {task.time && (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded" data-testid={`badge-time-${task.id}`}>
-                        <Clock className="w-2.5 h-2.5" />{task.time}
-                      </span>
+                <div key={task.id} className="px-4 py-3 flex items-center gap-3" data-testid={`row-task-${task.id}`}>
+                  <div className="flex-1 min-w-0">
+                    <span className="font-medium text-sm" data-testid={`text-task-title-${task.id}`}>{task.title}</span>
+                    {task.description && (
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[250px]" data-testid={`text-task-desc-preview-${task.id}`}>
+                        {task.description}
+                      </p>
                     )}
-                    <div className="flex items-center gap-2 ml-auto">
-                      {COMPLETION_LEVELS.map(level => (
-                        <div key={level} className="flex flex-col items-center gap-0.5">
-                          <span className="text-[9px] text-muted-foreground/60">{level}%</span>
-                          <ProgressDot
-                            active={(task.completionPercentage || 0) === level}
-                            level={level}
-                            onClick={() => updateTask.mutate({ id: task.id, completionPercentage: level })}
-                            testId={`dot-completion-${level}-${task.id}`}
-                          />
-                        </div>
-                      ))}
-                    </div>
                   </div>
+                  <PriorityBadge priority={task.priority || "Normal"} />
+                  {task.time && (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded shrink-0" data-testid={`badge-time-${task.id}`}>
+                      <Clock className="w-2.5 h-2.5" />{task.time}
+                    </span>
+                  )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {COMPLETION_LEVELS.map(level => (
+                      <div key={level} className="flex flex-col items-center gap-0.5">
+                        <span className="text-[9px] text-muted-foreground/60">{level}%</span>
+                        <ProgressDot
+                          active={(task.completionPercentage || 0) === level}
+                          level={level}
+                          onClick={() => updateTask.mutate({ id: task.id, completionPercentage: level })}
+                          testId={`dot-completion-${level}-${task.id}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setDescTask({ id: task.id, title: task.title, description: task.description })}
+                    className={cn(
+                      "p-1.5 rounded-md transition-colors shrink-0",
+                      task.description ? "text-primary hover:bg-primary/10" : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted"
+                    )}
+                    title="Description"
+                    data-testid={`button-desc-${task.id}`}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => deleteTask.mutate(task.id)}
+                    className="p-1.5 rounded-md text-muted-foreground/40 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
+                    data-testid={`button-delete-task-${task.id}`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               ))
             )}
-            <div className="p-4">
-              <form onSubmit={handleCreate} className="space-y-2">
-                <div className="flex gap-2 items-center">
-                  <Input
-                    value={newTaskTitle}
-                    onChange={(e) => setNewTaskTitle(e.target.value)}
-                    placeholder="Add new task..."
-                    className="flex-1"
-                    data-testid="input-new-task-title"
-                  />
-                  <Button type="submit" size="sm" className="gap-1 shrink-0" disabled={!newTaskTitle.trim()} data-testid="button-add-task">
-                    <Plus className="w-4 h-4" /> Add
-                  </Button>
-                </div>
-                <div className="flex gap-2 items-center">
-                  <TimeInput value={newTaskTime} onChange={setNewTaskTime} testId="input-new-task-time" />
-                  <Select value={newTaskPriority} onValueChange={setNewTaskPriority}>
-                    <SelectTrigger className="w-[140px] text-xs" data-testid="select-new-task-priority">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PRIORITIES.map(p => (
-                        <SelectItem key={p} value={p}>{p}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+            <div className="px-4 py-3">
+              <form onSubmit={handleCreate} className="flex gap-2 items-center">
+                <Input
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                  placeholder="Add new task..."
+                  className="flex-1"
+                  data-testid="input-new-task-title"
+                />
+                <TimeInput value={newTaskTime} onChange={setNewTaskTime} testId="input-new-task-time" />
+                <Select value={newTaskPriority} onValueChange={setNewTaskPriority}>
+                  <SelectTrigger className="w-[130px] text-xs" data-testid="select-new-task-priority">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRIORITIES.map(p => (
+                      <SelectItem key={p} value={p}>{p}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button type="submit" size="sm" className="gap-1 shrink-0" disabled={!newTaskTitle.trim()} data-testid="button-add-task">
+                  <Plus className="w-4 h-4" /> Add
+                </Button>
               </form>
             </div>
           </div>
