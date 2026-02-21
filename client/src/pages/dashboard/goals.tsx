@@ -180,7 +180,8 @@ function YearlyGoalsTable({ year, onOpenDescription }: { year: number; onOpenDes
 
   if (isLoading) return <Skeleton className="h-40 w-full rounded-xl" />;
 
-  const avgRating = goals?.length ? Math.round(goals.reduce((acc: number, g: any) => acc + (g.rating ?? 0), 0) / goals.length * 10) : 0;
+  const goalsWithRating = goals?.filter((g: any) => (g.rating ?? 0) > 0) || [];
+  const avgRating = goalsWithRating.length ? Math.round(goalsWithRating.reduce((acc: number, g: any) => acc + (g.rating ?? 0), 0) / goalsWithRating.length * 10) : 0;
 
   return (
     <Card className="border-border/50">
@@ -195,8 +196,8 @@ function YearlyGoalsTable({ year, onOpenDescription }: { year: number; onOpenDes
               <p className="text-sm text-muted-foreground">Set your long-term goals for {year}</p>
             </div>
           </div>
-          {goals && goals.length > 0 && (
-            <AvgBadge label={`${year} Avg`} avg={avgRating} total={goals.length} />
+          {goalsWithRating.length > 0 && (
+            <AvgBadge label={`${year} Avg`} avg={avgRating} total={goalsWithRating.length} />
           )}
         </div>
       </div>
@@ -282,8 +283,8 @@ function MonthlyOverviewTable({ year, onOpenDescription }: { year: number; onOpe
     return goals?.find((g: any) => g.month === month) || null;
   };
 
-  const goalsWithData = goals?.filter((g: any) => g.mainGoal && g.mainGoal.trim()) || [];
-  const avgRating = goalsWithData.length ? Math.round(goalsWithData.reduce((acc: number, g: any) => acc + (g.rating ?? 0), 0) / goalsWithData.length * 10) : 0;
+  const goalsWithRating = goals?.filter((g: any) => g.mainGoal && g.mainGoal.trim() && (g.rating ?? 0) > 0) || [];
+  const avgRating = goalsWithRating.length ? Math.round(goalsWithRating.reduce((acc: number, g: any) => acc + (g.rating ?? 0), 0) / goalsWithRating.length * 10) : 0;
 
   return (
     <Card className="border-border/50">
@@ -298,8 +299,8 @@ function MonthlyOverviewTable({ year, onOpenDescription }: { year: number; onOpe
               <p className="text-sm text-muted-foreground">Set goals for each month of {year}</p>
             </div>
           </div>
-          {goalsWithData.length > 0 && (
-            <AvgBadge label={`${year} Avg`} avg={avgRating} total={goalsWithData.length} />
+          {goalsWithRating.length > 0 && (
+            <AvgBadge label={`${year} Avg`} avg={avgRating} total={goalsWithRating.length} />
           )}
         </div>
       </div>
@@ -388,7 +389,8 @@ function DynamicMonthGoalsTable({ year, onOpenDescription }: { year: number; onO
 
   if (isLoading) return <Skeleton className="h-40 w-full rounded-xl" />;
 
-  const avgRating = goals?.length ? Math.round(goals.reduce((acc: number, g: any) => acc + (g.rating ?? 0), 0) / goals.length * 10) : 0;
+  const goalsWithRating = goals?.filter((g: any) => (g.rating ?? 0) > 0) || [];
+  const avgRating = goalsWithRating.length ? Math.round(goalsWithRating.reduce((acc: number, g: any) => acc + (g.rating ?? 0), 0) / goalsWithRating.length * 10) : 0;
 
   return (
     <Card className="border-border/50">
@@ -404,8 +406,8 @@ function DynamicMonthGoalsTable({ year, onOpenDescription }: { year: number; onO
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {goals && goals.length > 0 && (
-              <AvgBadge label={`${MONTHS[selectedMonth - 1]} Avg`} avg={avgRating} total={goals.length} />
+            {goalsWithRating.length > 0 && (
+              <AvgBadge label={`${MONTHS[selectedMonth - 1]} Avg`} avg={avgRating} total={goalsWithRating.length} />
             )}
             <Select value={String(selectedMonth)} onValueChange={(v) => setSelectedMonth(Number(v))}>
               <SelectTrigger className="w-[180px]" data-testid="select-dynamic-month">
