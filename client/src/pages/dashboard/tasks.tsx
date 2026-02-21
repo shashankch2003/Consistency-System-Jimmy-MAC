@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { format, addDays, subDays, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getDay, addMonths, subMonths, isSameDay, isToday } from "date-fns";
 import { useTasks, useTasksByMonth, useTasksByYear, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/use-tasks";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ChevronLeft, ChevronRight, Plus, Trash2, BarChart3, Calendar, TrendingUp, Clock, AlertTriangle, AlertCircle, Minus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, BarChart3, Calendar, TrendingUp, Clock, AlertTriangle, AlertCircle, FileText, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, AreaChart, Area } from "recharts";
 
@@ -16,12 +18,12 @@ const PRIORITIES = ["Very Important", "Important", "Normal"] as const;
 
 function PriorityBadge({ priority }: { priority: string }) {
   if (priority === "Very Important") return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">
+    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded" data-testid="badge-priority-vi">
       <AlertTriangle className="w-2.5 h-2.5" />VI
     </span>
   );
   if (priority === "Important") return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-yellow-400 bg-yellow-500/10 px-1.5 py-0.5 rounded">
+    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-yellow-400 bg-yellow-500/10 px-1.5 py-0.5 rounded" data-testid="badge-priority-imp">
       <AlertCircle className="w-2.5 h-2.5" />IMP
     </span>
   );
@@ -41,11 +43,87 @@ function ProgressDot({ active, level, onClick, testId }: { active: boolean; leve
     <button
       onClick={onClick}
       className={cn(
-        "w-5 h-5 rounded-full border-2 transition-all duration-200 hover:scale-110",
+        "w-5 h-5 rounded-full border-2 transition-colors duration-200",
         active ? colors[level] : "border-muted-foreground/30 bg-transparent hover:border-muted-foreground/60"
       )}
       data-testid={testId || `dot-completion-${level}`}
     />
+  );
+}
+
+function TimeInput({ value, onChange, testId }: { value: string; onChange: (v: string) => void; testId?: string }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let v = e.target.value.replace(/[^0-9:]/g, "");
+    if (v.length === 2 && !v.includes(":")) {
+      const hrs = parseInt(v);
+      if (hrs >= 0 && hrs <= 23) v = v + ":";
+    }
+    if (v.length > 5) v = v.slice(0, 5);
+    onChange(v);
+  };
+
+  const isValid = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(value);
+
+  return (
+    <div className="relative">
+      <Clock className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        onChange={handleChange}
+        placeholder="HH:MM"
+        maxLength={5}
+        className={cn(
+          "flex rounded-md border bg-background px-2 py-1.5 pl-7 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring w-[90px]",
+          value && !isValid ? "border-red-500/50" : "border-input"
+        )}
+        data-testid={testId}
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          data-testid={`${testId}-clear`}
+        >
+          <X className="w-3 h-3" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function DescriptionDialog({ task, onSave, onClose }: {
+  task: { id: number; title: string; description: string | null };
+  onSave: (desc: string) => void;
+  onClose: () => void;
+}) {
+  const [desc, setDesc] = useState(task.description || "");
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="sm:max-w-[600px] max-h-[80vh]" data-testid="dialog-description">
+        <DialogHeader>
+          <DialogTitle className="text-lg" data-testid="text-dialog-task-title">{task.title}</DialogTitle>
+          <p className="text-sm text-muted-foreground">Add notes, details, or instructions for this task</p>
+        </DialogHeader>
+        <Textarea
+          value={desc}
+          onChange={(e) => setDesc(e.target.value)}
+          placeholder="Write your description here..."
+          className="min-h-[250px] resize-y text-sm"
+          data-testid="textarea-description"
+          autoFocus
+        />
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} data-testid="button-cancel-description">Cancel</Button>
+          <Button onClick={() => { onSave(desc); onClose(); }} data-testid="button-save-description">Save</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -63,6 +141,7 @@ export default function TasksPage() {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskTime, setNewTaskTime] = useState("");
   const [newTaskPriority, setNewTaskPriority] = useState<string>("Normal");
+  const [descTask, setDescTask] = useState<{ id: number; title: string; description: string | null } | null>(null);
   const [analyticsMonth, setAnalyticsMonth] = useState(new Date());
   const dateStr = format(date, "yyyy-MM-dd");
   const analyticsMonthStr = format(analyticsMonth, "yyyy-MM");
@@ -195,95 +274,98 @@ export default function TasksPage() {
             <h2 className="text-lg font-semibold">Tasks for {format(date, "MMMM d")}</h2>
             <span className="text-sm text-muted-foreground ml-auto">{tasks?.length || 0} tasks</span>
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="min-w-[200px]">Task</TableHead>
-                <TableHead className="text-center w-[220px]">Completion</TableHead>
-                <TableHead className="w-[50px] text-center">Del</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">Loading tasks...</TableCell>
-                </TableRow>
-              ) : tasks?.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No tasks for this day. Add one below.</TableCell>
-                </TableRow>
-              ) : (
-                tasks?.map(task => (
-                  <TableRow key={task.id} data-testid={`row-task-${task.id}`}>
-                    <TableCell data-testid={`text-task-title-${task.id}`}>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{task.title}</span>
-                        <PriorityBadge priority={task.priority || "Normal"} />
-                        {task.time && (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded">
-                            <Clock className="w-2.5 h-2.5" />{task.time}
-                          </span>
+          <div className="divide-y divide-border">
+            {isLoading ? (
+              <div className="text-center py-8 text-muted-foreground">Loading tasks...</div>
+            ) : tasks?.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">No tasks for this day. Add one below.</div>
+            ) : (
+              tasks?.map(task => (
+                <div key={task.id} className="p-4" data-testid={`row-task-${task.id}`}>
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-sm" data-testid={`text-task-title-${task.id}`}>{task.title}</span>
+                      {task.description && (
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[300px]" data-testid={`text-task-desc-preview-${task.id}`}>
+                          {task.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => setDescTask({ id: task.id, title: task.title, description: task.description })}
+                        className={cn(
+                          "p-1.5 rounded-md transition-colors",
+                          task.description ? "text-primary hover:bg-primary/10" : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted"
                         )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-center gap-3">
-                        {COMPLETION_LEVELS.map(level => (
-                          <div key={level} className="flex flex-col items-center gap-0.5">
-                            <span className="text-[9px] text-muted-foreground/60">{level}%</span>
-                            <ProgressDot
-                              active={(task.completionPercentage || 0) === level}
-                              level={level}
-                              onClick={() => updateTask.mutate({ id: task.id, completionPercentage: level })}
-                              testId={`dot-completion-${level}-${task.id}`}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Button size="icon" variant="ghost" onClick={() => deleteTask.mutate(task.id)} data-testid={`button-delete-task-${task.id}`}>
-                        <Trash2 className="w-4 h-4 text-muted-foreground" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-              <TableRow>
-                <TableCell colSpan={3}>
-                  <form onSubmit={handleCreate} className="flex gap-2 items-center">
-                    <Input
-                      value={newTaskTitle}
-                      onChange={(e) => setNewTaskTitle(e.target.value)}
-                      placeholder="Add new task..."
-                      className="h-9 flex-1"
-                      data-testid="input-new-task-title"
-                    />
-                    <Input
-                      type="time"
-                      value={newTaskTime}
-                      onChange={(e) => setNewTaskTime(e.target.value)}
-                      className="h-9 w-[100px] text-xs"
-                      data-testid="input-new-task-time"
-                    />
-                    <Select value={newTaskPriority} onValueChange={setNewTaskPriority}>
-                      <SelectTrigger className="h-9 w-[130px] text-xs" data-testid="select-new-task-priority">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PRIORITIES.map(p => (
-                          <SelectItem key={p} value={p}>{p}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button type="submit" size="sm" className="h-9 gap-1 shrink-0" disabled={!newTaskTitle.trim()} data-testid="button-add-task">
-                      <Plus className="w-4 h-4" /> Add
-                    </Button>
-                  </form>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
+                        title="Description"
+                        data-testid={`button-desc-${task.id}`}
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => deleteTask.mutate(task.id)}
+                        className="p-1.5 rounded-md text-muted-foreground/40 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        data-testid={`button-delete-task-${task.id}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <PriorityBadge priority={task.priority || "Normal"} />
+                    {task.time && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded" data-testid={`badge-time-${task.id}`}>
+                        <Clock className="w-2.5 h-2.5" />{task.time}
+                      </span>
+                    )}
+                    <div className="flex items-center gap-2 ml-auto">
+                      {COMPLETION_LEVELS.map(level => (
+                        <div key={level} className="flex flex-col items-center gap-0.5">
+                          <span className="text-[9px] text-muted-foreground/60">{level}%</span>
+                          <ProgressDot
+                            active={(task.completionPercentage || 0) === level}
+                            level={level}
+                            onClick={() => updateTask.mutate({ id: task.id, completionPercentage: level })}
+                            testId={`dot-completion-${level}-${task.id}`}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+            <div className="p-4">
+              <form onSubmit={handleCreate} className="space-y-2">
+                <div className="flex gap-2 items-center">
+                  <Input
+                    value={newTaskTitle}
+                    onChange={(e) => setNewTaskTitle(e.target.value)}
+                    placeholder="Add new task..."
+                    className="flex-1"
+                    data-testid="input-new-task-title"
+                  />
+                  <Button type="submit" size="sm" className="gap-1 shrink-0" disabled={!newTaskTitle.trim()} data-testid="button-add-task">
+                    <Plus className="w-4 h-4" /> Add
+                  </Button>
+                </div>
+                <div className="flex gap-2 items-center">
+                  <TimeInput value={newTaskTime} onChange={setNewTaskTime} testId="input-new-task-time" />
+                  <Select value={newTaskPriority} onValueChange={setNewTaskPriority}>
+                    <SelectTrigger className="w-[140px] text-xs" data-testid="select-new-task-priority">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PRIORITIES.map(p => (
+                        <SelectItem key={p} value={p}>{p}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </form>
+            </div>
+          </div>
         </div>
 
         <div className="bg-card rounded-xl border border-border overflow-hidden" data-testid="calendar-view">
@@ -522,6 +604,14 @@ export default function TasksPage() {
           </div>
         </div>
       </div>
+
+      {descTask && (
+        <DescriptionDialog
+          task={descTask}
+          onSave={(desc) => updateTask.mutate({ id: descTask.id, description: desc.trim() || null })}
+          onClose={() => setDescTask(null)}
+        />
+      )}
     </div>
   );
 }
