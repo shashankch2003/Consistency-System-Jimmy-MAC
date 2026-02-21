@@ -145,7 +145,7 @@ export default function LandingPage() {
           </div>
         </motion.div>
 
-        <div className="max-w-5xl mx-auto px-6 lg:px-8 w-full py-20">
+        <div className="max-w-6xl mx-auto px-6 lg:px-8 w-full py-20">
           <motion.div
             style={{ opacity: heroOpacity, scale: heroScale }}
             className="flex flex-col items-center"
@@ -166,7 +166,7 @@ export default function LandingPage() {
               animate="visible"
               variants={fadeUp}
               custom={1}
-              className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-display font-bold tracking-tight leading-[1.15] mb-6 text-center"
+              className="text-3xl sm:text-4xl md:text-5xl lg:text-[3.8rem] xl:text-7xl font-display font-bold tracking-tight leading-[1.15] mb-6 text-center"
             >
               Helping You be <span className="text-emerald-400 underline decoration-emerald-500 underline-offset-[6px] decoration-[3px]">Productive</span> &<br />
               Reach Your <span className="text-emerald-400 underline decoration-emerald-500 underline-offset-[6px] decoration-[3px]">Goals</span> Through<br />
