@@ -2,7 +2,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { motion, useScroll, useTransform } from "framer-motion";
-import { ArrowRight, Target, Calendar, BarChart3, Eye, Lightbulb, Search, Layout, Zap, ChevronDown, CheckCircle2, Star, Play } from "lucide-react";
+import { ArrowRight, Target, Calendar, BarChart3, Eye, Lightbulb, Search, Layout, Zap, ChevronDown, CheckCircle2, Star, Play, Menu, X } from "lucide-react";
 import { SiInstagram, SiLinkedin, SiYoutube } from "react-icons/si";
 import { useRef, useState } from "react";
 import founderImg from "@assets/1-1_1771668652217.png";
@@ -28,12 +28,12 @@ function FAQItem({ question, answer }: { question: string; answer: string }) {
       onClick={() => setOpen(!open)}
       data-testid={`faq-item-${question.slice(0, 20).replace(/\s/g, '-').toLowerCase()}`}
     >
-      <div className="flex items-center justify-between px-6 py-5">
+      <div className="flex items-center justify-between px-4 sm:px-6 py-4 sm:py-5">
         <span className="font-semibold text-sm md:text-base text-white/90">{question}</span>
         <ChevronDown className={`w-5 h-5 text-white/40 transition-transform duration-300 shrink-0 ml-4 ${open ? "rotate-180" : ""}`} />
       </div>
       {open && (
-        <div className="px-6 pb-5 text-sm text-white/40 leading-relaxed">
+        <div className="px-4 sm:px-6 pb-4 sm:pb-5 text-sm text-white/40 leading-relaxed">
           {answer}
         </div>
       )}
@@ -43,6 +43,7 @@ function FAQItem({ question, answer }: { question: string; answer: string }) {
 
 export default function LandingPage() {
   const { user } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const heroRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
   const heroOpacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
@@ -51,9 +52,9 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white selection:bg-emerald-500/20 overflow-x-hidden" data-testid="landing-page">
       <nav className="fixed w-full z-50 bg-[#0a0a0f]/80 backdrop-blur-2xl border-b border-white/[0.06]" data-testid="landing-nav">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center text-white font-bold text-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-500 flex items-center justify-center text-white font-bold text-xs sm:text-sm">
               JM
             </div>
             <span className="text-lg font-display font-bold tracking-tight" data-testid="text-brand">Jimmy Mac</span>
@@ -65,7 +66,7 @@ export default function LandingPage() {
             <a href="#pricing" className="hover:text-white transition-colors duration-300" data-testid="link-nav-pricing">Pricing</a>
             <a href="#faq" className="hover:text-white transition-colors duration-300" data-testid="link-nav-faq">FAQ</a>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {user ? (
               <Link href="/dashboard">
                 <Button size="sm" className="bg-emerald-500 text-white font-semibold rounded-md" data-testid="button-dashboard">
@@ -79,11 +80,27 @@ export default function LandingPage() {
                 </Button>
               </a>
             )}
+            <button
+              className="md:hidden p-1.5 rounded-lg text-white/60"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              data-testid="button-mobile-menu"
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
           </div>
         </div>
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-white/[0.06] bg-[#0a0a0f]/95 backdrop-blur-2xl px-4 py-4 space-y-3" data-testid="mobile-menu">
+            <a href="#about" onClick={() => setMobileMenuOpen(false)} className="block text-sm text-white/60 py-2">About</a>
+            <a href="#system" onClick={() => setMobileMenuOpen(false)} className="block text-sm text-white/60 py-2">System</a>
+            <a href="#clarity-call" onClick={() => setMobileMenuOpen(false)} className="block text-sm text-white/60 py-2">Clarity Call</a>
+            <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="block text-sm text-white/60 py-2">Pricing</a>
+            <a href="#faq" onClick={() => setMobileMenuOpen(false)} className="block text-sm text-white/60 py-2">FAQ</a>
+          </div>
+        )}
       </nav>
 
-      <section ref={heroRef} className="relative min-h-screen flex items-center pt-16" data-testid="hero-section">
+      <section ref={heroRef} className="relative min-h-screen flex items-center pt-14 sm:pt-16" data-testid="hero-section">
         <div className="absolute inset-0 -z-10">
           <div className="absolute inset-0 bg-gradient-to-b from-emerald-500/[0.03] via-transparent to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
@@ -145,7 +162,7 @@ export default function LandingPage() {
           </div>
         </motion.div>
 
-        <div className="max-w-6xl mx-auto px-6 lg:px-8 w-full py-20">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 w-full py-12 sm:py-20">
           <motion.div
             style={{ opacity: heroOpacity, scale: heroScale }}
             className="flex flex-col items-center"
@@ -155,7 +172,7 @@ export default function LandingPage() {
               animate="visible"
               variants={fadeUp}
               custom={0}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-emerald-500/20 bg-emerald-500/[0.05] text-sm text-emerald-400 mb-10"
+              className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-emerald-500/20 bg-emerald-500/[0.05] text-xs sm:text-sm text-emerald-400 mb-6 sm:mb-10"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               SYSTEMS FOR A DISTRACTED WORLD
@@ -166,11 +183,11 @@ export default function LandingPage() {
               animate="visible"
               variants={fadeUp}
               custom={1}
-              className="text-3xl sm:text-4xl md:text-5xl lg:text-[3.8rem] xl:text-7xl font-display font-bold tracking-tight leading-[1.15] mb-6 text-center"
+              className="text-[1.75rem] sm:text-4xl md:text-5xl lg:text-[3.8rem] xl:text-7xl font-display font-bold tracking-tight leading-[1.15] mb-4 sm:mb-6 text-center"
             >
-              Helping You be <span className="text-emerald-400 underline decoration-emerald-500 underline-offset-[6px] decoration-[3px]">Productive</span> &<br />
-              Reach Your <span className="text-emerald-400 underline decoration-emerald-500 underline-offset-[6px] decoration-[3px]">Goals</span> Through<br />
-              <span className="underline decoration-emerald-500 underline-offset-[6px] decoration-[3px]">Systems</span> in a Distracted World
+              Helping You be <span className="text-emerald-400 underline decoration-emerald-500 underline-offset-4 sm:underline-offset-[6px] decoration-2 sm:decoration-[3px]">Productive</span> &<br />
+              Reach Your <span className="text-emerald-400 underline decoration-emerald-500 underline-offset-4 sm:underline-offset-[6px] decoration-2 sm:decoration-[3px]">Goals</span> Through<br />
+              <span className="underline decoration-emerald-500 underline-offset-4 sm:underline-offset-[6px] decoration-2 sm:decoration-[3px]">Systems</span> in a Distracted World
             </motion.h1>
 
             <motion.p
@@ -178,7 +195,7 @@ export default function LandingPage() {
               animate="visible"
               variants={fadeUp}
               custom={2}
-              className="text-base md:text-lg text-white/40 max-w-2xl mb-10 leading-relaxed text-center"
+              className="text-sm sm:text-base md:text-lg text-white/40 max-w-2xl mb-8 sm:mb-10 leading-relaxed text-center px-2"
             >
               If you can't see where your time is going, you'll never be consistent with where your life is going
             </motion.p>
@@ -188,21 +205,21 @@ export default function LandingPage() {
               animate="visible"
               variants={fadeUp}
               custom={3}
-              className="flex flex-col sm:flex-row gap-4 justify-center items-center"
+              className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-center w-full sm:w-auto"
             >
               <Button
                 size="lg"
-                className="bg-emerald-500 text-white rounded-md font-semibold"
+                className="bg-emerald-500 text-white rounded-md font-semibold w-full sm:w-auto"
                 onClick={() => window.location.href = "/api/login"}
                 data-testid="button-get-system"
               >
                 Get the System <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
-              <a href="#clarity-call">
+              <a href="#clarity-call" className="w-full sm:w-auto">
                 <Button
                   size="lg"
-                  variant="ghost"
-                  className="text-white/70 rounded-md bg-transparent"
+                  variant="outline"
+                  className="border-white/15 text-white/70 rounded-md bg-transparent w-full sm:w-auto"
                   data-testid="button-book-clarity"
                 >
                   Book a Clarity Call <ArrowRight className="w-4 h-4 ml-2" />
@@ -213,8 +230,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="about" className="py-24 md:py-32 relative" data-testid="about-section">
-        <div className="max-w-6xl mx-auto px-6 lg:px-8">
+      <section id="about" className="py-16 sm:py-24 md:py-32 relative" data-testid="about-section">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial="hidden"
             whileInView="visible"
@@ -223,7 +240,7 @@ export default function LandingPage() {
             className="text-center mb-16"
           >
             <span className="text-xs uppercase tracking-[0.3em] text-emerald-400 mb-4 block">THE STORY</span>
-            <h2 className="text-4xl md:text-5xl font-display font-bold tracking-tight">About Me</h2>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-display font-bold tracking-tight">About Me</h2>
           </motion.div>
 
           <motion.div
@@ -231,10 +248,10 @@ export default function LandingPage() {
             whileInView="visible"
             viewport={{ once: true, margin: "-50px" }}
             variants={stagger}
-            className="flex flex-col md:flex-row gap-12 md:gap-16 items-start"
+            className="flex flex-col md:flex-row gap-8 sm:gap-12 md:gap-16 items-start"
           >
             <motion.div variants={fadeUp} className="md:w-2/5 shrink-0 mx-auto md:mx-0">
-              <div className="w-full max-w-sm rounded-2xl overflow-hidden border border-white/[0.08]">
+              <div className="w-full max-w-[280px] sm:max-w-sm rounded-2xl overflow-hidden border border-white/[0.08] mx-auto">
                 <img
                   src={founderImg}
                   alt="Shashidhar - Founder"
@@ -264,11 +281,11 @@ export default function LandingPage() {
             whileInView="visible"
             viewport={{ once: true, margin: "-50px" }}
             variants={fadeUp}
-            className="mt-20 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-8 md:p-12"
+            className="mt-12 sm:mt-20 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 sm:p-8 md:p-12"
           >
-            <div className="flex flex-col md:flex-row gap-10 items-center">
+            <div className="flex flex-col md:flex-row gap-8 sm:gap-10 items-center">
               <div className="md:w-2/5 shrink-0 flex justify-center">
-                <div className="w-48 h-48 md:w-56 md:h-56 rounded-2xl overflow-hidden border border-white/[0.08]">
+                <div className="w-40 h-40 sm:w-48 sm:h-48 md:w-56 md:h-56 rounded-2xl overflow-hidden border border-white/[0.08]">
                   <img
                     src={founderImg}
                     alt="Jimmy Mac"
@@ -278,9 +295,9 @@ export default function LandingPage() {
               </div>
               <div className="md:w-3/5 space-y-5">
                 <p className="text-white/40 text-sm">What I learned changed everything.</p>
-                <div className="pl-5 relative">
+                <div className="pl-4 sm:pl-5 relative">
                   <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500 rounded-full" />
-                  <p className="text-xl md:text-2xl font-display font-bold leading-snug">
+                  <p className="text-lg sm:text-xl md:text-2xl font-display font-bold leading-snug">
                     Consistency doesn't come from motivation. It comes from systems.
                   </p>
                 </div>
@@ -337,9 +354,9 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="system" className="py-24 md:py-32 relative" data-testid="system-section">
+      <section id="system" className="py-16 sm:py-24 md:py-32 relative" data-testid="system-section">
         <div className="absolute inset-0 -z-10 bg-white/[0.01]" />
-        <div className="max-w-6xl mx-auto px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial="hidden"
             whileInView="visible"
@@ -348,7 +365,7 @@ export default function LandingPage() {
             className="text-center mb-6"
           >
             <span className="text-xs uppercase tracking-[0.3em] text-emerald-400 mb-4 block">THE FRAMEWORK</span>
-            <h2 className="text-4xl md:text-5xl font-display font-bold tracking-tight">Consistency System</h2>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-display font-bold tracking-tight">Consistency System</h2>
           </motion.div>
 
           <motion.div
@@ -356,7 +373,7 @@ export default function LandingPage() {
             whileInView="visible"
             viewport={{ once: true, margin: "-50px" }}
             variants={stagger}
-            className="flex flex-col md:flex-row gap-12 mt-16"
+            className="flex flex-col md:flex-row gap-8 sm:gap-12 mt-10 sm:mt-16"
           >
             <motion.div variants={fadeUp} className="md:w-1/2 space-y-5">
               <p className="text-white/50 leading-relaxed text-sm">You could write habits and goals on paper.</p>
@@ -401,8 +418,8 @@ export default function LandingPage() {
             variants={fadeUp}
             className="mt-24"
           >
-            <h3 className="text-2xl md:text-3xl font-display font-bold text-center mb-12">How Everything Connects</h3>
-            <motion.div variants={stagger} className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+            <h3 className="text-xl sm:text-2xl md:text-3xl font-display font-bold text-center mb-8 sm:mb-12">How Everything Connects</h3>
+            <motion.div variants={stagger} className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
               {[
                 { icon: Target, label: "Goals", desc: "Define what you want to achieve" },
                 { icon: Calendar, label: "Habits", desc: "Daily actions that compound" },
@@ -428,8 +445,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="clarity-call" className="py-24 md:py-32 relative" data-testid="clarity-call-section">
-        <div className="max-w-6xl mx-auto px-6 lg:px-8">
+      <section id="clarity-call" className="py-16 sm:py-24 md:py-32 relative" data-testid="clarity-call-section">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial="hidden"
             whileInView="visible"
@@ -438,7 +455,7 @@ export default function LandingPage() {
             className="text-center mb-16"
           >
             <span className="text-xs uppercase tracking-[0.3em] text-emerald-400 mb-4 block">PRIVATE ADVISORY</span>
-            <h2 className="text-4xl md:text-5xl font-display font-bold tracking-tight">Clarity Call</h2>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-display font-bold tracking-tight">Clarity Call</h2>
           </motion.div>
 
           <motion.div
@@ -446,19 +463,19 @@ export default function LandingPage() {
             whileInView="visible"
             viewport={{ once: true, margin: "-50px" }}
             variants={stagger}
-            className="flex flex-col lg:flex-row gap-12"
+            className="flex flex-col lg:flex-row gap-8 sm:gap-12"
           >
-            <motion.div variants={fadeUp} className="lg:w-1/2 space-y-5">
-              <p className="text-white/50 leading-relaxed text-[15px]">
+            <motion.div variants={fadeUp} className="lg:w-1/2 space-y-4 sm:space-y-5">
+              <p className="text-white/50 leading-relaxed text-sm sm:text-[15px]">
                 You've been trying to change for a while now. Weeks turned into months but there is no change.
               </p>
-              <p className="text-white/50 leading-relaxed text-[15px]">
+              <p className="text-white/50 leading-relaxed text-sm sm:text-[15px]">
                 You sit down to plan, but distractions pull you in different directions. Some days you feel motivated, other days completely lost. You want focus and clarity, but you're not sure what to fix first or how to stay consistent.
               </p>
-              <p className="text-white/50 leading-relaxed text-[15px]">
+              <p className="text-white/50 leading-relaxed text-sm sm:text-[15px]">
                 If this feels familiar, you're not alone — I was in the same place before.
               </p>
-              <p className="text-white/50 leading-relaxed text-[15px]">
+              <p className="text-white/50 leading-relaxed text-sm sm:text-[15px]">
                 In this one-to-one call, we'll create a clear plan for what to focus on, how to build structure into your days, and how to slowly reduce the habits and addictions that keep pulling you off track — so you leave with direction, not confusion.
               </p>
               <div className="flex flex-wrap gap-3 pt-4">
@@ -495,9 +512,9 @@ export default function LandingPage() {
             </motion.div>
 
             <motion.div variants={fadeUp} custom={1} className="lg:w-1/2">
-              <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-8">
-                <h3 className="text-xl font-display font-bold mb-8">The Process</h3>
-                <div className="space-y-8">
+              <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 sm:p-8">
+                <h3 className="text-lg sm:text-xl font-display font-bold mb-6 sm:mb-8">The Process</h3>
+                <div className="space-y-6 sm:space-y-8">
                   {[
                     { step: "STEP 01", icon: Search, title: "Diagnose", desc: "Identify what's really holding you back" },
                     { step: "STEP 02", icon: Layout, title: "Plan", desc: "Create a clear roadmap for your goals" },
@@ -529,9 +546,9 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="pricing" className="py-24 md:py-32 relative" data-testid="pricing-section">
+      <section id="pricing" className="py-16 sm:py-24 md:py-32 relative" data-testid="pricing-section">
         <div className="absolute inset-0 -z-10 bg-white/[0.01]" />
-        <div className="max-w-6xl mx-auto px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial="hidden"
             whileInView="visible"
@@ -540,7 +557,7 @@ export default function LandingPage() {
             className="text-center mb-16"
           >
             <span className="text-xs uppercase tracking-[0.3em] text-emerald-400 mb-4 block">INVESTMENT</span>
-            <h2 className="text-4xl md:text-5xl font-display font-bold tracking-tight mb-4">Choose Your Path</h2>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-display font-bold tracking-tight mb-4">Choose Your Path</h2>
             <p className="text-white/40 max-w-xl mx-auto text-sm">
               Start building systems that work. No subscriptions, no hidden fees.
             </p>
@@ -551,9 +568,9 @@ export default function LandingPage() {
             whileInView="visible"
             viewport={{ once: true, margin: "-50px" }}
             variants={stagger}
-            className="grid grid-cols-1 md:grid-cols-3 gap-6"
+            className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-6"
           >
-            <motion.div variants={fadeUp} className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-7 flex flex-col">
+            <motion.div variants={fadeUp} className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5 sm:p-7 flex flex-col">
               <div>
                 <h3 className="text-lg font-semibold mb-1">Consistency System</h3>
                 <p className="text-xs text-white/40 mb-5">The complete productivity system</p>
@@ -590,7 +607,7 @@ export default function LandingPage() {
               </div>
             </motion.div>
 
-            <motion.div variants={fadeUp} custom={1} className="rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.03] p-7 flex flex-col relative">
+            <motion.div variants={fadeUp} custom={1} className="rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.03] p-5 sm:p-7 flex flex-col relative">
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-emerald-500 text-xs font-semibold text-white">
                 BEST POPULAR
               </div>
@@ -629,7 +646,7 @@ export default function LandingPage() {
               </div>
             </motion.div>
 
-            <motion.div variants={fadeUp} custom={2} className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-7 flex flex-col">
+            <motion.div variants={fadeUp} custom={2} className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5 sm:p-7 flex flex-col">
               <div>
                 <h3 className="text-lg font-semibold mb-1">Clarity Call</h3>
                 <p className="text-xs text-white/40 mb-5">Private 1-on-1 consultation</p>
@@ -668,8 +685,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="py-24 md:py-32 relative" data-testid="testimonials-section">
-        <div className="max-w-6xl mx-auto px-6 lg:px-8">
+      <section className="py-16 sm:py-24 md:py-32 relative" data-testid="testimonials-section">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial="hidden"
             whileInView="visible"
@@ -678,7 +695,7 @@ export default function LandingPage() {
             className="text-center mb-16"
           >
             <span className="text-xs uppercase tracking-[0.3em] text-emerald-400 mb-4 block">SOCIAL PROOF</span>
-            <h2 className="text-4xl md:text-5xl font-display font-bold tracking-tight mb-4">Success Stories</h2>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-display font-bold tracking-tight mb-4">Success Stories</h2>
             <p className="text-white/40 text-sm">Real transformations from real people</p>
           </motion.div>
 
@@ -744,9 +761,9 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="faq" className="py-24 md:py-32 relative" data-testid="faq-section">
+      <section id="faq" className="py-16 sm:py-24 md:py-32 relative" data-testid="faq-section">
         <div className="absolute inset-0 -z-10 bg-white/[0.01]" />
-        <div className="max-w-3xl mx-auto px-6 lg:px-8">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial="hidden"
             whileInView="visible"
@@ -755,7 +772,7 @@ export default function LandingPage() {
             className="text-center mb-16"
           >
             <span className="text-xs uppercase tracking-[0.3em] text-emerald-400 mb-4 block">QUESTIONS</span>
-            <h2 className="text-4xl md:text-5xl font-display font-bold tracking-tight mb-4">Frequently Asked Questions</h2>
+            <h2 className="text-2xl sm:text-4xl md:text-5xl font-display font-bold tracking-tight mb-4">Frequently Asked Questions</h2>
             <p className="text-white/40 text-sm">Everything you need to know before getting started</p>
           </motion.div>
 
@@ -814,15 +831,15 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer className="border-t border-white/[0.06] py-16" data-testid="footer">
-        <div className="max-w-6xl mx-auto px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-10 md:gap-20 mb-12">
-            <div>
+      <footer className="border-t border-white/[0.06] py-10 sm:py-16" data-testid="footer">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-8 sm:gap-10 md:gap-20 mb-10 sm:mb-12">
+            <div className="col-span-2 md:col-span-1">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center text-white font-bold text-sm">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-500 flex items-center justify-center text-white font-bold text-xs sm:text-sm">
                   JM
                 </div>
-                <span className="font-display font-bold text-lg">Jimmy Mac</span>
+                <span className="font-display font-bold text-base sm:text-lg">Jimmy Mac</span>
               </div>
               <p className="text-sm text-white/35 leading-relaxed mb-6">
                 Helping you be productive and reach your goals through systems in a distracted world.
