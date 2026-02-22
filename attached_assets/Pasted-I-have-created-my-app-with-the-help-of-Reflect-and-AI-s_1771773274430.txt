@@ -1,0 +1,26 @@
+I have created my app with the help of Reflect and AI support. My app is primarily a **data-driven application**, meaning it collects and stores structured user data such as daily tasks, habits, productivity scores, and in the future, journaling entries.
+
+Since the core value of my app lies in user data, long-term data preservation is extremely important. In the future, I may want to expand the app into a more professional version by hiring a dedicated development team and building a fully custom-coded application with more advanced features.
+
+My main concern is this:
+
+How can I ensure that all existing user data — including productivity records, habit tracking history, and journaling entries — can be securely transferred to the new version of the app without data loss?
+
+I want to make sure that:
+
+1. Each user’s historical data remains linked to their individual account.
+2. If I migrate from the current system to a newly developed app, users will still have access to all their previous data.
+3. The transition process is smooth and does not disrupt the user experience.
+4. Data ownership remains with the individual user.
+5. Future features, including journaling, can be integrated without breaking existing stored data.
+
+Since journaling is a sensitive and highly personal feature, maintaining data integrity and privacy is critical. Therefore, I need guidance on how to structure my app from the beginning in a way that allows seamless future migration to a fully professional development environment.
+
+Specifically, I would like to understand:
+
+- How should the database be structured now to allow future scalability?
+- What data export or migration strategies should be implemented?
+- How can user authentication be designed so that accounts remain portable across versions?
+- What backend architecture decisions today will make future migration easier?
+
+Because data is the most valuable asset of this application, I want to ensure that no matter how the app evolves technically, each user’s data remains secure, portable, and permanently accessible.
