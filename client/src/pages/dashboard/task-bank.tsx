@@ -35,10 +35,10 @@ export default function TaskBankPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="p-4 pt-14 sm:p-8 sm:pt-8 space-y-6 sm:space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight" data-testid="text-task-bank-title">Task Bank</h1>
-        <p className="text-muted-foreground mt-1">Capture task ideas instantly. Assign them to a specific day when you're ready.</p>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight" data-testid="text-task-bank-title">Task Bank</h1>
+        <p className="text-muted-foreground mt-1 text-sm">Capture task ideas instantly. Assign them to a specific day when you're ready.</p>
       </div>
 
       <div className="bg-card/50 border border-border rounded-xl p-4 flex items-center gap-3" data-testid="task-bank-input-area">

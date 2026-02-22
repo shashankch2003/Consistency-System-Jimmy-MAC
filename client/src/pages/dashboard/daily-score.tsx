@@ -102,11 +102,11 @@ export default function DailyScorePage() {
   };
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
+    <div className="p-4 pt-14 sm:p-8 sm:pt-8 space-y-6 sm:space-y-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight" data-testid="text-daily-score-title">Daily Score</h1>
-          <p className="text-muted-foreground mt-1">Your overall productivity percentage based on all sections.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight" data-testid="text-daily-score-title">Daily Score</h1>
+          <p className="text-muted-foreground mt-1 text-sm">Your overall productivity percentage based on all sections.</p>
         </div>
         <div className="flex items-center gap-3">
           <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setDate(subDays(date, 1))} data-testid="button-prev-day">
@@ -125,7 +125,7 @@ export default function DailyScorePage() {
             <div className="text-center py-12 text-muted-foreground">Calculating your score...</div>
           ) : score ? (
             <>
-              <div className="grid grid-cols-[1fr_3fr] gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_3fr] gap-4">
                 <div className="bg-card/50 border border-border rounded-xl p-6 flex flex-col items-center justify-center" data-testid="score-ring-card">
                   <ScoreRing score={score.totalScore} />
                   <p className="text-xs text-muted-foreground mt-2">{format(date, "MMMM d, yyyy")}</p>

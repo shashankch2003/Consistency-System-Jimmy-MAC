@@ -289,11 +289,11 @@ export default function NotesPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden" data-testid="notes-page">
+    <div className="flex h-[calc(100vh-4rem)] pt-10 sm:pt-0 overflow-hidden" data-testid="notes-page">
       <div
         className={cn(
           "border-r border-white/[0.06] bg-[#191919] flex flex-col shrink-0 transition-all duration-200 relative",
-          sidebarOpen ? "w-60" : "w-0 border-r-0 overflow-hidden"
+          sidebarOpen ? "w-48 sm:w-60" : "w-0 border-r-0 overflow-hidden"
         )}
         data-testid="notes-sidebar"
       >

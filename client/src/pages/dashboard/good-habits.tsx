@@ -117,17 +117,17 @@ export default function GoodHabitsPage() {
   }, [habits, entries, days, daysPassed, currentMonth]);
 
   return (
-    <div className="p-8 max-w-[100vw] overflow-x-auto space-y-8">
-      <div className="flex items-center justify-between">
+    <div className="p-4 pt-14 sm:p-8 sm:pt-8 max-w-[100vw] overflow-x-auto space-y-6 sm:space-y-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-display font-bold" data-testid="text-good-habits-title">Good Habits</h1>
-          <p className="text-muted-foreground">Build consistency with daily tracking</p>
+          <h1 className="text-2xl sm:text-3xl font-display font-bold" data-testid="text-good-habits-title">Good Habits</h1>
+          <p className="text-muted-foreground text-sm">Build consistency with daily tracking</p>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2 sm:gap-3">
           <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} data-testid="button-prev-month">
             <ChevronLeft className="w-5 h-5" />
           </Button>
-          <span className="text-lg font-semibold min-w-[180px] text-center" data-testid="text-current-month">
+          <span className="text-base sm:text-lg font-semibold min-w-[150px] sm:min-w-[180px] text-center" data-testid="text-current-month">
             {format(currentMonth, "MMMM yyyy")}
           </span>
           <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} data-testid="button-next-month">

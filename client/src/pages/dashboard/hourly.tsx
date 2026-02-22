@@ -132,32 +132,32 @@ export default function HourlyPage() {
   };
 
   return (
-    <div className="p-8 space-y-8 overflow-y-auto" style={{ height: "calc(100vh - 4rem)" }}>
-      <div className="flex justify-between items-center">
+    <div className="p-4 pt-14 sm:p-8 sm:pt-8 space-y-6 sm:space-y-8 overflow-y-auto" style={{ height: "calc(100vh - 4rem)" }}>
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
         <div>
-          <h1 className="text-3xl font-display font-bold" data-testid="text-hourly-title">Hourly Tracker</h1>
-          <p className="text-muted-foreground">Log your focus and productivity hour by hour</p>
+          <h1 className="text-2xl sm:text-3xl font-display font-bold" data-testid="text-hourly-title">Hourly Tracker</h1>
+          <p className="text-muted-foreground text-sm">Log your focus and productivity hour by hour</p>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 bg-card p-2 rounded-lg border border-border">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 bg-card p-1.5 sm:p-2 rounded-lg border border-border">
             <Button variant="ghost" size="icon" onClick={() => setDate(subDays(date, 1))} data-testid="button-prev-day">
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <span className="font-mono font-medium min-w-[120px] text-center" data-testid="text-current-date">
+            <span className="font-mono font-medium min-w-[100px] sm:min-w-[120px] text-center text-sm sm:text-base" data-testid="text-current-date">
               {format(date, "MMM dd, yyyy")}
             </span>
             <Button variant="ghost" size="icon" onClick={() => setDate(addDays(date, 1))} data-testid="button-next-day">
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
-          <div className="flex gap-3 flex-wrap">
-            <div className="px-4 py-2 bg-primary/10 rounded-lg border border-primary/20" data-testid="badge-daily-avg">
-              <span className="text-sm text-muted-foreground">Avg: </span>
-              <span className="text-lg font-bold text-primary">{dailyAvg}/10</span>
+          <div className="flex gap-2 sm:gap-3">
+            <div className="px-3 py-1.5 sm:px-4 sm:py-2 bg-primary/10 rounded-lg border border-primary/20" data-testid="badge-daily-avg">
+              <span className="text-xs sm:text-sm text-muted-foreground">Avg: </span>
+              <span className="text-base sm:text-lg font-bold text-primary">{dailyAvg}/10</span>
             </div>
-            <div className="px-4 py-2 bg-white/10 rounded-lg border border-white/20" data-testid="badge-tracked-hours">
-              <span className="text-sm text-muted-foreground">Hours: </span>
-              <span className="text-lg font-bold text-white">{trackedHours}</span>
+            <div className="px-3 py-1.5 sm:px-4 sm:py-2 bg-white/10 rounded-lg border border-white/20" data-testid="badge-tracked-hours">
+              <span className="text-xs sm:text-sm text-muted-foreground">Hours: </span>
+              <span className="text-base sm:text-lg font-bold text-white">{trackedHours}</span>
             </div>
           </div>
         </div>
@@ -175,22 +175,22 @@ export default function HourlyPage() {
             const entry = entries?.find(e => e.hour === hour);
             const timeLabel = `${hour.toString().padStart(2, '0')}:00`;
             return (
-              <div key={`${dateStr}-${hour}`} className="flex gap-4 items-center group" data-testid={`row-hour-${hour}`}>
-                <div className="w-16 font-mono text-sm text-muted-foreground" data-testid={`text-hour-label-${hour}`}>{timeLabel}</div>
+              <div key={`${dateStr}-${hour}`} className="flex flex-wrap sm:flex-nowrap gap-2 sm:gap-4 items-center group py-1" data-testid={`row-hour-${hour}`}>
+                <div className="w-12 sm:w-16 font-mono text-xs sm:text-sm text-muted-foreground shrink-0" data-testid={`text-hour-label-${hour}`}>{timeLabel}</div>
                 <Input
-                  className="flex-1 bg-card/30 border-border/50 focus:bg-card transition-all"
+                  className="flex-1 min-w-[100px] bg-card/30 border-border/50 focus:bg-card transition-all text-sm"
                   placeholder="What did you do?"
                   defaultValue={entry?.taskDescription || ""}
                   onBlur={(e) => handleUpdate(hour, 'taskDescription', e.target.value)}
                   data-testid={`input-task-${hour}`}
                 />
-                <div className="flex gap-1">
+                <div className="flex gap-0.5 sm:gap-1 overflow-x-auto">
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(score => (
                     <button
                       key={score}
                       onClick={() => handleUpdate(hour, 'productivityScore', score)}
                       className={cn(
-                        "w-6 h-8 rounded text-[10px] font-bold border transition-all hover:scale-110",
+                        "w-5 h-7 sm:w-6 sm:h-8 rounded text-[9px] sm:text-[10px] font-bold border transition-all hover:scale-110 shrink-0",
                         (entry?.productivityScore === score)
                           ? getScoreColor(score)
                           : "text-muted-foreground/30 border-transparent hover:bg-secondary"
@@ -201,9 +201,9 @@ export default function HourlyPage() {
                     </button>
                   ))}
                 </div>
-                <div className="w-8">
+                <div className="w-7 sm:w-8 shrink-0">
                   {entry?.productivityScore ? (
-                    <div className={cn("w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white", getScoreBg(entry.productivityScore))} data-testid={`badge-score-${hour}`}>
+                    <div className={cn("w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold text-white", getScoreBg(entry.productivityScore))} data-testid={`badge-score-${hour}`}>
                       {entry.productivityScore}
                     </div>
                   ) : null}
@@ -215,19 +215,19 @@ export default function HourlyPage() {
       </div>
 
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <BarChart3 className="w-6 h-6 text-primary" />
+            <BarChart3 className="w-5 sm:w-6 h-5 sm:h-6 text-primary" />
             <div>
-              <h2 className="text-2xl font-display font-bold" data-testid="text-analytics-title">Productivity Analytics</h2>
-              <p className="text-muted-foreground text-sm">Detailed productivity data and trends</p>
+              <h2 className="text-xl sm:text-2xl font-display font-bold" data-testid="text-analytics-title">Productivity Analytics</h2>
+              <p className="text-muted-foreground text-xs sm:text-sm">Detailed productivity data and trends</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 bg-card p-2 rounded-lg border border-border">
+          <div className="flex items-center gap-2 bg-card p-1.5 sm:p-2 rounded-lg border border-border">
             <Button variant="ghost" size="icon" onClick={() => setAnalyticsMonth(subMonths(analyticsMonth, 1))} data-testid="button-analytics-prev-month">
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <span className="font-mono font-medium min-w-[140px] text-center" data-testid="text-analytics-month">
+            <span className="font-mono font-medium min-w-[120px] sm:min-w-[140px] text-center text-sm sm:text-base" data-testid="text-analytics-month">
               {format(analyticsMonth, "MMMM yyyy")}
             </span>
             <Button variant="ghost" size="icon" onClick={() => setAnalyticsMonth(addMonths(analyticsMonth, 1))} data-testid="button-analytics-next-month">

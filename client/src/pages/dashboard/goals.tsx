@@ -529,15 +529,13 @@ export default function GoalsPage() {
   }
 
   return (
-    <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-8">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="p-4 pt-14 sm:p-8 sm:pt-8 max-w-7xl mx-auto space-y-6 sm:space-y-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Goals</h1>
-          <p className="text-muted-foreground mt-1">Track your yearly, monthly, and detailed goals</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Goals</h1>
+          <p className="text-muted-foreground mt-1 text-sm">Track your yearly, monthly, and detailed goals</p>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <YearSelector year={year} setYear={setYear} />
-        </div>
+        <YearSelector year={year} setYear={setYear} />
       </div>
 
       <YearlyGoalsTable year={year} onOpenDescription={(goalId, title, desc, type) => setDescView({ goalId, title, description: desc, type })} />

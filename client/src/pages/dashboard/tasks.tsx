@@ -285,7 +285,7 @@ export default function TasksPage() {
             <div className="text-center py-8 text-muted-foreground">No tasks for this day</div>
           ) : (
             tasks?.map(task => (
-              <div key={task.id} className="px-4 py-3 flex items-center gap-3" data-testid={`cal-day-row-task-${task.id}`}>
+              <div key={task.id} className="px-3 sm:px-4 py-3 flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3" data-testid={`cal-day-row-task-${task.id}`}>
                 <div className="flex-1 min-w-0">
                   {editingTitle?.id === task.id ? (
                     <Input
@@ -425,13 +425,13 @@ export default function TasksPage() {
         </div>
         <form
           onSubmit={handleCreate}
-          className="p-4 border-t border-border flex items-center gap-3"
+          className="p-3 sm:p-4 border-t border-border flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3"
         >
           <Input
             placeholder="Add a task..."
             value={newTaskTitle}
             onChange={e => setNewTaskTitle(e.target.value)}
-            className="flex-1 bg-transparent border-border text-sm"
+            className="flex-1 min-w-[120px] bg-transparent border-border text-sm"
             data-testid="cal-day-input-new-task"
           />
           <TimeInput value={newTaskTime} onChange={setNewTaskTime} />
@@ -473,7 +473,7 @@ export default function TasksPage() {
             <ChevronRight className="w-4 h-4" />
           </Button>
         </div>
-        <div className="grid grid-cols-7 divide-x divide-border">
+        <div className="grid grid-cols-7 divide-x divide-border overflow-x-auto">
           {weekDays.map(day => {
             const dayStr = format(day, "yyyy-MM-dd");
             const dayTasks = calViewYearTasks?.filter(t => t.date === dayStr) || [];
@@ -484,7 +484,7 @@ export default function TasksPage() {
                 key={dayStr}
                 onClick={() => { setDate(day); setCalViewMode("day"); }}
                 className={cn(
-                  "p-3 min-h-[160px] text-left transition-colors hover:bg-white/10 flex flex-col",
+                  "p-2 sm:p-3 min-h-[120px] sm:min-h-[160px] text-left transition-colors hover:bg-white/10 flex flex-col",
                   selected && "bg-white/5"
                 )}
                 data-testid={`cal-week-day-${dayStr}`}
@@ -670,12 +670,12 @@ export default function TasksPage() {
   };
 
   return (
-    <div className="p-8 space-y-8 overflow-y-auto" style={{ height: "calc(100vh - 4rem)" }}>
-      <div className="flex justify-between items-center flex-wrap gap-4">
-        <div className="flex items-center gap-4 flex-wrap">
+    <div className="p-4 pt-14 sm:p-8 sm:pt-8 space-y-6 sm:space-y-8 overflow-y-auto" style={{ height: "calc(100vh - 4rem)" }}>
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 sm:gap-4">
+        <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
           <div>
-            <h1 className="text-3xl font-display font-bold" data-testid="text-page-title">Daily Tasks</h1>
-            <p className="text-muted-foreground">Track your daily task completion for {format(date, "MMMM do, yyyy")}</p>
+            <h1 className="text-2xl sm:text-3xl font-display font-bold" data-testid="text-page-title">Daily Tasks</h1>
+            <p className="text-muted-foreground text-sm">Track your daily task completion</p>
           </div>
           <div className="flex items-center bg-card rounded-lg border border-border p-1 gap-1">
             <button
@@ -701,7 +701,7 @@ export default function TasksPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
           <div className="flex items-center gap-2 bg-card p-2 rounded-lg border border-border">
             <Button variant="ghost" size="icon" onClick={() => setDate(subDays(date, 1))} data-testid="button-prev-day">
               <ChevronLeft className="w-4 h-4" />
@@ -1020,19 +1020,19 @@ export default function TasksPage() {
       )}
 
       <div className="space-y-6">
-        <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-3">
-            <BarChart3 className="w-6 h-6 text-primary" />
+            <BarChart3 className="w-5 sm:w-6 h-5 sm:h-6 text-primary" />
             <div>
-              <h2 className="text-2xl font-display font-bold">Task Analytics</h2>
-              <p className="text-muted-foreground text-sm">Detailed performance data for your tasks</p>
+              <h2 className="text-xl sm:text-2xl font-display font-bold">Task Analytics</h2>
+              <p className="text-muted-foreground text-xs sm:text-sm">Detailed performance data for your tasks</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 bg-card p-2 rounded-lg border border-border">
+          <div className="flex items-center gap-2 bg-card p-1.5 sm:p-2 rounded-lg border border-border">
             <Button variant="ghost" size="icon" onClick={() => setAnalyticsMonth(new Date(analyticsMonth.getFullYear(), analyticsMonth.getMonth() - 1, 1))} data-testid="button-analytics-prev-month">
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <span className="font-mono font-medium min-w-[140px] text-center" data-testid="text-analytics-month">
+            <span className="font-mono font-medium min-w-[120px] sm:min-w-[140px] text-center text-sm sm:text-base" data-testid="text-analytics-month">
               {format(analyticsMonth, "MMMM yyyy")}
             </span>
             <Button variant="ghost" size="icon" onClick={() => setAnalyticsMonth(new Date(analyticsMonth.getFullYear(), analyticsMonth.getMonth() + 1, 1))} data-testid="button-analytics-next-month">
@@ -1041,7 +1041,7 @@ export default function TasksPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <div className="bg-card rounded-xl border border-border p-4 text-center">
             <p className="text-sm text-muted-foreground">Monthly Avg</p>
             <p className="text-3xl font-bold text-primary" data-testid="text-monthly-avg">
