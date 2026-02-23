@@ -915,19 +915,12 @@ export default function JournalPage() {
             <YearlyGrid entries={yearEntries} year={yearNum} selectedDateStr={yearlyPreviewStr} onSelectDate={(d, ds) => { setYearlyPreviewDate(d); setYearlyPreviewStr(ds); }} />
           </div>
           <div className="bg-card rounded-xl border border-white/10 p-6 hidden lg:flex flex-col min-w-[400px]" data-testid="yearly-preview-panel">
-            {yearlyPreviewDate && yearlyPreviewEntry ? (
-              <>
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-base font-semibold" data-testid="text-preview-date">
-                      {yearlyPreviewDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-                    </h3>
-                    {yearlyPreviewEntry.customDayName && (
-                      <p className="text-sm text-muted-foreground mt-0.5">
-                        {yearlyPreviewEntry.emoji} {yearlyPreviewEntry.customDayName}
-                      </p>
-                    )}
-                  </div>
+            {yearlyPreviewDate ? (
+              <div className="flex-1 flex flex-col overflow-y-auto">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-base font-semibold" data-testid="text-preview-date">
+                    {yearlyPreviewDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+                  </h3>
                   <button
                     onClick={() => {
                       setSelectedDate(yearlyPreviewDate);
@@ -940,52 +933,22 @@ export default function JournalPage() {
                     <Maximize2 className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="flex-1 overflow-y-auto space-y-4">
-                  {yearlyPreviewEntry.journalText ? (
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground mb-1">Journal</p>
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap" data-testid="text-preview-journal">
-                        {yearlyPreviewEntry.journalText}
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">No journal text for this day</p>
-                  )}
-                  {yearlyPreviewEntry.imageUrls && yearlyPreviewEntry.imageUrls.length > 0 && (
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground mb-1">Images</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {yearlyPreviewEntry.imageUrls.map((url: string, i: number) => (
-                          <img key={i} src={url} alt="" className="w-full h-20 object-cover rounded-md border border-white/10" />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {yearlyPreviewEntry.extractedText && (
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground mb-1">Extracted Text</p>
-                      <p className="text-sm whitespace-pre-wrap text-muted-foreground">{yearlyPreviewEntry.extractedText}</p>
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : yearlyPreviewDate ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-center">
-                <p className="text-sm text-muted-foreground">No entry for this day</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-3"
-                  onClick={() => { setSelectedDate(yearlyPreviewDate); setViewMode("daily"); }}
-                  data-testid="button-create-entry"
-                >
-                  <Plus className="w-3.5 h-3.5 mr-1" />
-                  Create Entry
-                </Button>
+                <DailyEditor
+                  key={yearlyPreviewStr || ""}
+                  selectedDate={yearlyPreviewDate}
+                  entry={yearlyPreviewEntry || null}
+                  dayTypes={dayTypes}
+                  onSave={(data) => saveMutation.mutate(data)}
+                  onCreateCustomDayType={(name, emoji) => createCustomDayType.mutate({ name, emoji })}
+                  onDeleteCustomDayType={(id) => deleteCustomDayType.mutate(id)}
+                  onEditCustomDayType={(id, emoji) => editCustomDayType.mutate({ id, emoji })}
+                  onEditBuiltinEmoji={(dayTypeName, emoji) => editBuiltinEmoji.mutate({ dayTypeName, emoji })}
+                  isSaving={saveMutation.isPending}
+                />
               </div>
             ) : (
               <div className="flex-1 flex items-center justify-center">
-                <p className="text-sm text-muted-foreground">Click a day to preview</p>
+                <p className="text-sm text-muted-foreground">Click a day to preview or create an entry</p>
               </div>
             )}
           </div>
