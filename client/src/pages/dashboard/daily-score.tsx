@@ -89,7 +89,7 @@ function getScoreTextColor(score: number) {
 }
 
 function formatWeekLabel(weekStart: string, index: number) {
-  return `Week ${index + 1}`;
+  return `${index + 1}`;
 }
 
 function formatMonthLabel(month: string) {
@@ -100,7 +100,7 @@ function formatMonthLabel(month: string) {
 
 export default function DailyScorePage() {
   const [date, setDate] = useState(new Date());
-  const [showReason, setShowReason] = useState(false);
+  const [showReasonPage, setShowReasonPage] = useState(false);
   const [reasonText, setReasonText] = useState("");
   const [calMonth, setCalMonth] = useState(new Date());
   const dateStr = format(date, "yyyy-MM-dd");
@@ -142,16 +142,16 @@ export default function DailyScorePage() {
   const startDayOfWeek = getDay(calMonthStart);
   const offset = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
 
-  const openReason = () => {
+  const openReasonPage = () => {
     setReasonText(reason?.reason || "");
-    setShowReason(true);
+    setShowReasonPage(true);
   };
 
   const saveReason = () => {
     if (!reasonText.trim()) return;
     upsertReason.mutate({ date: dateStr, reason: reasonText.trim() }, {
       onSuccess: () => {
-        setShowReason(false);
+        setShowReasonPage(false);
         toast({ title: "Saved", description: "Your reason has been saved." });
       },
     });
@@ -176,6 +176,39 @@ export default function DailyScorePage() {
     name: formatMonthLabel(m.month),
     average: m.average,
   })) || [];
+
+  if (showReasonPage) {
+    return (
+      <div className="p-4 pt-14 sm:p-8 sm:pt-8 max-w-3xl mx-auto space-y-4" data-testid="reason-page">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={() => setShowReasonPage(false)} data-testid="button-back-from-reason">
+            <ChevronLeft className="w-4 h-4 mr-1" /> Back to Comparison
+          </Button>
+        </div>
+        <div className="bg-card/50 border border-border rounded-xl p-6 space-y-4">
+          <div>
+            <h2 className="text-lg font-bold">Daily Reason / Reflection</h2>
+            <p className="text-sm text-muted-foreground mt-1">{format(date, "MMMM d, yyyy")} - Write your thoughts, reflections, or reasons for the day.</p>
+          </div>
+          <textarea
+            value={reasonText}
+            onChange={(e) => setReasonText(e.target.value)}
+            placeholder="Write your thoughts, reflections, or reasons for today's performance... You can write as much as you want here."
+            className="w-full min-h-[300px] bg-background border border-border rounded-lg p-4 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-white/20"
+            data-testid="textarea-reason"
+          />
+          <div className="flex gap-3">
+            <Button onClick={saveReason} disabled={upsertReason.isPending || !reasonText.trim()} className="gap-2" data-testid="button-save-reason">
+              <Save className="w-4 h-4" /> Save Reason
+            </Button>
+            <Button variant="outline" onClick={() => setShowReasonPage(false)} data-testid="button-cancel-reason">
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 pt-14 sm:p-8 sm:pt-8 space-y-6">
@@ -248,14 +281,14 @@ export default function DailyScorePage() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
                 <div className="flex flex-col items-center">
-                  <ScoreRing score={score?.totalScore || 0} label="Today" />
+                  <ScoreRing score={yesterdayScore?.totalScore || 0} label="Yesterday" />
                 </div>
                 <div className="flex flex-col items-center gap-2">
                   <DiffIndicator current={score?.totalScore || 0} previous={yesterdayScore?.totalScore || 0} />
                   <span className="text-xs text-muted-foreground">vs yesterday</span>
                 </div>
                 <div className="flex flex-col items-center">
-                  <ScoreRing score={yesterdayScore?.totalScore || 0} label="Yesterday" />
+                  <ScoreRing score={score?.totalScore || 0} label="Today" />
                 </div>
               </div>
             )}
@@ -270,33 +303,14 @@ export default function DailyScorePage() {
               <SectionBar label="Bad Habits Avoided" score={score.badHabitScore} count={score.badHabitCount} testId="bar-bad-habits" />
               <SectionBar label="Hourly Productivity" score={score.hourlyScore} count={score.hourlyCount} testId="bar-hourly" />
               <div className="flex items-center gap-3 pt-2">
-                <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={openReason} data-testid="button-reason">
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={openReasonPage} data-testid="button-reason">
                   <FileText className="w-3.5 h-3.5" />
                   {reason?.reason ? "Edit Reason" : "Add Reason"}
                 </Button>
-                {reason?.reason && !showReason && (
+                {reason?.reason && (
                   <p className="text-xs text-muted-foreground italic truncate max-w-sm">"{reason.reason.substring(0, 60)}..."</p>
                 )}
               </div>
-              {showReason && (
-                <div className="border-t border-border pt-3 space-y-2">
-                  <textarea
-                    value={reasonText}
-                    onChange={(e) => setReasonText(e.target.value)}
-                    placeholder="Write your thoughts or reflections..."
-                    className="w-full min-h-[80px] bg-background border border-border rounded-lg p-3 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-white/20"
-                    data-testid="textarea-reason"
-                  />
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={saveReason} disabled={upsertReason.isPending || !reasonText.trim()} className="gap-1" data-testid="button-save-reason">
-                      <Save className="w-3 h-3" /> Save
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setShowReason(false)} data-testid="button-cancel-reason">
-                      <X className="w-3 h-3 mr-1" /> Cancel
-                    </Button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -305,7 +319,7 @@ export default function DailyScorePage() {
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">This Week vs Last Week</h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
               <div className="flex flex-col items-center">
-                <ScoreRing score={currentWeekAvg?.average || 0} size={100} label="This Week" />
+                <ScoreRing score={lastWeekAvg?.average || 0} size={100} label="Last Week" />
               </div>
               <div className="flex flex-col items-center gap-2">
                 {currentWeekAvg && lastWeekAvg ? (
@@ -318,7 +332,7 @@ export default function DailyScorePage() {
                 )}
               </div>
               <div className="flex flex-col items-center">
-                <ScoreRing score={lastWeekAvg?.average || 0} size={100} label="Last Week" />
+                <ScoreRing score={currentWeekAvg?.average || 0} size={100} label="This Week" />
               </div>
             </div>
           </div>
@@ -327,12 +341,12 @@ export default function DailyScorePage() {
           {weeklyChartData.length > 1 && (
             <div className="bg-card/50 border border-border rounded-xl p-6" data-testid="weekly-trend-chart">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Weekly Progression</h3>
-              <div className="h-52">
+              <div className="h-52 -mr-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={weeklyChartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
                     <XAxis dataKey="name" tick={{ fill: "#888", fontSize: 10 }} axisLine={false} tickLine={false} />
-                    <YAxis domain={[0, 100]} tick={{ fill: "#888", fontSize: 10 }} axisLine={false} tickLine={false} width={30} />
+                    <YAxis domain={[0, 100]} tick={{ fill: "#888", fontSize: 10 }} axisLine={false} tickLine={false} width={28} />
                     <Tooltip contentStyle={{ background: "#111", border: "1px solid #333", borderRadius: "8px", fontSize: "12px" }} formatter={(v: number) => [`${v}%`, "Average"]} />
                     <Line type="monotone" dataKey="average" stroke="#3b82f6" strokeWidth={2} dot={{ fill: "#3b82f6", r: 3 }} />
                   </LineChart>
@@ -343,20 +357,20 @@ export default function DailyScorePage() {
 
           {/* Weekly History List */}
           {stats?.weeklyAverages && stats.weeklyAverages.length > 0 && (
-            <div className="bg-card/50 border border-border rounded-xl p-6" data-testid="weekly-history-list">
+            <div className="bg-background border border-border rounded-xl p-6" data-testid="weekly-history-list">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Weekly History</h3>
-              <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+              <div className="max-h-64 overflow-y-auto space-y-1 scrollbar-thin">
                 {[...stats.weeklyAverages].reverse().map((w, i) => (
-                  <div key={w.weekStart} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-white/5">
+                  <div key={w.weekStart} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/5">
                     <div className="flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground w-16">Week {stats.weeklyAverages.length - i}</span>
+                      <span className="text-xs font-medium text-muted-foreground w-8">{stats.weeklyAverages.length - i}</span>
                       <span className="text-xs text-muted-foreground/60">{format(new Date(w.weekStart + "T00:00:00"), "MMM d")}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-24 h-1.5 bg-muted/20 rounded-full overflow-hidden">
+                    <div className="flex items-center gap-2 flex-1 ml-4">
+                      <div className="flex-1 h-1.5 bg-muted/20 rounded-full overflow-hidden">
                         <div className={cn("h-full rounded-full", getScoreColor(w.average))} style={{ width: `${w.average}%` }} />
                       </div>
-                      <span className={cn("text-sm font-semibold w-10 text-right", getScoreTextColor(w.average))}>{w.average}%</span>
+                      <span className={cn("text-sm font-semibold w-12 text-right", getScoreTextColor(w.average))}>{w.average}%</span>
                     </div>
                   </div>
                 ))}
@@ -369,7 +383,7 @@ export default function DailyScorePage() {
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">This Month vs Last Month</h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
               <div className="flex flex-col items-center">
-                <ScoreRing score={currentMonthAvg?.average || 0} size={100} label={currentMonthAvg ? formatMonthLabel(currentMonthAvg.month) : "This Month"} />
+                <ScoreRing score={lastMonthAvg?.average || 0} size={100} label={lastMonthAvg ? formatMonthLabel(lastMonthAvg.month) : "Last Month"} />
               </div>
               <div className="flex flex-col items-center gap-2">
                 {currentMonthAvg && lastMonthAvg ? (
@@ -382,7 +396,7 @@ export default function DailyScorePage() {
                 )}
               </div>
               <div className="flex flex-col items-center">
-                <ScoreRing score={lastMonthAvg?.average || 0} size={100} label={lastMonthAvg ? formatMonthLabel(lastMonthAvg.month) : "Last Month"} />
+                <ScoreRing score={currentMonthAvg?.average || 0} size={100} label={currentMonthAvg ? formatMonthLabel(currentMonthAvg.month) : "This Month"} />
               </div>
             </div>
           </div>
@@ -391,12 +405,12 @@ export default function DailyScorePage() {
           {monthlyChartData.length > 1 && (
             <div className="bg-card/50 border border-border rounded-xl p-6" data-testid="monthly-bar-chart">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Monthly Comparison</h3>
-              <div className="h-52">
+              <div className="h-52 -mr-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={monthlyChartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
                     <XAxis dataKey="name" tick={{ fill: "#888", fontSize: 10 }} axisLine={false} tickLine={false} />
-                    <YAxis domain={[0, 100]} tick={{ fill: "#888", fontSize: 10 }} axisLine={false} tickLine={false} width={30} />
+                    <YAxis domain={[0, 100]} tick={{ fill: "#888", fontSize: 10 }} axisLine={false} tickLine={false} width={28} />
                     <Tooltip contentStyle={{ background: "#111", border: "1px solid #333", borderRadius: "8px", fontSize: "12px" }} formatter={(v: number) => [`${v}%`, "Average"]} />
                     <Bar dataKey="average" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
                   </BarChart>
@@ -407,20 +421,20 @@ export default function DailyScorePage() {
 
           {/* Monthly History List */}
           {stats?.monthlyAverages && stats.monthlyAverages.length > 0 && (
-            <div className="bg-card/50 border border-border rounded-xl p-6" data-testid="monthly-history-list">
+            <div className="bg-background border border-border rounded-xl p-6" data-testid="monthly-history-list">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Monthly History</h3>
-              <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+              <div className="max-h-64 overflow-y-auto space-y-1 scrollbar-thin">
                 {[...stats.monthlyAverages].reverse().map((m) => (
-                  <div key={m.month} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-white/5">
+                  <div key={m.month} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/5">
                     <div className="flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground w-16">{formatMonthLabel(m.month)}</span>
+                      <span className="text-xs font-medium text-muted-foreground w-16">{formatMonthLabel(m.month)}</span>
                       <span className="text-xs text-muted-foreground/60">{m.days} days</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-24 h-1.5 bg-muted/20 rounded-full overflow-hidden">
+                    <div className="flex items-center gap-2 flex-1 ml-4">
+                      <div className="flex-1 h-1.5 bg-muted/20 rounded-full overflow-hidden">
                         <div className={cn("h-full rounded-full", getScoreColor(m.average))} style={{ width: `${m.average}%` }} />
                       </div>
-                      <span className={cn("text-sm font-semibold w-10 text-right", getScoreTextColor(m.average))}>{m.average}%</span>
+                      <span className={cn("text-sm font-semibold w-12 text-right", getScoreTextColor(m.average))}>{m.average}%</span>
                     </div>
                   </div>
                 ))}
@@ -432,7 +446,15 @@ export default function DailyScorePage() {
           {stats?.lifetime && (
             <div className="bg-card/50 border border-border rounded-xl p-6" data-testid="lifetime-stats">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Lifetime Statistics</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                <div className="text-center p-3 bg-white/[0.03] rounded-lg">
+                  <p className={cn("text-2xl font-bold", getScoreTextColor(stats.lifetime.average))}>{stats.lifetime.average}%</p>
+                  <p className="text-xs text-muted-foreground mt-1">Lifetime Avg</p>
+                </div>
+                <div className="text-center p-3 bg-white/[0.03] rounded-lg">
+                  <p className="text-2xl font-bold text-blue-400">{stats.lifetime.totalDays}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Total Days</p>
+                </div>
                 <div className="text-center p-3 bg-white/[0.03] rounded-lg">
                   <p className={cn("text-2xl font-bold", getScoreTextColor(stats.lifetime.highestDaily))}>{stats.lifetime.highestDaily}%</p>
                   <p className="text-xs text-muted-foreground mt-1">Highest Daily</p>
