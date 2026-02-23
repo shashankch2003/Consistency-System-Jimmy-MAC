@@ -26,7 +26,8 @@ import {
   Gauge,
   FileText,
   Users,
-  Shield
+  Shield,
+  BookOpen
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -38,6 +39,7 @@ const menuItems = [
   { title: "Bad Habits", icon: XCircle, url: "/dashboard/bad-habits" },
   { title: "Hourly Tracker", icon: Clock, url: "/dashboard/hourly" },
   { title: "Daily Score", icon: Gauge, url: "/dashboard/daily-score" },
+  { title: "Journal", icon: BookOpen, url: "/dashboard/journal" },
   { title: "Notes", icon: FileText, url: "/dashboard/notes" },
   { title: "Community", icon: Users, url: "/dashboard/community" },
 ];
