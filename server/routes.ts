@@ -8,7 +8,7 @@ import crypto from "crypto";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { LEVELS, LEVEL_INDEX, INTERACTIVE_LEVELS, FUNDAMENTALS_LIST } from "@shared/schema";
+import { LEVELS, LEVEL_INDEX, INTERACTIVE_LEVELS, FUNDAMENTALS_LIST, DEFAULT_EXPENSE_CATEGORIES } from "@shared/schema";
 import { getCurrentLevelStatus, runMonthlyEvaluation, computeDailyMetrics } from "./level-engine";
 
 const ADMIN_USER_ID = process.env.ADMIN_USER_ID || "";
@@ -1060,6 +1060,338 @@ export async function registerRoutes(
       const url = `/uploads/${req.file.filename}`;
       res.json({ url });
     });
+  });
+
+  // ===== MONEY TRACKING ROUTES =====
+  
+  // Money Settings
+  app.get(api.moneySettings.get.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      let settings = await storage.getMoneySettings(userId);
+      if (!settings) {
+        settings = await storage.upsertMoneySettings(userId, {});
+      }
+      res.json(settings);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.put(api.moneySettings.update.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const updates = req.body;
+      delete updates.id;
+      delete updates.userId;
+      const settings = await storage.upsertMoneySettings(userId, updates);
+      res.json(settings);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Expense Categories
+  app.get(api.moneyCategories.list.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      let categories = await storage.getExpenseCategories(userId);
+      if (categories.length === 0) {
+        for (let i = 0; i < DEFAULT_EXPENSE_CATEGORIES.length; i++) {
+          const cat = DEFAULT_EXPENSE_CATEGORIES[i];
+          await storage.createExpenseCategory({
+            userId, key: cat.key, name: cat.name, emoji: cat.emoji, color: cat.color, sortOrder: i, isDefault: true, isActive: true,
+          });
+        }
+        categories = await storage.getExpenseCategories(userId);
+      }
+      res.json(categories);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post(api.moneyCategories.create.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const cat = await storage.createExpenseCategory({ ...req.body, userId });
+      res.status(201).json(cat);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
+  app.put(api.moneyCategories.update.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const cat = await storage.updateExpenseCategory(parseInt(req.params.id), userId, req.body);
+      res.json(cat);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
+  app.delete(api.moneyCategories.delete.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      await storage.deleteExpenseCategory(parseInt(req.params.id), userId);
+      res.status(204).end();
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Expenses
+  app.get(api.moneyExpenses.list.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const filters: any = {};
+      if (req.query.dateFrom) filters.dateFrom = req.query.dateFrom;
+      if (req.query.dateTo) filters.dateTo = req.query.dateTo;
+      if (req.query.categoryKey) filters.categoryKey = req.query.categoryKey;
+      if (req.query.paymentMethod) filters.paymentMethod = req.query.paymentMethod;
+      if (req.query.month) {
+        const exps = await storage.getExpensesByMonth(userId, req.query.month as string);
+        return res.json(exps);
+      }
+      const exps = await storage.getExpenses(userId, filters);
+      res.json(exps);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post(api.moneyExpenses.create.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const expense = await storage.createExpense({ ...req.body, userId });
+      res.status(201).json(expense);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
+  app.put(api.moneyExpenses.update.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const expense = await storage.updateExpense(parseInt(req.params.id), userId, req.body);
+      res.json(expense);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
+  app.delete(api.moneyExpenses.delete.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      await storage.deleteExpense(parseInt(req.params.id), userId);
+      res.status(204).end();
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Budgets
+  app.get(api.moneyBudgets.list.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const budgetList = await storage.getBudgets(req.user.claims.sub);
+      res.json(budgetList);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post(api.moneyBudgets.upsert.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const budget = await storage.upsertBudget({ ...req.body, userId: req.user.claims.sub });
+      res.json(budget);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
+  app.delete(api.moneyBudgets.delete.path, isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteBudget(parseInt(req.params.id), req.user.claims.sub);
+      res.status(204).end();
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Subscriptions
+  app.get(api.moneySubscriptions.list.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const subs = await storage.getSubscriptions(req.user.claims.sub);
+      res.json(subs);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post(api.moneySubscriptions.create.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const sub = await storage.createSubscription({ ...req.body, userId: req.user.claims.sub });
+      res.status(201).json(sub);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
+  app.put(api.moneySubscriptions.update.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const sub = await storage.updateSubscription(parseInt(req.params.id), req.user.claims.sub, req.body);
+      res.json(sub);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
+  app.delete(api.moneySubscriptions.delete.path, isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteSubscription(parseInt(req.params.id), req.user.claims.sub);
+      res.status(204).end();
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Bills
+  app.get(api.moneyBills.list.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const billList = await storage.getBills(req.user.claims.sub);
+      res.json(billList);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post(api.moneyBills.create.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const bill = await storage.createBill({ ...req.body, userId: req.user.claims.sub });
+      res.status(201).json(bill);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
+  app.put(api.moneyBills.update.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const bill = await storage.updateBill(parseInt(req.params.id), req.user.claims.sub, req.body);
+      res.json(bill);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
+  app.delete(api.moneyBills.delete.path, isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteBill(parseInt(req.params.id), req.user.claims.sub);
+      res.status(204).end();
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Credit Cards
+  app.get(api.moneyCreditCards.list.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const cards = await storage.getCreditCards(req.user.claims.sub);
+      res.json(cards);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post(api.moneyCreditCards.create.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const card = await storage.createCreditCard({ ...req.body, userId: req.user.claims.sub });
+      res.status(201).json(card);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
+  app.put(api.moneyCreditCards.update.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const card = await storage.updateCreditCard(parseInt(req.params.id), req.user.claims.sub, req.body);
+      res.json(card);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
+  app.delete(api.moneyCreditCards.delete.path, isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteCreditCard(parseInt(req.params.id), req.user.claims.sub);
+      res.status(204).end();
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Savings Goals
+  app.get(api.moneySavingsGoals.list.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const goals = await storage.getSavingsGoals(req.user.claims.sub);
+      res.json(goals);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post(api.moneySavingsGoals.create.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const goal = await storage.createSavingsGoal({ ...req.body, userId: req.user.claims.sub });
+      res.status(201).json(goal);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
+  app.put(api.moneySavingsGoals.update.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const goal = await storage.updateSavingsGoal(parseInt(req.params.id), req.user.claims.sub, req.body);
+      res.json(goal);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
+  app.delete(api.moneySavingsGoals.delete.path, isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteSavingsGoal(parseInt(req.params.id), req.user.claims.sub);
+      res.status(204).end();
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Money Dashboard aggregate data
+  app.get(api.moneyDashboard.get.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      
+      const [settings, monthExpenses, allBudgets, allSubs, allBills, allGoals] = await Promise.all([
+        storage.getMoneySettings(userId),
+        storage.getExpensesByMonth(userId, currentMonth),
+        storage.getBudgets(userId),
+        storage.getSubscriptions(userId),
+        storage.getBills(userId),
+        storage.getSavingsGoals(userId),
+      ]);
+
+      const totalSpent = monthExpenses.reduce((sum, e) => sum + e.amount, 0);
+      const income = settings?.monthlyIncome || 0;
+      const remaining = income - totalSpent;
+
+      const categorySpending: Record<string, number> = {};
+      for (const e of monthExpenses) {
+        categorySpending[e.categoryKey] = (categorySpending[e.categoryKey] || 0) + e.amount;
+      }
+
+      const dailySpending: Record<string, number> = {};
+      for (const e of monthExpenses) {
+        dailySpending[e.date] = (dailySpending[e.date] || 0) + e.amount;
+      }
+
+      const today = now.toISOString().split('T')[0];
+      const thirtyDaysLater = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      
+      const upcomingPayments: any[] = [];
+      for (const sub of allSubs.filter(s => s.status === 'active')) {
+        if (sub.nextDueDate >= today && sub.nextDueDate <= thirtyDaysLater) {
+          upcomingPayments.push({ type: 'subscription', name: sub.serviceName, amount: sub.amount, dueDate: sub.nextDueDate, id: sub.id });
+        }
+      }
+      for (const bill of allBills.filter(b => b.status === 'pending')) {
+        if (bill.dueDate >= today && bill.dueDate <= thirtyDaysLater) {
+          upcomingPayments.push({ type: 'bill', name: bill.name, amount: bill.amount, dueDate: bill.dueDate, id: bill.id });
+        }
+      }
+      upcomingPayments.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+      const recentTransactions = monthExpenses
+        .sort((a, b) => b.date.localeCompare(a.date) || (b.id - a.id))
+        .slice(0, 8);
+
+      const savingsRate = income > 0 ? Math.round(((income - totalSpent) / income) * 100) : 0;
+
+      const daysInMonth = monthExpenses.length > 0 ? new Set(monthExpenses.map(e => e.date)).size : 0;
+      const avgDailySpending = daysInMonth > 0 ? Math.round(totalSpent / daysInMonth) : 0;
+      const biggestExpense = monthExpenses.length > 0 ? Math.max(...monthExpenses.map(e => e.amount)) : 0;
+      
+      const merchantCounts: Record<string, number> = {};
+      for (const e of monthExpenses) {
+        if (e.merchant) merchantCounts[e.merchant] = (merchantCounts[e.merchant] || 0) + 1;
+      }
+      const topMerchant = Object.entries(merchantCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+      const budgetProgress = allBudgets.filter(b => b.isEnabled).map(b => ({
+        categoryKey: b.categoryKey,
+        limit: b.monthlyLimit,
+        spent: categorySpending[b.categoryKey] || 0,
+        percentage: b.monthlyLimit > 0 ? Math.round(((categorySpending[b.categoryKey] || 0) / b.monthlyLimit) * 100) : 0,
+      }));
+
+      res.json({
+        income,
+        totalSpent,
+        remaining,
+        savingsRate,
+        categorySpending,
+        dailySpending,
+        upcomingPayments,
+        recentTransactions,
+        budgetProgress,
+        quickStats: { avgDailySpending, biggestExpense, topMerchant },
+        activeGoals: allGoals.filter(g => g.status === 'active').slice(0, 2),
+      });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
   return httpServer;

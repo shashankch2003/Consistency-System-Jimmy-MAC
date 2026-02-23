@@ -389,6 +389,189 @@ export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({ 
 export type InsertUserSettings = z.infer<typeof insertUserSettingsSchema>;
 export type UserSettings = typeof userSettings.$inferSelect;
 
+// ===== MONEY TRACKING TABLES =====
+
+export const DEFAULT_EXPENSE_CATEGORIES = [
+  { key: "food-dining", name: "Food & Dining", emoji: "🍔", color: "#FF6B6B" },
+  { key: "groceries", name: "Groceries", emoji: "🛒", color: "#4ECDC4" },
+  { key: "transportation", name: "Transportation", emoji: "🚗", color: "#45B7D1" },
+  { key: "housing-rent", name: "Housing & Rent", emoji: "🏠", color: "#96CEB4" },
+  { key: "utilities", name: "Utilities", emoji: "💡", color: "#FFEAA7" },
+  { key: "mobile-internet", name: "Mobile & Internet", emoji: "📱", color: "#DDA0DD" },
+  { key: "healthcare", name: "Healthcare", emoji: "🏥", color: "#FF7675" },
+  { key: "pharmacy", name: "Pharmacy", emoji: "💊", color: "#E17055" },
+  { key: "shopping", name: "Shopping", emoji: "👗", color: "#A29BFE" },
+  { key: "entertainment", name: "Entertainment", emoji: "🎬", color: "#FD79A8" },
+  { key: "education", name: "Education", emoji: "🎓", color: "#6C5CE7" },
+  { key: "travel", name: "Travel", emoji: "✈️", color: "#00B894" },
+  { key: "business", name: "Business", emoji: "💼", color: "#636E72" },
+  { key: "pets", name: "Pets", emoji: "🐾", color: "#FDCB6E" },
+  { key: "family", name: "Family", emoji: "👶", color: "#E84393" },
+  { key: "gifts-donations", name: "Gifts & Donations", emoji: "🎁", color: "#D63031" },
+  { key: "savings", name: "Savings", emoji: "💰", color: "#00B894" },
+  { key: "credit-card-payment", name: "Credit Card Payment", emoji: "💳", color: "#0984E3" },
+  { key: "subscriptions", name: "Subscriptions", emoji: "🔔", color: "#6C5CE7" },
+  { key: "health-fitness", name: "Health & Fitness", emoji: "🏋️", color: "#00CEC9" },
+  { key: "other", name: "Other", emoji: "📦", color: "#B2BEC3" },
+] as const;
+
+export const moneySettings = pgTable("money_settings", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().unique(),
+  currency: text("currency").notNull().default("INR"),
+  currencySymbol: text("currency_symbol").notNull().default("₹"),
+  monthlyIncome: integer("monthly_income").notNull().default(0),
+  thousandsSeparator: text("thousands_separator").notNull().default(","),
+  decimalPlaces: integer("decimal_places").notNull().default(0),
+  symbolPosition: text("symbol_position").notNull().default("before"),
+  rolloverBudget: boolean("rollover_budget").notNull().default(false),
+  overallMonthlyBudget: integer("overall_monthly_budget").default(0),
+  notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
+  budgetAlerts: boolean("budget_alerts").notNull().default(true),
+  billReminders: boolean("bill_reminders").notNull().default(true),
+  subscriptionReminders: boolean("subscription_reminders").notNull().default(true),
+  reminderDaysBefore: text("reminder_days_before").notNull().default("1,3,7"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const expenseCategories = pgTable("expense_categories", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  key: text("key").notNull(),
+  name: text("name").notNull(),
+  emoji: text("emoji").notNull().default("📦"),
+  color: text("color").notNull().default("#B2BEC3"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isDefault: boolean("is_default").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const expenses = pgTable("expenses", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  amount: integer("amount").notNull(),
+  date: text("date").notNull(),
+  categoryKey: text("category_key").notNull(),
+  merchant: text("merchant").notNull().default(""),
+  paymentMethod: text("payment_method").notNull().default("cash"),
+  creditCardId: integer("credit_card_id"),
+  notes: text("notes").default(""),
+  tags: text("tags").array().default([]),
+  isRecurring: boolean("is_recurring").notNull().default(false),
+  recurringFrequency: text("recurring_frequency"),
+  recurringEndDate: text("recurring_end_date"),
+  foreignCurrency: text("foreign_currency"),
+  foreignAmount: integer("foreign_amount"),
+  exchangeRate: text("exchange_rate"),
+  sourceType: text("source_type").default("manual"),
+  sourceId: integer("source_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const budgets = pgTable("budgets", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  categoryKey: text("category_key").notNull(),
+  monthlyLimit: integer("monthly_limit").notNull().default(0),
+  isEnabled: boolean("is_enabled").notNull().default(true),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const subscriptions = pgTable("subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  serviceName: text("service_name").notNull(),
+  category: text("category").notNull().default("other"),
+  amount: integer("amount").notNull(),
+  billingCycle: text("billing_cycle").notNull().default("monthly"),
+  nextDueDate: text("next_due_date").notNull(),
+  autoRenews: boolean("auto_renews").notNull().default(true),
+  paymentMethod: text("payment_method").default(""),
+  notes: text("notes").default(""),
+  icon: text("icon").default(""),
+  status: text("status").notNull().default("active"),
+  cancelledDate: text("cancelled_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const bills = pgTable("bills", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  name: text("name").notNull(),
+  amount: integer("amount").notNull(),
+  amountMax: integer("amount_max"),
+  dueDate: text("due_date").notNull(),
+  frequency: text("frequency").notNull().default("monthly"),
+  categoryKey: text("category_key").notNull().default("utilities"),
+  paymentMethod: text("payment_method").default(""),
+  autoPay: boolean("auto_pay").notNull().default(false),
+  notes: text("notes").default(""),
+  status: text("status").notNull().default("pending"),
+  lastPaidDate: text("last_paid_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const creditCards = pgTable("credit_cards", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  nickname: text("nickname").notNull(),
+  cardType: text("card_type").notNull().default("visa"),
+  lastFourDigits: text("last_four_digits").notNull(),
+  creditLimit: integer("credit_limit").notNull().default(0),
+  statementDate: integer("statement_date").notNull().default(1),
+  dueDate: integer("due_date").notNull().default(15),
+  currentBalance: integer("current_balance").notNull().default(0),
+  minimumDue: integer("minimum_due").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const savingsGoals = pgTable("savings_goals", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  name: text("name").notNull(),
+  targetAmount: integer("target_amount").notNull(),
+  currentAmount: integer("current_amount").notNull().default(0),
+  targetDate: text("target_date"),
+  monthlyContribution: integer("monthly_contribution").default(0),
+  icon: text("icon").default("🎯"),
+  status: text("status").notNull().default("active"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertMoneySettingsSchema = createInsertSchema(moneySettings).omit({ id: true, updatedAt: true });
+export type InsertMoneySettings = z.infer<typeof insertMoneySettingsSchema>;
+export type MoneySettings = typeof moneySettings.$inferSelect;
+
+export const insertExpenseCategorySchema = createInsertSchema(expenseCategories).omit({ id: true, createdAt: true });
+export type InsertExpenseCategory = z.infer<typeof insertExpenseCategorySchema>;
+export type ExpenseCategory = typeof expenseCategories.$inferSelect;
+
+export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true, createdAt: true });
+export type InsertExpense = z.infer<typeof insertExpenseSchema>;
+export type Expense = typeof expenses.$inferSelect;
+
+export const insertBudgetSchema = createInsertSchema(budgets).omit({ id: true, updatedAt: true });
+export type InsertBudget = z.infer<typeof insertBudgetSchema>;
+export type Budget = typeof budgets.$inferSelect;
+
+export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true });
+export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
+export type Subscription = typeof subscriptions.$inferSelect;
+
+export const insertBillSchema = createInsertSchema(bills).omit({ id: true, createdAt: true });
+export type InsertBill = z.infer<typeof insertBillSchema>;
+export type Bill = typeof bills.$inferSelect;
+
+export const insertCreditCardSchema = createInsertSchema(creditCards).omit({ id: true, createdAt: true });
+export type InsertCreditCard = z.infer<typeof insertCreditCardSchema>;
+export type CreditCard = typeof creditCards.$inferSelect;
+
+export const insertSavingsGoalSchema = createInsertSchema(savingsGoals).omit({ id: true, createdAt: true, completedAt: true });
+export type InsertSavingsGoal = z.infer<typeof insertSavingsGoalSchema>;
+export type SavingsGoal = typeof savingsGoals.$inferSelect;
+
 export const insertJournalEntrySchema = createInsertSchema(journalEntries).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertCustomDayTypeSchema = createInsertSchema(customDayTypes).omit({ id: true, createdAt: true });
 export const insertDayTypeUsageSchema = createInsertSchema(dayTypeUsage).omit({ id: true });

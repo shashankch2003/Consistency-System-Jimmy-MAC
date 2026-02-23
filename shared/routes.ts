@@ -3,7 +3,9 @@ import {
   insertPaymentSchema, insertYearlyGoalSchema, insertMonthlyOverviewGoalSchema, insertMonthlyDynamicGoalSchema,
   insertTaskSchema, insertGoodHabitSchema, insertGoodHabitEntrySchema, 
   insertBadHabitSchema, insertBadHabitEntrySchema, insertHourlyEntrySchema, insertTaskBankItemSchema, insertDailyReasonSchema, insertNoteSchema,
-  payments, yearlyGoals, monthlyOverviewGoals, monthlyDynamicGoals, tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, taskBankItems, dailyReasons, notes 
+  insertExpenseSchema, insertExpenseCategorySchema, insertBudgetSchema, insertSubscriptionSchema, insertBillSchema, insertCreditCardSchema, insertSavingsGoalSchema,
+  payments, yearlyGoals, monthlyOverviewGoals, monthlyDynamicGoals, tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, taskBankItems, dailyReasons, notes,
+  expenses, expenseCategories, budgets, subscriptions, bills, creditCards, savingsGoals, moneySettings,
 } from './schema';
 
 export const errorSchemas = {
@@ -285,6 +287,56 @@ export const api = {
         }),
       }) }
     }
+  },
+
+  // ===== MONEY TRACKING API =====
+  moneySettings: {
+    get: { method: 'GET' as const, path: '/api/money/settings' as const, responses: { 200: z.custom<typeof moneySettings.$inferSelect>() } },
+    update: { method: 'PUT' as const, path: '/api/money/settings' as const, input: z.record(z.any()), responses: { 200: z.custom<typeof moneySettings.$inferSelect>() } },
+  },
+  moneyCategories: {
+    list: { method: 'GET' as const, path: '/api/money/categories' as const, responses: { 200: z.array(z.custom<typeof expenseCategories.$inferSelect>()) } },
+    create: { method: 'POST' as const, path: '/api/money/categories' as const, input: insertExpenseCategorySchema.omit({ userId: true }), responses: { 201: z.custom<typeof expenseCategories.$inferSelect>() } },
+    update: { method: 'PUT' as const, path: '/api/money/categories/:id' as const, input: insertExpenseCategorySchema.partial(), responses: { 200: z.custom<typeof expenseCategories.$inferSelect>() } },
+    delete: { method: 'DELETE' as const, path: '/api/money/categories/:id' as const, responses: { 204: z.void() } },
+  },
+  moneyExpenses: {
+    list: { method: 'GET' as const, path: '/api/money/expenses' as const, responses: { 200: z.array(z.custom<typeof expenses.$inferSelect>()) } },
+    create: { method: 'POST' as const, path: '/api/money/expenses' as const, input: insertExpenseSchema.omit({ userId: true }), responses: { 201: z.custom<typeof expenses.$inferSelect>() } },
+    update: { method: 'PUT' as const, path: '/api/money/expenses/:id' as const, input: insertExpenseSchema.omit({ userId: true }).partial(), responses: { 200: z.custom<typeof expenses.$inferSelect>() } },
+    delete: { method: 'DELETE' as const, path: '/api/money/expenses/:id' as const, responses: { 204: z.void() } },
+  },
+  moneyBudgets: {
+    list: { method: 'GET' as const, path: '/api/money/budgets' as const, responses: { 200: z.array(z.custom<typeof budgets.$inferSelect>()) } },
+    upsert: { method: 'POST' as const, path: '/api/money/budgets' as const, input: insertBudgetSchema.omit({ userId: true }), responses: { 200: z.custom<typeof budgets.$inferSelect>() } },
+    delete: { method: 'DELETE' as const, path: '/api/money/budgets/:id' as const, responses: { 204: z.void() } },
+  },
+  moneySubscriptions: {
+    list: { method: 'GET' as const, path: '/api/money/subscriptions' as const, responses: { 200: z.array(z.custom<typeof subscriptions.$inferSelect>()) } },
+    create: { method: 'POST' as const, path: '/api/money/subscriptions' as const, input: insertSubscriptionSchema.omit({ userId: true }), responses: { 201: z.custom<typeof subscriptions.$inferSelect>() } },
+    update: { method: 'PUT' as const, path: '/api/money/subscriptions/:id' as const, input: insertSubscriptionSchema.omit({ userId: true }).partial(), responses: { 200: z.custom<typeof subscriptions.$inferSelect>() } },
+    delete: { method: 'DELETE' as const, path: '/api/money/subscriptions/:id' as const, responses: { 204: z.void() } },
+  },
+  moneyBills: {
+    list: { method: 'GET' as const, path: '/api/money/bills' as const, responses: { 200: z.array(z.custom<typeof bills.$inferSelect>()) } },
+    create: { method: 'POST' as const, path: '/api/money/bills' as const, input: insertBillSchema.omit({ userId: true }), responses: { 201: z.custom<typeof bills.$inferSelect>() } },
+    update: { method: 'PUT' as const, path: '/api/money/bills/:id' as const, input: insertBillSchema.omit({ userId: true }).partial(), responses: { 200: z.custom<typeof bills.$inferSelect>() } },
+    delete: { method: 'DELETE' as const, path: '/api/money/bills/:id' as const, responses: { 204: z.void() } },
+  },
+  moneyCreditCards: {
+    list: { method: 'GET' as const, path: '/api/money/credit-cards' as const, responses: { 200: z.array(z.custom<typeof creditCards.$inferSelect>()) } },
+    create: { method: 'POST' as const, path: '/api/money/credit-cards' as const, input: insertCreditCardSchema.omit({ userId: true }), responses: { 201: z.custom<typeof creditCards.$inferSelect>() } },
+    update: { method: 'PUT' as const, path: '/api/money/credit-cards/:id' as const, input: insertCreditCardSchema.omit({ userId: true }).partial(), responses: { 200: z.custom<typeof creditCards.$inferSelect>() } },
+    delete: { method: 'DELETE' as const, path: '/api/money/credit-cards/:id' as const, responses: { 204: z.void() } },
+  },
+  moneySavingsGoals: {
+    list: { method: 'GET' as const, path: '/api/money/savings-goals' as const, responses: { 200: z.array(z.custom<typeof savingsGoals.$inferSelect>()) } },
+    create: { method: 'POST' as const, path: '/api/money/savings-goals' as const, input: insertSavingsGoalSchema.omit({ userId: true }), responses: { 201: z.custom<typeof savingsGoals.$inferSelect>() } },
+    update: { method: 'PUT' as const, path: '/api/money/savings-goals/:id' as const, input: insertSavingsGoalSchema.omit({ userId: true }).partial(), responses: { 200: z.custom<typeof savingsGoals.$inferSelect>() } },
+    delete: { method: 'DELETE' as const, path: '/api/money/savings-goals/:id' as const, responses: { 204: z.void() } },
+  },
+  moneyDashboard: {
+    get: { method: 'GET' as const, path: '/api/money/dashboard' as const, responses: { 200: z.any() } },
   },
 };
 

@@ -62,6 +62,29 @@ The frontend lives in `client/src/` with pages under `client/src/pages/`, reusab
   - `custom_day_types` / `day_type_usage` — Custom journal day types and usage tracking
   - `user_streaks` — Consecutive productive day streak tracking
   - `successful_fundamentals` — Business/success foundation notes (32 predefined topics)
+  - `money_settings` — Per-user Money Tracking preferences (currency, income, notifications)
+  - `expense_categories` — Customizable expense categories with emoji, color, sort order
+  - `expenses` — Individual expense entries with amount (paise), date, category, merchant, payment method, tags
+  - `budgets` — Per-category monthly budget limits with enabled/disabled toggle
+  - `subscriptions` — Recurring subscription tracking (Netflix, Spotify, etc.) with billing cycles
+  - `bills` — Bill tracking with due dates, frequencies, and mark-as-paid flow
+  - `credit_cards` — Credit card management with limits, balances, statement/due dates
+  - `savings_goals` — Savings goals with target amounts, progress tracking, and monthly contributions
+
+### Money Tracking Module
+- **Route**: `/dashboard/money` — 8 sub-tabs: Dashboard, Expenses, Budget, Subscriptions, Bills & Cards, Reports, Goals, Settings
+- **Currency**: All monetary values stored as integers (paise/cents) to avoid floating-point errors
+- **Formatting**: Respects user settings (currency symbol, position, decimal places)
+- **Dashboard**: Summary cards, category pie chart, daily spending trend, budget progress, upcoming payments, recent transactions, savings rate gauge
+- **Expenses**: CRUD with filters (search, category, payment method), multiple payment methods (Cash, UPI, Credit Card, etc.)
+- **Budget**: Per-category monthly limits with progress bars and smart suggestions
+- **Subscriptions**: Track recurring services with billing cycles, pause/cancel, monthly/yearly projections
+- **Bills & Cards**: Bill tracking with mark-as-paid (auto-creates expense), credit card visual cards with utilization tracking
+- **Reports**: Monthly analytics with category breakdowns and daily bar charts
+- **Goals**: Savings goals with add-funds inline, progress tracking, completion
+- **Settings**: Currency selection (INR/USD/EUR/GBP/AED), monthly income, notification preferences, CSV/JSON data export
+- **API**: All endpoints under `/api/money/` prefix, protected by `isAuthenticated` middleware
+- **Default Categories**: 21 categories auto-initialized on first access (food, transport, shopping, etc.)
 
 ### Level/Ranking System
 - **7 Levels**: Unproductive (default) → Bronze → Silver → Gold → Platinum → Diamond → Elite

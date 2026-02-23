@@ -1,11 +1,12 @@
 import { db } from "./db";
-import { eq, and, asc, like, desc } from "drizzle-orm";
+import { eq, and, asc, like, desc, gte, lte } from "drizzle-orm";
 import {
   yearlyGoals, monthlyOverviewGoals, monthlyDynamicGoals,
   tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, payments, taskBankItems, dailyReasons, notes,
   userLevels, groupMessages, adminInbox, monthlyEvaluations,
   journalEntries, customDayTypes, dayTypeUsage, userStreaks,
   successfulFundamentals, userSettings,
+  moneySettings, expenseCategories, expenses, budgets, subscriptions, bills, creditCards, savingsGoals,
 } from "@shared/schema";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
 
@@ -28,6 +29,14 @@ type InsertJournalEntry = typeof journalEntries.$inferInsert;
 type InsertCustomDayType = typeof customDayTypes.$inferInsert;
 type InsertDayTypeUsage = typeof dayTypeUsage.$inferInsert;
 type InsertSuccessfulFundamental = typeof successfulFundamentals.$inferInsert;
+type InsertMoneySettings = typeof moneySettings.$inferInsert;
+type InsertExpenseCategory = typeof expenseCategories.$inferInsert;
+type InsertExpense = typeof expenses.$inferInsert;
+type InsertBudget = typeof budgets.$inferInsert;
+type InsertSubscription = typeof subscriptions.$inferInsert;
+type InsertBill = typeof bills.$inferInsert;
+type InsertCreditCard = typeof creditCards.$inferInsert;
+type InsertSavingsGoal = typeof savingsGoals.$inferInsert;
 
 export interface IStorage extends IAuthStorage {
   getYearlyGoals(userId: string, year?: number): Promise<(typeof yearlyGoals.$inferSelect)[]>;
@@ -119,6 +128,45 @@ export interface IStorage extends IAuthStorage {
 
   getUserSettings(userId: string): Promise<typeof userSettings.$inferSelect | undefined>;
   upsertUserSettings(userId: string, data: Partial<typeof userSettings.$inferInsert>): Promise<typeof userSettings.$inferSelect>;
+
+  // Money Tracking
+  getMoneySettings(userId: string): Promise<(typeof moneySettings.$inferSelect) | undefined>;
+  upsertMoneySettings(userId: string, data: Partial<InsertMoneySettings>): Promise<typeof moneySettings.$inferSelect>;
+
+  getExpenseCategories(userId: string): Promise<(typeof expenseCategories.$inferSelect)[]>;
+  createExpenseCategory(cat: InsertExpenseCategory): Promise<typeof expenseCategories.$inferSelect>;
+  updateExpenseCategory(id: number, userId: string, updates: Partial<InsertExpenseCategory>): Promise<typeof expenseCategories.$inferSelect>;
+  deleteExpenseCategory(id: number, userId: string): Promise<void>;
+
+  getExpenses(userId: string, filters?: { dateFrom?: string; dateTo?: string; categoryKey?: string; paymentMethod?: string }): Promise<(typeof expenses.$inferSelect)[]>;
+  getExpensesByMonth(userId: string, month: string): Promise<(typeof expenses.$inferSelect)[]>;
+  createExpense(expense: InsertExpense): Promise<typeof expenses.$inferSelect>;
+  updateExpense(id: number, userId: string, updates: Partial<InsertExpense>): Promise<typeof expenses.$inferSelect>;
+  deleteExpense(id: number, userId: string): Promise<void>;
+
+  getBudgets(userId: string): Promise<(typeof budgets.$inferSelect)[]>;
+  upsertBudget(data: InsertBudget): Promise<typeof budgets.$inferSelect>;
+  deleteBudget(id: number, userId: string): Promise<void>;
+
+  getSubscriptions(userId: string): Promise<(typeof subscriptions.$inferSelect)[]>;
+  createSubscription(sub: InsertSubscription): Promise<typeof subscriptions.$inferSelect>;
+  updateSubscription(id: number, userId: string, updates: Partial<InsertSubscription>): Promise<typeof subscriptions.$inferSelect>;
+  deleteSubscription(id: number, userId: string): Promise<void>;
+
+  getBills(userId: string): Promise<(typeof bills.$inferSelect)[]>;
+  createBill(bill: InsertBill): Promise<typeof bills.$inferSelect>;
+  updateBill(id: number, userId: string, updates: Partial<InsertBill>): Promise<typeof bills.$inferSelect>;
+  deleteBill(id: number, userId: string): Promise<void>;
+
+  getCreditCards(userId: string): Promise<(typeof creditCards.$inferSelect)[]>;
+  createCreditCard(card: InsertCreditCard): Promise<typeof creditCards.$inferSelect>;
+  updateCreditCard(id: number, userId: string, updates: Partial<InsertCreditCard>): Promise<typeof creditCards.$inferSelect>;
+  deleteCreditCard(id: number, userId: string): Promise<void>;
+
+  getSavingsGoals(userId: string): Promise<(typeof savingsGoals.$inferSelect)[]>;
+  createSavingsGoal(goal: InsertSavingsGoal): Promise<typeof savingsGoals.$inferSelect>;
+  updateSavingsGoal(id: number, userId: string, updates: Partial<InsertSavingsGoal>): Promise<typeof savingsGoals.$inferSelect>;
+  deleteSavingsGoal(id: number, userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -473,6 +521,157 @@ export class DatabaseStorage implements IStorage {
     }
     const [created] = await db.insert(userSettings).values({ ...data, userId }).returning();
     return created;
+  }
+
+  // Money Tracking Methods
+  async getMoneySettings(userId: string) {
+    const [settings] = await db.select().from(moneySettings).where(eq(moneySettings.userId, userId));
+    return settings;
+  }
+
+  async upsertMoneySettings(userId: string, data: Partial<InsertMoneySettings>) {
+    const existing = await this.getMoneySettings(userId);
+    if (existing) {
+      const [updated] = await db.update(moneySettings).set({ ...data, updatedAt: new Date() }).where(eq(moneySettings.userId, userId)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(moneySettings).values({ ...data, userId }).returning();
+    return created;
+  }
+
+  async getExpenseCategories(userId: string) {
+    return await db.select().from(expenseCategories).where(eq(expenseCategories.userId, userId)).orderBy(asc(expenseCategories.sortOrder));
+  }
+
+  async createExpenseCategory(cat: InsertExpenseCategory) {
+    const [created] = await db.insert(expenseCategories).values(cat).returning();
+    return created;
+  }
+
+  async updateExpenseCategory(id: number, userId: string, updates: Partial<InsertExpenseCategory>) {
+    const [updated] = await db.update(expenseCategories).set(updates).where(and(eq(expenseCategories.id, id), eq(expenseCategories.userId, userId))).returning();
+    return updated;
+  }
+
+  async deleteExpenseCategory(id: number, userId: string) {
+    await db.delete(expenseCategories).where(and(eq(expenseCategories.id, id), eq(expenseCategories.userId, userId)));
+  }
+
+  async getExpenses(userId: string, filters?: { dateFrom?: string; dateTo?: string; categoryKey?: string; paymentMethod?: string }) {
+    const conditions: any[] = [eq(expenses.userId, userId)];
+    if (filters?.dateFrom) conditions.push(gte(expenses.date, filters.dateFrom));
+    if (filters?.dateTo) conditions.push(lte(expenses.date, filters.dateTo));
+    if (filters?.categoryKey) conditions.push(eq(expenses.categoryKey, filters.categoryKey));
+    if (filters?.paymentMethod) conditions.push(eq(expenses.paymentMethod, filters.paymentMethod));
+    return await db.select().from(expenses).where(and(...conditions)).orderBy(desc(expenses.date));
+  }
+
+  async getExpensesByMonth(userId: string, month: string) {
+    return await db.select().from(expenses).where(and(eq(expenses.userId, userId), like(expenses.date, `${month}%`))).orderBy(asc(expenses.date));
+  }
+
+  async createExpense(expense: InsertExpense) {
+    const [created] = await db.insert(expenses).values(expense).returning();
+    return created;
+  }
+
+  async updateExpense(id: number, userId: string, updates: Partial<InsertExpense>) {
+    const [updated] = await db.update(expenses).set(updates).where(and(eq(expenses.id, id), eq(expenses.userId, userId))).returning();
+    return updated;
+  }
+
+  async deleteExpense(id: number, userId: string) {
+    await db.delete(expenses).where(and(eq(expenses.id, id), eq(expenses.userId, userId)));
+  }
+
+  async getBudgets(userId: string) {
+    return await db.select().from(budgets).where(eq(budgets.userId, userId)).orderBy(asc(budgets.categoryKey));
+  }
+
+  async upsertBudget(data: InsertBudget) {
+    const existing = await db.select().from(budgets).where(and(eq(budgets.userId, data.userId), eq(budgets.categoryKey, data.categoryKey)));
+    if (existing.length > 0) {
+      const [updated] = await db.update(budgets).set({ monthlyLimit: data.monthlyLimit, isEnabled: data.isEnabled, updatedAt: new Date() }).where(eq(budgets.id, existing[0].id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(budgets).values(data).returning();
+    return created;
+  }
+
+  async deleteBudget(id: number, userId: string) {
+    await db.delete(budgets).where(and(eq(budgets.id, id), eq(budgets.userId, userId)));
+  }
+
+  async getSubscriptions(userId: string) {
+    return await db.select().from(subscriptions).where(eq(subscriptions.userId, userId)).orderBy(asc(subscriptions.serviceName));
+  }
+
+  async createSubscription(sub: InsertSubscription) {
+    const [created] = await db.insert(subscriptions).values(sub).returning();
+    return created;
+  }
+
+  async updateSubscription(id: number, userId: string, updates: Partial<InsertSubscription>) {
+    const [updated] = await db.update(subscriptions).set(updates).where(and(eq(subscriptions.id, id), eq(subscriptions.userId, userId))).returning();
+    return updated;
+  }
+
+  async deleteSubscription(id: number, userId: string) {
+    await db.delete(subscriptions).where(and(eq(subscriptions.id, id), eq(subscriptions.userId, userId)));
+  }
+
+  async getBills(userId: string) {
+    return await db.select().from(bills).where(eq(bills.userId, userId)).orderBy(asc(bills.name));
+  }
+
+  async createBill(bill: InsertBill) {
+    const [created] = await db.insert(bills).values(bill).returning();
+    return created;
+  }
+
+  async updateBill(id: number, userId: string, updates: Partial<InsertBill>) {
+    const [updated] = await db.update(bills).set(updates).where(and(eq(bills.id, id), eq(bills.userId, userId))).returning();
+    return updated;
+  }
+
+  async deleteBill(id: number, userId: string) {
+    await db.delete(bills).where(and(eq(bills.id, id), eq(bills.userId, userId)));
+  }
+
+  async getCreditCards(userId: string) {
+    return await db.select().from(creditCards).where(eq(creditCards.userId, userId)).orderBy(asc(creditCards.nickname));
+  }
+
+  async createCreditCard(card: InsertCreditCard) {
+    const [created] = await db.insert(creditCards).values(card).returning();
+    return created;
+  }
+
+  async updateCreditCard(id: number, userId: string, updates: Partial<InsertCreditCard>) {
+    const [updated] = await db.update(creditCards).set(updates).where(and(eq(creditCards.id, id), eq(creditCards.userId, userId))).returning();
+    return updated;
+  }
+
+  async deleteCreditCard(id: number, userId: string) {
+    await db.delete(creditCards).where(and(eq(creditCards.id, id), eq(creditCards.userId, userId)));
+  }
+
+  async getSavingsGoals(userId: string) {
+    return await db.select().from(savingsGoals).where(eq(savingsGoals.userId, userId)).orderBy(asc(savingsGoals.name));
+  }
+
+  async createSavingsGoal(goal: InsertSavingsGoal) {
+    const [created] = await db.insert(savingsGoals).values(goal).returning();
+    return created;
+  }
+
+  async updateSavingsGoal(id: number, userId: string, updates: Partial<InsertSavingsGoal>) {
+    const [updated] = await db.update(savingsGoals).set(updates).where(and(eq(savingsGoals.id, id), eq(savingsGoals.userId, userId))).returning();
+    return updated;
+  }
+
+  async deleteSavingsGoal(id: number, userId: string) {
+    await db.delete(savingsGoals).where(and(eq(savingsGoals.id, id), eq(savingsGoals.userId, userId)));
   }
 }
 
