@@ -441,10 +441,10 @@ export default function DailyScorePage() {
           <div className="bg-background border border-border rounded-xl p-6" data-testid="weekly-history-list">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Weekly History</h3>
             <div className="max-h-64 overflow-y-auto space-y-1 dark-scrollbar">
-              {[...stats.weeklyAverages].reverse().map((w, i) => (
+              {stats.weeklyAverages.map((w, i) => (
                 <div key={w.weekStart} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/5">
                   <div className="flex items-center gap-3">
-                    <span className="text-xs font-medium text-muted-foreground w-8">{stats.weeklyAverages.length - i}</span>
+                    <span className="text-xs font-medium text-muted-foreground w-8">{i + 1}</span>
                     <span className="text-xs text-muted-foreground/60">{format(new Date(w.weekStart + "T00:00:00"), "MMM d")}</span>
                   </div>
                   <div className="flex items-center gap-2 flex-1 ml-4">
@@ -505,7 +505,7 @@ export default function DailyScorePage() {
           <div className="bg-background border border-border rounded-xl p-6" data-testid="monthly-history-list">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Monthly History</h3>
             <div className="max-h-64 overflow-y-auto space-y-1 dark-scrollbar">
-              {[...stats.monthlyAverages].reverse().map((m) => (
+              {stats.monthlyAverages.map((m) => (
                 <div key={m.month} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/5">
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-medium text-muted-foreground w-16">{formatMonthLabel(m.month)}</span>
