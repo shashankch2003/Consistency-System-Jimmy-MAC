@@ -505,7 +505,7 @@ export default function DailyScorePage() {
           <div className="bg-background border border-border rounded-xl p-6" data-testid="monthly-history-list">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Monthly History</h3>
             <div className="max-h-64 overflow-y-auto space-y-1 dark-scrollbar">
-              {stats.monthlyAverages.map((m) => (
+              {[...stats.monthlyAverages].sort((a, b) => a.month.localeCompare(b.month)).map((m) => (
                 <div key={m.month} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/5">
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-medium text-muted-foreground w-16">{formatMonthLabel(m.month)}</span>
