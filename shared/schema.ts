@@ -572,6 +572,8 @@ export const videoFeedback = pgTable("video_feedback", {
   feedbackType: text("feedback_type").notNull(),
   message: text("message").notNull(),
   status: text("status").notNull().default("pending"),
+  adminReply: text("admin_reply"),
+  adminRepliedAt: timestamp("admin_replied_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

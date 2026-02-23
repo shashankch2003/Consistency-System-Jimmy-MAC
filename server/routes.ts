@@ -1554,6 +1554,17 @@ export async function registerRoutes(
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  // Admin: Reply to feedback
+  app.post("/api/admin/video-feedback/:id/reply", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!isAdmin(req)) return res.status(403).json({ message: "Admin only" });
+      const { reply } = req.body;
+      if (!reply || !reply.trim()) return res.status(400).json({ message: "Reply cannot be empty" });
+      const updated = await storage.replyToVideoFeedback(parseInt(req.params.id), reply.trim());
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   // Admin: Delete feedback
   app.delete("/api/admin/video-feedback/:id", isAuthenticated, async (req: any, res) => {
     try {

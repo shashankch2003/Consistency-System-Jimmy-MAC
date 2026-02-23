@@ -199,6 +199,7 @@ export interface IStorage extends IAuthStorage {
   getAllVideoFeedback(videoId?: number): Promise<(typeof videoFeedback.$inferSelect)[]>;
   createVideoFeedback(fb: InsertVideoFeedback): Promise<typeof videoFeedback.$inferSelect>;
   updateVideoFeedbackStatus(id: number, status: string): Promise<typeof videoFeedback.$inferSelect>;
+  replyToVideoFeedback(id: number, adminReply: string): Promise<typeof videoFeedback.$inferSelect>;
   deleteVideoFeedback(id: number): Promise<void>;
 
   // Grow Together - Friends
@@ -849,6 +850,14 @@ export class DatabaseStorage implements IStorage {
 
   async updateVideoFeedbackStatus(id: number, status: string) {
     const [updated] = await db.update(videoFeedback).set({ status }).where(eq(videoFeedback.id, id)).returning();
+    return updated;
+  }
+
+  async replyToVideoFeedback(id: number, adminReply: string) {
+    const [updated] = await db.update(videoFeedback)
+      .set({ adminReply, adminRepliedAt: new Date() })
+      .where(eq(videoFeedback.id, id))
+      .returning();
     return updated;
   }
 
