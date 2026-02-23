@@ -106,7 +106,7 @@ export default function AdminPage() {
 
   if (adminCheck?.isAdmin === false) {
     return (
-      <div className="p-4 pt-14 sm:p-8 sm:pt-8 flex items-center justify-center min-h-[60vh]">
+      <div className="p-2 pt-14 sm:p-4 sm:pt-4 flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <Shield className="w-12 h-12 mx-auto mb-4 text-muted-foreground/30" />
           <h2 className="text-xl font-bold mb-2">Admin Access Required</h2>
@@ -129,7 +129,7 @@ export default function AdminPage() {
   };
 
   return (
-    <div className="p-4 pt-14 sm:p-8 sm:pt-8 h-[calc(100vh-2rem)] sm:h-[calc(100vh-4rem)] flex flex-col max-w-5xl mx-auto">
+    <div className="p-2 pt-14 sm:p-4 sm:pt-4 h-[calc(100vh-1rem)] sm:h-[calc(100vh-2rem)] flex flex-col">
       <div className="flex-1 min-h-0 flex flex-col sm:flex-row border border-border rounded-xl overflow-hidden bg-card/30">
 
         <div className={cn(
