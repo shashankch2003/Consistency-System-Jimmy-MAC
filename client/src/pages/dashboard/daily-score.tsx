@@ -271,7 +271,7 @@ export default function DailyScorePage() {
         </div>
       </div>
 
-      {/* 1. Today vs Yesterday */}
+      {/* 1. Today vs Yesterday + Calendar sidebar */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
         <div className="space-y-6">
           <div className="bg-card/50 border border-border rounded-xl p-6" data-testid="today-vs-yesterday">
@@ -310,169 +310,6 @@ export default function DailyScorePage() {
                 {reason?.reason && (
                   <p className="text-xs text-muted-foreground italic truncate max-w-sm">"{reason.reason.substring(0, 60)}..."</p>
                 )}
-              </div>
-            </div>
-          )}
-
-          {/* 2. This Week vs Last Week */}
-          <div className="bg-card/50 border border-border rounded-xl p-6" data-testid="week-comparison">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">This Week vs Last Week</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
-              <div className="flex flex-col items-center">
-                <ScoreRing score={lastWeekAvg?.average || 0} size={100} label="Last Week" />
-              </div>
-              <div className="flex flex-col items-center gap-2">
-                {currentWeekAvg && lastWeekAvg ? (
-                  <>
-                    <DiffIndicator current={currentWeekAvg.average} previous={lastWeekAvg.average} />
-                    <span className="text-xs text-muted-foreground">week over week</span>
-                  </>
-                ) : (
-                  <span className="text-xs text-muted-foreground">Not enough data</span>
-                )}
-              </div>
-              <div className="flex flex-col items-center">
-                <ScoreRing score={currentWeekAvg?.average || 0} size={100} label="This Week" />
-              </div>
-            </div>
-          </div>
-
-          {/* 3. Weekly History Line Chart */}
-          {weeklyChartData.length > 1 && (
-            <div className="bg-card/50 border border-border rounded-xl p-6" data-testid="weekly-trend-chart">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Weekly Progression</h3>
-              <div className="h-52 -mr-2">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={weeklyChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                    <XAxis dataKey="name" tick={{ fill: "#888", fontSize: 10 }} axisLine={false} tickLine={false} />
-                    <YAxis domain={[0, 100]} tick={{ fill: "#888", fontSize: 10 }} axisLine={false} tickLine={false} width={28} />
-                    <Tooltip contentStyle={{ background: "#111", border: "1px solid #333", borderRadius: "8px", fontSize: "12px" }} formatter={(v: number) => [`${v}%`, "Average"]} />
-                    <Line type="monotone" dataKey="average" stroke="#3b82f6" strokeWidth={2} dot={{ fill: "#3b82f6", r: 3 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
-
-          {/* Weekly History List */}
-          {stats?.weeklyAverages && stats.weeklyAverages.length > 0 && (
-            <div className="bg-background border border-border rounded-xl p-6" data-testid="weekly-history-list">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Weekly History</h3>
-              <div className="max-h-64 overflow-y-auto space-y-1 scrollbar-thin">
-                {[...stats.weeklyAverages].reverse().map((w, i) => (
-                  <div key={w.weekStart} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/5">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs font-medium text-muted-foreground w-8">{stats.weeklyAverages.length - i}</span>
-                      <span className="text-xs text-muted-foreground/60">{format(new Date(w.weekStart + "T00:00:00"), "MMM d")}</span>
-                    </div>
-                    <div className="flex items-center gap-2 flex-1 ml-4">
-                      <div className="flex-1 h-1.5 bg-muted/20 rounded-full overflow-hidden">
-                        <div className={cn("h-full rounded-full", getScoreColor(w.average))} style={{ width: `${w.average}%` }} />
-                      </div>
-                      <span className={cn("text-sm font-semibold w-12 text-right", getScoreTextColor(w.average))}>{w.average}%</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* 4. This Month vs Last Month */}
-          <div className="bg-card/50 border border-border rounded-xl p-6" data-testid="month-comparison">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">This Month vs Last Month</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
-              <div className="flex flex-col items-center">
-                <ScoreRing score={lastMonthAvg?.average || 0} size={100} label={lastMonthAvg ? formatMonthLabel(lastMonthAvg.month) : "Last Month"} />
-              </div>
-              <div className="flex flex-col items-center gap-2">
-                {currentMonthAvg && lastMonthAvg ? (
-                  <>
-                    <DiffIndicator current={currentMonthAvg.average} previous={lastMonthAvg.average} />
-                    <span className="text-xs text-muted-foreground">month over month</span>
-                  </>
-                ) : (
-                  <span className="text-xs text-muted-foreground">Not enough data</span>
-                )}
-              </div>
-              <div className="flex flex-col items-center">
-                <ScoreRing score={currentMonthAvg?.average || 0} size={100} label={currentMonthAvg ? formatMonthLabel(currentMonthAvg.month) : "This Month"} />
-              </div>
-            </div>
-          </div>
-
-          {/* Monthly Bar Chart */}
-          {monthlyChartData.length > 1 && (
-            <div className="bg-card/50 border border-border rounded-xl p-6" data-testid="monthly-bar-chart">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Monthly Comparison</h3>
-              <div className="h-52 -mr-2">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={monthlyChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                    <XAxis dataKey="name" tick={{ fill: "#888", fontSize: 10 }} axisLine={false} tickLine={false} />
-                    <YAxis domain={[0, 100]} tick={{ fill: "#888", fontSize: 10 }} axisLine={false} tickLine={false} width={28} />
-                    <Tooltip contentStyle={{ background: "#111", border: "1px solid #333", borderRadius: "8px", fontSize: "12px" }} formatter={(v: number) => [`${v}%`, "Average"]} />
-                    <Bar dataKey="average" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
-
-          {/* Monthly History List */}
-          {stats?.monthlyAverages && stats.monthlyAverages.length > 0 && (
-            <div className="bg-background border border-border rounded-xl p-6" data-testid="monthly-history-list">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Monthly History</h3>
-              <div className="max-h-64 overflow-y-auto space-y-1 scrollbar-thin">
-                {[...stats.monthlyAverages].reverse().map((m) => (
-                  <div key={m.month} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/5">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs font-medium text-muted-foreground w-16">{formatMonthLabel(m.month)}</span>
-                      <span className="text-xs text-muted-foreground/60">{m.days} days</span>
-                    </div>
-                    <div className="flex items-center gap-2 flex-1 ml-4">
-                      <div className="flex-1 h-1.5 bg-muted/20 rounded-full overflow-hidden">
-                        <div className={cn("h-full rounded-full", getScoreColor(m.average))} style={{ width: `${m.average}%` }} />
-                      </div>
-                      <span className={cn("text-sm font-semibold w-12 text-right", getScoreTextColor(m.average))}>{m.average}%</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* 6. Lifetime Statistics */}
-          {stats?.lifetime && (
-            <div className="bg-card/50 border border-border rounded-xl p-6" data-testid="lifetime-stats">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Lifetime Statistics</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                <div className="text-center p-3 bg-white/[0.03] rounded-lg">
-                  <p className={cn("text-2xl font-bold", getScoreTextColor(stats.lifetime.average))}>{stats.lifetime.average}%</p>
-                  <p className="text-xs text-muted-foreground mt-1">Lifetime Avg</p>
-                </div>
-                <div className="text-center p-3 bg-white/[0.03] rounded-lg">
-                  <p className="text-2xl font-bold text-blue-400">{stats.lifetime.totalDays}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Total Days</p>
-                </div>
-                <div className="text-center p-3 bg-white/[0.03] rounded-lg">
-                  <p className={cn("text-2xl font-bold", getScoreTextColor(stats.lifetime.highestDaily))}>{stats.lifetime.highestDaily}%</p>
-                  <p className="text-xs text-muted-foreground mt-1">Highest Daily</p>
-                </div>
-                <div className="text-center p-3 bg-white/[0.03] rounded-lg">
-                  <p className={cn("text-2xl font-bold", getScoreTextColor(stats.lifetime.lowestDaily))}>{stats.lifetime.lowestDaily}%</p>
-                  <p className="text-xs text-muted-foreground mt-1">Lowest Daily</p>
-                </div>
-                <div className="text-center p-3 bg-white/[0.03] rounded-lg">
-                  <p className="text-2xl font-bold text-blue-400">{stats.lifetime.bestWeek?.average || 0}%</p>
-                  <p className="text-xs text-muted-foreground mt-1">Best Week</p>
-                  {stats.lifetime.bestWeek && <p className="text-[10px] text-muted-foreground/50">{format(new Date(stats.lifetime.bestWeek.weekStart + "T00:00:00"), "MMM d")}</p>}
-                </div>
-                <div className="text-center p-3 bg-white/[0.03] rounded-lg">
-                  <p className="text-2xl font-bold text-purple-400">{stats.lifetime.bestMonth?.average || 0}%</p>
-                  <p className="text-xs text-muted-foreground mt-1">Best Month</p>
-                  {stats.lifetime.bestMonth && <p className="text-[10px] text-muted-foreground/50">{formatMonthLabel(stats.lifetime.bestMonth.month)}</p>}
-                </div>
               </div>
             </div>
           )}
@@ -554,6 +391,172 @@ export default function DailyScorePage() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Full-width sections below the grid */}
+      <div className="space-y-6">
+        {/* 2. This Week vs Last Week */}
+        <div className="bg-card/50 border border-border rounded-xl p-6" data-testid="week-comparison">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">This Week vs Last Week</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
+            <div className="flex flex-col items-center">
+              <ScoreRing score={lastWeekAvg?.average || 0} size={100} label="Last Week" />
+            </div>
+            <div className="flex flex-col items-center gap-2">
+              {currentWeekAvg && lastWeekAvg ? (
+                <>
+                  <DiffIndicator current={currentWeekAvg.average} previous={lastWeekAvg.average} />
+                  <span className="text-xs text-muted-foreground">week over week</span>
+                </>
+              ) : (
+                <span className="text-xs text-muted-foreground">Not enough data</span>
+              )}
+            </div>
+            <div className="flex flex-col items-center">
+              <ScoreRing score={currentWeekAvg?.average || 0} size={100} label="This Week" />
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Weekly History Line Chart */}
+        {weeklyChartData.length > 1 && (
+          <div className="bg-card/50 border border-border rounded-xl p-6" data-testid="weekly-trend-chart">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Weekly Progression</h3>
+            <div className="h-52">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={weeklyChartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis dataKey="name" tick={{ fill: "#888", fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <YAxis domain={[0, 100]} tick={{ fill: "#888", fontSize: 10 }} axisLine={false} tickLine={false} width={28} />
+                  <Tooltip contentStyle={{ background: "#111", border: "1px solid #333", borderRadius: "8px", fontSize: "12px" }} formatter={(v: number) => [`${v}%`, "Average"]} />
+                  <Line type="monotone" dataKey="average" stroke="#3b82f6" strokeWidth={2} dot={{ fill: "#3b82f6", r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {/* Weekly History List */}
+        {stats?.weeklyAverages && stats.weeklyAverages.length > 0 && (
+          <div className="bg-background border border-border rounded-xl p-6" data-testid="weekly-history-list">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Weekly History</h3>
+            <div className="max-h-64 overflow-y-auto space-y-1 scrollbar-thin">
+              {[...stats.weeklyAverages].reverse().map((w, i) => (
+                <div key={w.weekStart} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/5">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-medium text-muted-foreground w-8">{stats.weeklyAverages.length - i}</span>
+                    <span className="text-xs text-muted-foreground/60">{format(new Date(w.weekStart + "T00:00:00"), "MMM d")}</span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-1 ml-4">
+                    <div className="flex-1 h-1.5 bg-muted/20 rounded-full overflow-hidden">
+                      <div className={cn("h-full rounded-full", getScoreColor(w.average))} style={{ width: `${w.average}%` }} />
+                    </div>
+                    <span className={cn("text-sm font-semibold w-12 text-right", getScoreTextColor(w.average))}>{w.average}%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 4. This Month vs Last Month */}
+        <div className="bg-card/50 border border-border rounded-xl p-6" data-testid="month-comparison">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">This Month vs Last Month</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
+            <div className="flex flex-col items-center">
+              <ScoreRing score={lastMonthAvg?.average || 0} size={100} label={lastMonthAvg ? formatMonthLabel(lastMonthAvg.month) : "Last Month"} />
+            </div>
+            <div className="flex flex-col items-center gap-2">
+              {currentMonthAvg && lastMonthAvg ? (
+                <>
+                  <DiffIndicator current={currentMonthAvg.average} previous={lastMonthAvg.average} />
+                  <span className="text-xs text-muted-foreground">month over month</span>
+                </>
+              ) : (
+                <span className="text-xs text-muted-foreground">Not enough data</span>
+              )}
+            </div>
+            <div className="flex flex-col items-center">
+              <ScoreRing score={currentMonthAvg?.average || 0} size={100} label={currentMonthAvg ? formatMonthLabel(currentMonthAvg.month) : "This Month"} />
+            </div>
+          </div>
+        </div>
+
+        {/* Monthly Bar Chart */}
+        {monthlyChartData.length > 1 && (
+          <div className="bg-card/50 border border-border rounded-xl p-6" data-testid="monthly-bar-chart">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Monthly Comparison</h3>
+            <div className="h-52">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyChartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis dataKey="name" tick={{ fill: "#888", fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <YAxis domain={[0, 100]} tick={{ fill: "#888", fontSize: 10 }} axisLine={false} tickLine={false} width={28} />
+                  <Tooltip contentStyle={{ background: "#111", border: "1px solid #333", borderRadius: "8px", fontSize: "12px" }} formatter={(v: number) => [`${v}%`, "Average"]} />
+                  <Bar dataKey="average" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {/* Monthly History List */}
+        {stats?.monthlyAverages && stats.monthlyAverages.length > 0 && (
+          <div className="bg-background border border-border rounded-xl p-6" data-testid="monthly-history-list">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Monthly History</h3>
+            <div className="max-h-64 overflow-y-auto space-y-1 scrollbar-thin">
+              {[...stats.monthlyAverages].reverse().map((m) => (
+                <div key={m.month} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/5">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-medium text-muted-foreground w-16">{formatMonthLabel(m.month)}</span>
+                    <span className="text-xs text-muted-foreground/60">{m.days} days</span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-1 ml-4">
+                    <div className="flex-1 h-1.5 bg-muted/20 rounded-full overflow-hidden">
+                      <div className={cn("h-full rounded-full", getScoreColor(m.average))} style={{ width: `${m.average}%` }} />
+                    </div>
+                    <span className={cn("text-sm font-semibold w-12 text-right", getScoreTextColor(m.average))}>{m.average}%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 6. Lifetime Statistics */}
+        {stats?.lifetime && (
+          <div className="bg-card/50 border border-border rounded-xl p-6" data-testid="lifetime-stats">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Lifetime Statistics</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+              <div className="text-center p-3 bg-white/[0.03] rounded-lg">
+                <p className={cn("text-2xl font-bold", getScoreTextColor(stats.lifetime.average))}>{stats.lifetime.average}%</p>
+                <p className="text-xs text-muted-foreground mt-1">Lifetime Avg</p>
+              </div>
+              <div className="text-center p-3 bg-white/[0.03] rounded-lg">
+                <p className="text-2xl font-bold text-blue-400">{stats.lifetime.totalDays}</p>
+                <p className="text-xs text-muted-foreground mt-1">Total Days</p>
+              </div>
+              <div className="text-center p-3 bg-white/[0.03] rounded-lg">
+                <p className={cn("text-2xl font-bold", getScoreTextColor(stats.lifetime.highestDaily))}>{stats.lifetime.highestDaily}%</p>
+                <p className="text-xs text-muted-foreground mt-1">Highest Daily</p>
+              </div>
+              <div className="text-center p-3 bg-white/[0.03] rounded-lg">
+                <p className={cn("text-2xl font-bold", getScoreTextColor(stats.lifetime.lowestDaily))}>{stats.lifetime.lowestDaily}%</p>
+                <p className="text-xs text-muted-foreground mt-1">Lowest Daily</p>
+              </div>
+              <div className="text-center p-3 bg-white/[0.03] rounded-lg">
+                <p className="text-2xl font-bold text-blue-400">{stats.lifetime.bestWeek?.average || 0}%</p>
+                <p className="text-xs text-muted-foreground mt-1">Best Week</p>
+                {stats.lifetime.bestWeek && <p className="text-[10px] text-muted-foreground/50">{format(new Date(stats.lifetime.bestWeek.weekStart + "T00:00:00"), "MMM d")}</p>}
+              </div>
+              <div className="text-center p-3 bg-white/[0.03] rounded-lg">
+                <p className="text-2xl font-bold text-purple-400">{stats.lifetime.bestMonth?.average || 0}%</p>
+                <p className="text-xs text-muted-foreground mt-1">Best Month</p>
+                {stats.lifetime.bestMonth && <p className="text-[10px] text-muted-foreground/50">{formatMonthLabel(stats.lifetime.bestMonth.month)}</p>}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
