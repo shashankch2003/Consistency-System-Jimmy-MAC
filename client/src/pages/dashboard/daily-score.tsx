@@ -440,7 +440,7 @@ export default function DailyScorePage() {
         {stats?.weeklyAverages && stats.weeklyAverages.length > 0 && (
           <div className="bg-background border border-border rounded-xl p-6" data-testid="weekly-history-list">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Weekly History</h3>
-            <div className="max-h-64 overflow-y-auto space-y-1 scrollbar-thin">
+            <div className="max-h-64 overflow-y-auto space-y-1 dark-scrollbar">
               {[...stats.weeklyAverages].reverse().map((w, i) => (
                 <div key={w.weekStart} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/5">
                   <div className="flex items-center gap-3">
@@ -504,7 +504,7 @@ export default function DailyScorePage() {
         {stats?.monthlyAverages && stats.monthlyAverages.length > 0 && (
           <div className="bg-background border border-border rounded-xl p-6" data-testid="monthly-history-list">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Monthly History</h3>
-            <div className="max-h-64 overflow-y-auto space-y-1 scrollbar-thin">
+            <div className="max-h-64 overflow-y-auto space-y-1 dark-scrollbar">
               {[...stats.monthlyAverages].reverse().map((m) => (
                 <div key={m.month} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/5">
                   <div className="flex items-center gap-3">
