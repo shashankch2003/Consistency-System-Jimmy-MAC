@@ -900,11 +900,37 @@ export default function JournalPage() {
               currentMonth={selectedDate}
               entries={monthEntries}
               selectedDate={selectedDate}
-              onSelectDate={(d) => { setSelectedDate(d); setViewMode("daily"); }}
+              onSelectDate={(d) => setSelectedDate(d)}
             />
           </div>
-          <div className="bg-card rounded-xl border border-white/10 p-4">
-            <MonthlyListView entries={monthEntries} onSelectDate={(d) => { setSelectedDate(d); setViewMode("daily"); }} />
+          <div className="bg-card rounded-xl border border-white/10 p-6 flex flex-col">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-base font-semibold" data-testid="text-monthly-preview-date">
+                {selectedDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+              </h3>
+              <button
+                onClick={() => setViewMode("daily")}
+                className="p-2 rounded-md text-muted-foreground hover:text-white hover:bg-white/10 transition-colors"
+                title="Open in daily view"
+                data-testid="button-monthly-expand"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <DailyEditor
+                key={dateStr}
+                selectedDate={selectedDate}
+                entry={currentEntry || null}
+                dayTypes={dayTypes}
+                onSave={(data) => saveMutation.mutate(data)}
+                onCreateCustomDayType={(name, emoji) => createCustomDayType.mutate({ name, emoji })}
+                onDeleteCustomDayType={(id) => deleteCustomDayType.mutate(id)}
+                onEditCustomDayType={(id, emoji) => editCustomDayType.mutate({ id, emoji })}
+                onEditBuiltinEmoji={(dayTypeName, emoji) => editBuiltinEmoji.mutate({ dayTypeName, emoji })}
+                isSaving={saveMutation.isPending}
+              />
+            </div>
           </div>
         </div>
       )}
