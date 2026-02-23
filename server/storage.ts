@@ -8,8 +8,11 @@ import {
   successfulFundamentals, userSettings,
   moneySettings, expenseCategories, expenses, budgets, subscriptions, bills, creditCards, savingsGoals,
   videos, videoFeedback,
+  friends, friendInvites, comparisonPrivacy, dailyStatsCache,
+  growGroups, growGroupMembers, growGroupMessages,
 } from "@shared/schema";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
+import { or, sql, inArray } from "drizzle-orm";
 
 type InsertYearlyGoal = typeof yearlyGoals.$inferInsert;
 type InsertMonthlyOverviewGoal = typeof monthlyOverviewGoals.$inferInsert;
@@ -40,6 +43,13 @@ type InsertCreditCard = typeof creditCards.$inferInsert;
 type InsertSavingsGoal = typeof savingsGoals.$inferInsert;
 type InsertVideo = typeof videos.$inferInsert;
 type InsertVideoFeedback = typeof videoFeedback.$inferInsert;
+type InsertFriend = typeof friends.$inferInsert;
+type InsertFriendInvite = typeof friendInvites.$inferInsert;
+type InsertComparisonPrivacy = typeof comparisonPrivacy.$inferInsert;
+type InsertDailyStatsCache = typeof dailyStatsCache.$inferInsert;
+type InsertGrowGroup = typeof growGroups.$inferInsert;
+type InsertGrowGroupMember = typeof growGroupMembers.$inferInsert;
+type InsertGrowGroupMessage = typeof growGroupMessages.$inferInsert;
 
 export interface IStorage extends IAuthStorage {
   getYearlyGoals(userId: string, year?: number): Promise<(typeof yearlyGoals.$inferSelect)[]>;
@@ -184,6 +194,53 @@ export interface IStorage extends IAuthStorage {
   createVideoFeedback(fb: InsertVideoFeedback): Promise<typeof videoFeedback.$inferSelect>;
   updateVideoFeedbackStatus(id: number, status: string): Promise<typeof videoFeedback.$inferSelect>;
   deleteVideoFeedback(id: number): Promise<void>;
+
+  // Grow Together - Friends
+  getFriends(userId: string): Promise<(typeof friends.$inferSelect)[]>;
+  getFriendRequests(userId: string): Promise<(typeof friends.$inferSelect)[]>;
+  getSentRequests(userId: string): Promise<(typeof friends.$inferSelect)[]>;
+  getFriendship(userId1: string, userId2: string): Promise<(typeof friends.$inferSelect) | undefined>;
+  createFriendRequest(data: InsertFriend): Promise<typeof friends.$inferSelect>;
+  updateFriendStatus(id: number, status: string): Promise<typeof friends.$inferSelect>;
+  deleteFriend(id: number): Promise<void>;
+
+  // Friend Invites
+  createFriendInvite(data: InsertFriendInvite): Promise<typeof friendInvites.$inferSelect>;
+  getFriendInviteByToken(token: string): Promise<(typeof friendInvites.$inferSelect) | undefined>;
+  updateFriendInvite(id: number, updates: Partial<InsertFriendInvite>): Promise<typeof friendInvites.$inferSelect>;
+
+  // Comparison Privacy
+  getComparisonPrivacy(userId: string): Promise<(typeof comparisonPrivacy.$inferSelect) | undefined>;
+  upsertComparisonPrivacy(userId: string, data: Partial<InsertComparisonPrivacy>): Promise<typeof comparisonPrivacy.$inferSelect>;
+
+  // Daily Stats Cache
+  getDailyStats(userId: string, date: string): Promise<(typeof dailyStatsCache.$inferSelect) | undefined>;
+  getDailyStatsRange(userId: string, dateFrom: string, dateTo: string): Promise<(typeof dailyStatsCache.$inferSelect)[]>;
+  upsertDailyStats(data: InsertDailyStatsCache): Promise<typeof dailyStatsCache.$inferSelect>;
+
+  // Paid membership check
+  hasPaidMembership(userId: string): Promise<boolean>;
+
+  // Grow Groups
+  getGrowGroups(publicOnly?: boolean): Promise<(typeof growGroups.$inferSelect)[]>;
+  getGrowGroup(id: number): Promise<(typeof growGroups.$inferSelect) | undefined>;
+  getUserGrowGroups(userId: string): Promise<(typeof growGroups.$inferSelect)[]>;
+  createGrowGroup(group: InsertGrowGroup): Promise<typeof growGroups.$inferSelect>;
+  updateGrowGroup(id: number, updates: Partial<InsertGrowGroup>): Promise<typeof growGroups.$inferSelect>;
+  deleteGrowGroup(id: number): Promise<void>;
+
+  // Group Members
+  getGroupMembers(groupId: number): Promise<(typeof growGroupMembers.$inferSelect)[]>;
+  getGroupMember(groupId: number, userId: string): Promise<(typeof growGroupMembers.$inferSelect) | undefined>;
+  addGroupMember(data: InsertGrowGroupMember): Promise<typeof growGroupMembers.$inferSelect>;
+  updateGroupMemberRole(id: number, role: string): Promise<typeof growGroupMembers.$inferSelect>;
+  removeGroupMember(groupId: number, userId: string): Promise<void>;
+
+  // Group Messages
+  getGroupMessages2(groupId: number, limit?: number, before?: number): Promise<(typeof growGroupMessages.$inferSelect)[]>;
+  createGroupMessage2(msg: InsertGrowGroupMessage): Promise<typeof growGroupMessages.$inferSelect>;
+  deleteGroupMessage2(id: number): Promise<void>;
+  getGroupMemberCount(groupId: number): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -743,6 +800,206 @@ export class DatabaseStorage implements IStorage {
 
   async deleteVideoFeedback(id: number) {
     await db.delete(videoFeedback).where(eq(videoFeedback.id, id));
+  }
+
+  // ===== GROW TOGETHER - FRIENDS =====
+  async getFriends(userId: string) {
+    return await db.select().from(friends).where(
+      and(
+        or(eq(friends.requesterId, userId), eq(friends.addresseeId, userId)),
+        eq(friends.status, "accepted")
+      )
+    ).orderBy(desc(friends.createdAt));
+  }
+
+  async getFriendRequests(userId: string) {
+    return await db.select().from(friends).where(
+      and(eq(friends.addresseeId, userId), eq(friends.status, "pending"))
+    ).orderBy(desc(friends.createdAt));
+  }
+
+  async getSentRequests(userId: string) {
+    return await db.select().from(friends).where(
+      and(eq(friends.requesterId, userId), eq(friends.status, "pending"))
+    ).orderBy(desc(friends.createdAt));
+  }
+
+  async getFriendship(userId1: string, userId2: string) {
+    const [f] = await db.select().from(friends).where(
+      or(
+        and(eq(friends.requesterId, userId1), eq(friends.addresseeId, userId2)),
+        and(eq(friends.requesterId, userId2), eq(friends.addresseeId, userId1))
+      )
+    );
+    return f;
+  }
+
+  async createFriendRequest(data: InsertFriend) {
+    const [created] = await db.insert(friends).values(data).returning();
+    return created;
+  }
+
+  async updateFriendStatus(id: number, status: string) {
+    const [updated] = await db.update(friends).set({ status }).where(eq(friends.id, id)).returning();
+    return updated;
+  }
+
+  async deleteFriend(id: number) {
+    await db.delete(friends).where(eq(friends.id, id));
+  }
+
+  // Friend Invites
+  async createFriendInvite(data: InsertFriendInvite) {
+    const [created] = await db.insert(friendInvites).values(data).returning();
+    return created;
+  }
+
+  async getFriendInviteByToken(token: string) {
+    const [invite] = await db.select().from(friendInvites).where(
+      and(eq(friendInvites.token, token), eq(friendInvites.status, "active"))
+    );
+    return invite;
+  }
+
+  async updateFriendInvite(id: number, updates: Partial<InsertFriendInvite>) {
+    const [updated] = await db.update(friendInvites).set(updates).where(eq(friendInvites.id, id)).returning();
+    return updated;
+  }
+
+  // Comparison Privacy
+  async getComparisonPrivacy(userId: string) {
+    const [privacy] = await db.select().from(comparisonPrivacy).where(eq(comparisonPrivacy.userId, userId));
+    return privacy;
+  }
+
+  async upsertComparisonPrivacy(userId: string, data: Partial<InsertComparisonPrivacy>) {
+    const existing = await this.getComparisonPrivacy(userId);
+    if (existing) {
+      const [updated] = await db.update(comparisonPrivacy).set({ ...data, updatedAt: new Date() }).where(eq(comparisonPrivacy.userId, userId)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(comparisonPrivacy).values({ ...data, userId }).returning();
+    return created;
+  }
+
+  // Daily Stats Cache
+  async getDailyStats(userId: string, date: string) {
+    const [stats] = await db.select().from(dailyStatsCache).where(
+      and(eq(dailyStatsCache.userId, userId), eq(dailyStatsCache.date, date))
+    );
+    return stats;
+  }
+
+  async getDailyStatsRange(userId: string, dateFrom: string, dateTo: string) {
+    return await db.select().from(dailyStatsCache).where(
+      and(eq(dailyStatsCache.userId, userId), gte(dailyStatsCache.date, dateFrom), lte(dailyStatsCache.date, dateTo))
+    ).orderBy(asc(dailyStatsCache.date));
+  }
+
+  async upsertDailyStats(data: InsertDailyStatsCache) {
+    const existing = await this.getDailyStats(data.userId, data.date);
+    if (existing) {
+      const [updated] = await db.update(dailyStatsCache).set({ ...data, computedAt: new Date() }).where(eq(dailyStatsCache.id, existing.id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(dailyStatsCache).values(data).returning();
+    return created;
+  }
+
+  // Paid membership check
+  async hasPaidMembership(userId: string) {
+    const [payment] = await db.select().from(payments).where(
+      and(eq(payments.userId, userId), eq(payments.status, "completed"))
+    );
+    return !!payment;
+  }
+
+  // ===== GROW GROUPS =====
+  async getGrowGroups(publicOnly = false) {
+    if (publicOnly) {
+      return await db.select().from(growGroups).where(eq(growGroups.isPublic, true)).orderBy(desc(growGroups.createdAt));
+    }
+    return await db.select().from(growGroups).orderBy(desc(growGroups.createdAt));
+  }
+
+  async getGrowGroup(id: number) {
+    const [group] = await db.select().from(growGroups).where(eq(growGroups.id, id));
+    return group;
+  }
+
+  async getUserGrowGroups(userId: string) {
+    const memberships = await db.select().from(growGroupMembers).where(eq(growGroupMembers.userId, userId));
+    if (memberships.length === 0) return [];
+    const groupIds = memberships.map(m => m.groupId);
+    return await db.select().from(growGroups).where(inArray(growGroups.id, groupIds)).orderBy(desc(growGroups.createdAt));
+  }
+
+  async createGrowGroup(group: InsertGrowGroup) {
+    const [created] = await db.insert(growGroups).values(group).returning();
+    return created;
+  }
+
+  async updateGrowGroup(id: number, updates: Partial<InsertGrowGroup>) {
+    const [updated] = await db.update(growGroups).set({ ...updates, updatedAt: new Date() }).where(eq(growGroups.id, id)).returning();
+    return updated;
+  }
+
+  async deleteGrowGroup(id: number) {
+    await db.delete(growGroupMessages).where(eq(growGroupMessages.groupId, id));
+    await db.delete(growGroupMembers).where(eq(growGroupMembers.groupId, id));
+    await db.delete(growGroups).where(eq(growGroups.id, id));
+  }
+
+  // Group Members
+  async getGroupMembers(groupId: number) {
+    return await db.select().from(growGroupMembers).where(eq(growGroupMembers.groupId, groupId)).orderBy(asc(growGroupMembers.joinedAt));
+  }
+
+  async getGroupMember(groupId: number, userId: string) {
+    const [member] = await db.select().from(growGroupMembers).where(
+      and(eq(growGroupMembers.groupId, groupId), eq(growGroupMembers.userId, userId))
+    );
+    return member;
+  }
+
+  async addGroupMember(data: InsertGrowGroupMember) {
+    const [created] = await db.insert(growGroupMembers).values(data).returning();
+    return created;
+  }
+
+  async updateGroupMemberRole(id: number, role: string) {
+    const [updated] = await db.update(growGroupMembers).set({ role }).where(eq(growGroupMembers.id, id)).returning();
+    return updated;
+  }
+
+  async removeGroupMember(groupId: number, userId: string) {
+    await db.delete(growGroupMembers).where(
+      and(eq(growGroupMembers.groupId, groupId), eq(growGroupMembers.userId, userId))
+    );
+  }
+
+  // Group Messages
+  async getGroupMessages2(groupId: number, limit = 50, before?: number) {
+    const conditions: any[] = [eq(growGroupMessages.groupId, groupId), eq(growGroupMessages.isDeleted, false)];
+    if (before) conditions.push(lte(growGroupMessages.id, before));
+    return await db.select().from(growGroupMessages)
+      .where(and(...conditions))
+      .orderBy(desc(growGroupMessages.id))
+      .limit(limit);
+  }
+
+  async createGroupMessage2(msg: InsertGrowGroupMessage) {
+    const [created] = await db.insert(growGroupMessages).values(msg).returning();
+    return created;
+  }
+
+  async deleteGroupMessage2(id: number) {
+    await db.update(growGroupMessages).set({ isDeleted: true }).where(eq(growGroupMessages.id, id));
+  }
+
+  async getGroupMemberCount(groupId: number) {
+    const members = await db.select().from(growGroupMembers).where(eq(growGroupMembers.groupId, groupId));
+    return members.length;
   }
 }
 

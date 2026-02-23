@@ -72,6 +72,21 @@ The frontend lives in `client/src/` with pages under `client/src/pages/`, reusab
   - `savings_goals` — Savings goals with target amounts, progress tracking, and monthly contributions
   - `videos` — YouTube video entries for the Know More section (title, description, category, youtube_url, duration, provider, sort_order, is_published)
   - `video_feedback` — User feedback on videos (video_id, user_id, feedback_type, message, status)
+  - `friends` — Friend connections with requesterId/addresseeId and status (pending/accepted/rejected/blocked)
+  - `friend_invites` — Shareable invite link tokens for adding friends
+  - `comparison_privacy` — Per-user privacy toggles for what data friends can see
+  - `daily_stats_cache` — Cached daily productivity metrics for comparison features
+  - `grow_groups` — Paid-only groups with name, description, public/private toggle
+  - `grow_group_members` — Group membership with roles (owner/admin/member)
+  - `grow_group_messages` — Group chat messages with soft-delete and reply support
+
+### Grow Together Section
+- **Route**: `/dashboard/grow-together` — Two tabs: Compare With Friends + Groups
+- **Compare With Friends**: Friend invite links, friend list, high-level comparison (daily/weekly/monthly averages, streaks, levels), deep daily comparison (per-metric breakdown with table), leaderboard (today/week/month), privacy controls
+- **Groups (Paid Only)**: Create/join public groups, group chat with real-time polling (5s), member list with roles, leave/delete group. Requires completed payment (₹3999) to create, join, or send messages
+- **Privacy Controls**: 6 toggles (daily score, weekly avg, monthly avg, streak, habit details, daily breakdown) controlling what friends can see
+- **Comparison Data Flow**: computeDailyMetrics() from level-engine.ts → upsertDailyStats cache → comparison endpoints
+- **API**: All endpoints under `/api/grow/` prefix (friends, privacy, stats, compare, leaderboard, membership, groups)
 
 ### Know More Section
 - **Route**: `/dashboard/know-more` — Video learning center with YouTube embedding

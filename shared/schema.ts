@@ -566,6 +566,118 @@ export const videoFeedback = pgTable("video_feedback", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// ===== GROW TOGETHER TABLES =====
+
+// Friends / Connections
+export const friends = pgTable("friends", {
+  id: serial("id").primaryKey(),
+  requesterId: varchar("requester_id").notNull(),
+  addresseeId: varchar("addressee_id").notNull(),
+  status: text("status").notNull().default("pending"), // pending / accepted / rejected / blocked
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Friend invite links (for sharing)
+export const friendInvites = pgTable("friend_invites", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  token: text("token").notNull().unique(),
+  usedBy: varchar("used_by"),
+  status: text("status").notNull().default("active"), // active / used / expired
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Comparison privacy settings per user
+export const comparisonPrivacy = pgTable("comparison_privacy", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().unique(),
+  shareDailyScore: boolean("share_daily_score").notNull().default(true),
+  shareWeeklyAverage: boolean("share_weekly_average").notNull().default(true),
+  shareMonthlyAverage: boolean("share_monthly_average").notNull().default(true),
+  shareStreak: boolean("share_streak").notNull().default(true),
+  shareHabitDetails: boolean("share_habit_details").notNull().default(true),
+  shareDailyBreakdown: boolean("share_daily_breakdown").notNull().default(true),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Cached daily stats for comparison (avoids recalculating)
+export const dailyStatsCache = pgTable("daily_stats_cache", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  date: text("date").notNull(), // YYYY-MM-DD
+  taskPct: integer("task_pct").notNull().default(0),
+  goodHabitPct: integer("good_habit_pct").notNull().default(0),
+  badHabitPct: integer("bad_habit_pct").notNull().default(0),
+  hourlyPct: integer("hourly_pct").notNull().default(0),
+  overallPct: integer("overall_pct").notNull().default(0),
+  totalTasks: integer("total_tasks").notNull().default(0),
+  completedTasks: integer("completed_tasks").notNull().default(0),
+  computedAt: timestamp("computed_at").defaultNow(),
+});
+
+// Grow Together Groups (paid feature)
+export const growGroups = pgTable("grow_groups", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").default(""),
+  isPublic: boolean("is_public").notNull().default(true),
+  createdBy: varchar("created_by").notNull(),
+  icon: text("icon").default("👥"),
+  rules: text("rules").default(""),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Group Members
+export const growGroupMembers = pgTable("grow_group_members", {
+  id: serial("id").primaryKey(),
+  groupId: integer("group_id").notNull(),
+  userId: varchar("user_id").notNull(),
+  role: text("role").notNull().default("member"), // owner / admin / member
+  joinedAt: timestamp("joined_at").defaultNow(),
+});
+
+// Group Messages
+export const growGroupMessages = pgTable("grow_group_messages", {
+  id: serial("id").primaryKey(),
+  groupId: integer("group_id").notNull(),
+  userId: varchar("user_id").notNull(),
+  senderName: varchar("sender_name"),
+  content: text("content").notNull(),
+  replyToId: integer("reply_to_id"),
+  isDeleted: boolean("is_deleted").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  editedAt: timestamp("edited_at"),
+});
+
+export const insertFriendSchema = createInsertSchema(friends).omit({ id: true, createdAt: true });
+export type InsertFriend = z.infer<typeof insertFriendSchema>;
+export type Friend = typeof friends.$inferSelect;
+
+export const insertFriendInviteSchema = createInsertSchema(friendInvites).omit({ id: true, createdAt: true });
+export type InsertFriendInvite = z.infer<typeof insertFriendInviteSchema>;
+export type FriendInvite = typeof friendInvites.$inferSelect;
+
+export const insertComparisonPrivacySchema = createInsertSchema(comparisonPrivacy).omit({ id: true, updatedAt: true });
+export type InsertComparisonPrivacy = z.infer<typeof insertComparisonPrivacySchema>;
+export type ComparisonPrivacy = typeof comparisonPrivacy.$inferSelect;
+
+export const insertDailyStatsCacheSchema = createInsertSchema(dailyStatsCache).omit({ id: true, computedAt: true });
+export type InsertDailyStatsCache = z.infer<typeof insertDailyStatsCacheSchema>;
+export type DailyStatsCache = typeof dailyStatsCache.$inferSelect;
+
+export const insertGrowGroupSchema = createInsertSchema(growGroups).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertGrowGroup = z.infer<typeof insertGrowGroupSchema>;
+export type GrowGroup = typeof growGroups.$inferSelect;
+
+export const insertGrowGroupMemberSchema = createInsertSchema(growGroupMembers).omit({ id: true, joinedAt: true });
+export type InsertGrowGroupMember = z.infer<typeof insertGrowGroupMemberSchema>;
+export type GrowGroupMember = typeof growGroupMembers.$inferSelect;
+
+export const insertGrowGroupMessageSchema = createInsertSchema(growGroupMessages).omit({ id: true, createdAt: true, editedAt: true });
+export type InsertGrowGroupMessage = z.infer<typeof insertGrowGroupMessageSchema>;
+export type GrowGroupMessage = typeof growGroupMessages.$inferSelect;
+
 export const insertVideoSchema = createInsertSchema(videos).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertVideo = z.infer<typeof insertVideoSchema>;
 export type Video = typeof videos.$inferSelect;

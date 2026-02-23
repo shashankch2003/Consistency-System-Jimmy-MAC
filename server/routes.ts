@@ -1512,5 +1512,478 @@ export async function registerRoutes(
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  // ===== GROW TOGETHER - FRIENDS =====
+
+  // Get accepted friends list
+  app.get("/api/grow/friends", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const friendsList = await storage.getFriends(userId);
+      const friendsWithNames = await Promise.all(friendsList.map(async (f) => {
+        const friendId = f.requesterId === userId ? f.addresseeId : f.requesterId;
+        const friendUser = await storage.getUser(friendId);
+        return { ...f, friendId, friendName: friendUser?.firstName ? `${friendUser.firstName} ${friendUser.lastName || ""}`.trim() : friendId.slice(0, 8) };
+      }));
+      res.json(friendsWithNames);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Get pending friend requests received
+  app.get("/api/grow/friends/requests", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const requests = await storage.getFriendRequests(userId);
+      const withNames = await Promise.all(requests.map(async (r) => {
+        const user = await storage.getUser(r.requesterId);
+        return { ...r, requesterName: user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : r.requesterId.slice(0, 8) };
+      }));
+      res.json(withNames);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Get sent requests
+  app.get("/api/grow/friends/sent", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      res.json(await storage.getSentRequests(userId));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Generate invite link
+  app.post("/api/grow/friends/invite", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const token = crypto.randomBytes(16).toString("hex");
+      const invite = await storage.createFriendInvite({ userId, token, status: "active" });
+      res.json({ token: invite.token, link: `/dashboard/grow-together?invite=${invite.token}` });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Accept invite link
+  app.post("/api/grow/friends/accept-invite", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { token } = req.body;
+      if (!token) return res.status(400).json({ message: "Token required" });
+      const invite = await storage.getFriendInviteByToken(token);
+      if (!invite) return res.status(404).json({ message: "Invalid or expired invite" });
+      if (invite.userId === userId) return res.status(400).json({ message: "Cannot add yourself" });
+      const existing = await storage.getFriendship(userId, invite.userId);
+      if (existing) return res.status(400).json({ message: "Already connected or request pending" });
+      const friend = await storage.createFriendRequest({ requesterId: invite.userId, addresseeId: userId, status: "accepted" });
+      await storage.updateFriendInvite(invite.id, { status: "used", usedBy: userId });
+      res.json(friend);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Accept/reject friend request
+  app.patch("/api/grow/friends/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { status } = req.body;
+      if (!["accepted", "rejected"].includes(status)) return res.status(400).json({ message: "Invalid status" });
+      const friendId = parseInt(req.params.id);
+      const friendship = await storage.getFriendRequests(userId);
+      const match = friendship.find(f => f.id === friendId);
+      if (!match) return res.status(403).json({ message: "Not authorized to update this request" });
+      const updated = await storage.updateFriendStatus(friendId, status);
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Remove friend
+  app.delete("/api/grow/friends/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const friendId = parseInt(req.params.id);
+      const friendsList = await storage.getFriends(userId);
+      const match = friendsList.find(f => f.id === friendId);
+      if (!match) return res.status(403).json({ message: "Not authorized to remove this friendship" });
+      await storage.deleteFriend(friendId);
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ===== COMPARISON PRIVACY =====
+
+  app.get("/api/grow/privacy", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      let privacy = await storage.getComparisonPrivacy(userId);
+      if (!privacy) privacy = await storage.upsertComparisonPrivacy(userId, {});
+      res.json(privacy);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.put("/api/grow/privacy", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const updated = await storage.upsertComparisonPrivacy(userId, req.body);
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ===== COMPARISON DATA =====
+
+  // Compute and cache daily stats for a user/date
+  app.post("/api/grow/stats/compute", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { date } = req.body;
+      if (!date) return res.status(400).json({ message: "Date required" });
+      const metrics = await computeDailyMetrics(userId, date);
+      const overallPct = Math.round((metrics.taskCompletionPct + metrics.goodHabitsPct + metrics.hourlyCompletionPct) / 3);
+      const dayTasks = await storage.getTasks(userId, date);
+      const completedTasks = dayTasks.filter(t => (t.completionPercentage || 0) >= 100).length;
+      const cached = await storage.upsertDailyStats({
+        userId, date,
+        taskPct: metrics.taskCompletionPct,
+        goodHabitPct: metrics.goodHabitsPct,
+        badHabitPct: metrics.badHabitsPct,
+        hourlyPct: metrics.hourlyCompletionPct,
+        overallPct,
+        totalTasks: dayTasks.length,
+        completedTasks,
+      });
+      res.json(cached);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // High-level comparison with a friend
+  app.get("/api/grow/compare/:friendId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const friendId = req.params.friendId;
+      const friendship = await storage.getFriendship(userId, friendId);
+      if (!friendship || friendship.status !== "accepted") return res.status(403).json({ message: "Not connected" });
+      const friendPrivacy = await storage.getComparisonPrivacy(friendId);
+      const now = new Date();
+      const today = now.toISOString().split("T")[0];
+      const monthStart = today.slice(0, 7) + "-01";
+      const weekStart = new Date(now.setDate(now.getDate() - now.getDay())).toISOString().split("T")[0];
+
+      const [myStats, friendStats] = await Promise.all([
+        storage.getDailyStatsRange(userId, monthStart, today),
+        storage.getDailyStatsRange(friendId, monthStart, today),
+      ]);
+      const [myStreak, friendStreak] = await Promise.all([
+        storage.getUserStreak(userId),
+        storage.getUserStreak(friendId),
+      ]);
+      const [myLevel, friendLevel] = await Promise.all([
+        storage.getUserLevel(userId),
+        storage.getUserLevel(friendId),
+      ]);
+
+      const calcAvg = (stats: any[], from?: string) => {
+        const filtered = from ? stats.filter(s => s.date >= from) : stats;
+        if (filtered.length === 0) return 0;
+        return Math.round(filtered.reduce((sum, s) => sum + s.overallPct, 0) / filtered.length);
+      };
+
+      const myData = {
+        dailyAvg: calcAvg(myStats, today),
+        weeklyAvg: calcAvg(myStats, weekStart),
+        monthlyAvg: calcAvg(myStats),
+        currentStreak: myStreak?.currentStreak || 0,
+        longestStreak: myStreak?.longestStreak || 0,
+        level: myLevel?.level || "Unproductive",
+      };
+
+      const isPrivate = (field: string) => friendPrivacy && !(friendPrivacy as any)[field];
+      const friendData = {
+        dailyAvg: isPrivate("shareDailyScore") ? null : calcAvg(friendStats, today),
+        weeklyAvg: isPrivate("shareWeeklyAverage") ? null : calcAvg(friendStats, weekStart),
+        monthlyAvg: isPrivate("shareMonthlyAverage") ? null : calcAvg(friendStats),
+        currentStreak: isPrivate("shareStreak") ? null : (friendStreak?.currentStreak || 0),
+        longestStreak: isPrivate("shareStreak") ? null : (friendStreak?.longestStreak || 0),
+        level: friendLevel?.level || "Unproductive",
+      };
+
+      res.json({ myData, friendData });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Deep daily comparison for a specific date
+  app.get("/api/grow/compare/:friendId/deep", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const friendId = req.params.friendId;
+      const date = req.query.date as string;
+      if (!date) return res.status(400).json({ message: "Date required" });
+      const friendship = await storage.getFriendship(userId, friendId);
+      if (!friendship || friendship.status !== "accepted") return res.status(403).json({ message: "Not connected" });
+      const friendPrivacy = await storage.getComparisonPrivacy(friendId);
+      if (friendPrivacy && !friendPrivacy.shareDailyBreakdown) return res.json({ friendData: null, message: "Friend has set this data to private" });
+
+      const [myMetrics, friendMetrics] = await Promise.all([
+        computeDailyMetrics(userId, date),
+        computeDailyMetrics(friendId, date),
+      ]);
+      const [myTasks, friendTasks] = await Promise.all([
+        storage.getTasks(userId, date),
+        storage.getTasks(friendId, date),
+      ]);
+
+      const myOverall = Math.round((myMetrics.taskCompletionPct + myMetrics.goodHabitsPct + myMetrics.hourlyCompletionPct) / 3);
+      const friendOverall = Math.round((friendMetrics.taskCompletionPct + friendMetrics.goodHabitsPct + friendMetrics.hourlyCompletionPct) / 3);
+
+      res.json({
+        myData: {
+          overallPct: myOverall,
+          taskPct: myMetrics.taskCompletionPct,
+          goodHabitPct: myMetrics.goodHabitsPct,
+          badHabitPct: myMetrics.badHabitsPct,
+          hourlyPct: myMetrics.hourlyCompletionPct,
+          totalTasks: myTasks.length,
+          completedTasks: myTasks.filter(t => (t.completionPercentage || 0) >= 100).length,
+        },
+        friendData: {
+          overallPct: friendOverall,
+          taskPct: friendMetrics.taskCompletionPct,
+          goodHabitPct: friendMetrics.goodHabitsPct,
+          badHabitPct: friendMetrics.badHabitsPct,
+          hourlyPct: friendMetrics.hourlyCompletionPct,
+          totalTasks: friendTasks.length,
+          completedTasks: friendTasks.filter(t => (t.completionPercentage || 0) >= 100).length,
+        },
+      });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Multi-friend leaderboard
+  app.get("/api/grow/leaderboard", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const period = (req.query.period as string) || "today";
+      const friendsList = await storage.getFriends(userId);
+      const now = new Date();
+      const today = now.toISOString().split("T")[0];
+
+      let dateFrom = today;
+      if (period === "week") {
+        const d = new Date();
+        d.setDate(d.getDate() - d.getDay());
+        dateFrom = d.toISOString().split("T")[0];
+      } else if (period === "month") {
+        dateFrom = today.slice(0, 7) + "-01";
+      }
+
+      const userIds = [userId, ...friendsList.map(f => f.requesterId === userId ? f.addresseeId : f.requesterId)];
+      const entries = await Promise.all(userIds.map(async (uid) => {
+        const stats = await storage.getDailyStatsRange(uid, dateFrom, today);
+        const user = await storage.getUser(uid);
+        const streak = await storage.getUserStreak(uid);
+        const level = await storage.getUserLevel(uid);
+        const privacy = await storage.getComparisonPrivacy(uid);
+        const avg = stats.length > 0 ? Math.round(stats.reduce((s, x) => s + x.overallPct, 0) / stats.length) : 0;
+        const isMe = uid === userId;
+        const canSee = isMe || !privacy || (privacy as any)[period === "today" ? "shareDailyScore" : period === "week" ? "shareWeeklyAverage" : "shareMonthlyAverage"];
+        return {
+          userId: uid,
+          name: user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : uid.slice(0, 8),
+          average: canSee ? avg : null,
+          currentStreak: isMe || !privacy || privacy.shareStreak ? (streak?.currentStreak || 0) : null,
+          level: level?.level || "Unproductive",
+          isMe,
+        };
+      }));
+
+      entries.sort((a, b) => (b.average ?? -1) - (a.average ?? -1));
+      res.json(entries);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ===== GROW TOGETHER - GROUPS =====
+
+  // Check paid membership
+  app.get("/api/grow/membership", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const hasPaid = await storage.hasPaidMembership(userId);
+      res.json({ hasPaid });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Get user's groups
+  app.get("/api/grow/groups/my", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const groups = await storage.getUserGrowGroups(userId);
+      const withCounts = await Promise.all(groups.map(async (g) => ({
+        ...g,
+        memberCount: await storage.getGroupMemberCount(g.id),
+      })));
+      res.json(withCounts);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Discover public groups
+  app.get("/api/grow/groups/discover", isAuthenticated, async (req: any, res) => {
+    try {
+      const groups = await storage.getGrowGroups(true);
+      const withCounts = await Promise.all(groups.map(async (g) => ({
+        ...g,
+        memberCount: await storage.getGroupMemberCount(g.id),
+      })));
+      res.json(withCounts);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Create group (paid only)
+  app.post("/api/grow/groups", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const hasPaid = await storage.hasPaidMembership(userId);
+      if (!hasPaid) return res.status(403).json({ message: "Active paid membership required to create groups" });
+      const { name, description, isPublic, icon, rules } = req.body;
+      if (!name?.trim()) return res.status(400).json({ message: "Group name required" });
+      const group = await storage.createGrowGroup({ name, description, isPublic: isPublic ?? true, createdBy: userId, icon, rules });
+      await storage.addGroupMember({ groupId: group.id, userId, role: "owner" });
+      res.json(group);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Get group details
+  app.get("/api/grow/groups/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const group = await storage.getGrowGroup(parseInt(req.params.id));
+      if (!group) return res.status(404).json({ message: "Group not found" });
+      const members = await storage.getGroupMembers(group.id);
+      const membersWithNames = await Promise.all(members.map(async (m) => {
+        const user = await storage.getUser(m.userId);
+        return { ...m, name: user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : m.userId.slice(0, 8) };
+      }));
+      res.json({ ...group, members: membersWithNames, memberCount: members.length });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Update group
+  app.patch("/api/grow/groups/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const groupId = parseInt(req.params.id);
+      const member = await storage.getGroupMember(groupId, userId);
+      if (!member || !["owner", "admin"].includes(member.role)) return res.status(403).json({ message: "Not authorized" });
+      const updated = await storage.updateGrowGroup(groupId, req.body);
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Join group (paid only)
+  app.post("/api/grow/groups/:id/join", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const groupId = parseInt(req.params.id);
+      const hasPaid = await storage.hasPaidMembership(userId);
+      if (!hasPaid) return res.status(403).json({ message: "Active paid membership required to join groups" });
+      const group = await storage.getGrowGroup(groupId);
+      if (!group) return res.status(404).json({ message: "Group not found" });
+      if (!group.isPublic) return res.status(403).json({ message: "This is a private group. You need an invite." });
+      const existing = await storage.getGroupMember(groupId, userId);
+      if (existing) return res.status(400).json({ message: "Already a member" });
+      const member = await storage.addGroupMember({ groupId, userId, role: "member" });
+      res.json(member);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Leave group
+  app.post("/api/grow/groups/:id/leave", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const groupId = parseInt(req.params.id);
+      const member = await storage.getGroupMember(groupId, userId);
+      if (!member) return res.status(404).json({ message: "Not a member" });
+      if (member.role === "owner") return res.status(400).json({ message: "Owner cannot leave. Transfer ownership or delete the group." });
+      await storage.removeGroupMember(groupId, userId);
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Delete group (owner only)
+  app.delete("/api/grow/groups/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const groupId = parseInt(req.params.id);
+      const member = await storage.getGroupMember(groupId, userId);
+      if (!member || member.role !== "owner") return res.status(403).json({ message: "Only group owner can delete" });
+      await storage.deleteGrowGroup(groupId);
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Kick member (admin/owner)
+  app.delete("/api/grow/groups/:id/members/:userId", isAuthenticated, async (req: any, res) => {
+    try {
+      const currentUser = req.user.claims.sub;
+      const groupId = parseInt(req.params.id);
+      const targetUserId = req.params.userId;
+      const member = await storage.getGroupMember(groupId, currentUser);
+      if (!member || !["owner", "admin"].includes(member.role)) return res.status(403).json({ message: "Not authorized" });
+      await storage.removeGroupMember(groupId, targetUserId);
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Promote member (owner only)
+  app.patch("/api/grow/groups/:id/members/:memberId/role", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const groupId = parseInt(req.params.id);
+      const memberId = parseInt(req.params.memberId);
+      const { role } = req.body;
+      const currentMember = await storage.getGroupMember(groupId, userId);
+      if (!currentMember || currentMember.role !== "owner") return res.status(403).json({ message: "Only owner can change roles" });
+      const updated = await storage.updateGroupMemberRole(memberId, role);
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Group messages (with pagination)
+  app.get("/api/grow/groups/:id/messages", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const groupId = parseInt(req.params.id);
+      const member = await storage.getGroupMember(groupId, userId);
+      if (!member) return res.status(403).json({ message: "Not a member" });
+      const limit = parseInt(req.query.limit as string) || 50;
+      const before = req.query.before ? parseInt(req.query.before as string) : undefined;
+      const messages = await storage.getGroupMessages2(groupId, limit, before);
+      res.json(messages.reverse());
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Send message (paid only)
+  app.post("/api/grow/groups/:id/messages", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const groupId = parseInt(req.params.id);
+      const hasPaid = await storage.hasPaidMembership(userId);
+      if (!hasPaid) return res.status(403).json({ message: "Active paid membership required to send messages" });
+      const member = await storage.getGroupMember(groupId, userId);
+      if (!member) return res.status(403).json({ message: "Not a member" });
+      const { content, replyToId } = req.body;
+      if (!content?.trim()) return res.status(400).json({ message: "Message content required" });
+      if (content.length > 2000) return res.status(400).json({ message: "Message too long" });
+      const user = await storage.getUser(userId);
+      const senderName = user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : undefined;
+      const msg = await storage.createGroupMessage2({ groupId, userId, senderName, content, replyToId, isDeleted: false });
+      res.json(msg);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Delete message (own or admin/owner)
+  app.delete("/api/grow/groups/:groupId/messages/:msgId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const groupId = parseInt(req.params.groupId);
+      const msgId = parseInt(req.params.msgId);
+      const member = await storage.getGroupMember(groupId, userId);
+      if (!member) return res.status(403).json({ message: "Not a member" });
+      await storage.deleteGroupMessage2(msgId);
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   return httpServer;
 }

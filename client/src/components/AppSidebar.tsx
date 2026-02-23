@@ -31,7 +31,8 @@ import {
   Trophy,
   Settings,
   Wallet,
-  PlayCircle
+  PlayCircle,
+  HeartHandshake
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -48,6 +49,7 @@ const menuItems = [
   { title: "Fundamentals", icon: Trophy, url: "/dashboard/fundamentals" },
   { title: "Money", icon: Wallet, url: "/dashboard/money" },
   { title: "Know More", icon: PlayCircle, url: "/dashboard/know-more" },
+  { title: "Grow Together", icon: HeartHandshake, url: "/dashboard/grow-together" },
   { title: "Community", icon: Users, url: "/dashboard/community" },
   { title: "Settings", icon: Settings, url: "/dashboard/settings" },
 ];
