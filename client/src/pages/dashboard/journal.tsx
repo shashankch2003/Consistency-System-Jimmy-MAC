@@ -393,7 +393,7 @@ function DailyEditor({
           placeholder="Write about your day..."
           value={journalText}
           onChange={(e) => setJournalText(e.target.value)}
-          className="flex-1 min-h-[300px] bg-white/5 border-white/10 resize-y"
+          className="flex-1 w-full min-h-[300px] bg-white/5 border-white/10 resize-y"
           data-testid="textarea-journal"
         />
       </div>
@@ -454,7 +454,12 @@ function DailyEditor({
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  setJournalText(prev => (prev ? prev + "\n\n" : "") + extractedText);
+                  const cleaned = extractedText
+                    .replace(/\r\n/g, "\n")
+                    .replace(/(?<!\n)\n(?!\n)/g, " ")
+                    .replace(/  +/g, " ")
+                    .trim();
+                  setJournalText(prev => (prev ? prev + "\n\n" : "") + cleaned);
                   toast({ title: "Text pasted into journal" });
                 }}
                 data-testid="button-paste-ocr"
