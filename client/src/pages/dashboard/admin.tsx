@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import {
   Shield, Send, Trash2, Inbox, MessageSquare, ArrowLeft,
-  Star, Trophy, Crown, Gem, Zap, CheckCheck, Users, Lock
+  Star, Trophy, Crown, Gem, Flame, CheckCheck, Users, Lock
 } from "lucide-react";
 import { LEVELS, INTERACTIVE_LEVELS } from "@shared/schema";
 
@@ -17,7 +17,7 @@ const LEVEL_CONFIG: Record<string, { icon: any; color: string; avatarBg: string 
   Gold: { icon: Trophy, color: "text-yellow-400", avatarBg: "bg-yellow-900" },
   Platinum: { icon: Crown, color: "text-cyan-400", avatarBg: "bg-cyan-900" },
   Diamond: { icon: Gem, color: "text-blue-400", avatarBg: "bg-blue-900" },
-  Elite: { icon: Zap, color: "text-purple-400", avatarBg: "bg-purple-900" },
+  Elite: { icon: Flame, color: "text-amber-400", avatarBg: "bg-amber-950" },
 };
 
 type GroupMessage = {

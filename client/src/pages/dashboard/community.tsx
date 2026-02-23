@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Shield, Trophy, Crown, Star, Gem, Zap, Send, Lock,
+  Shield, Trophy, Crown, Star, Gem, Flame, Send, Lock,
   TrendingUp, Target, MessageCircle, ArrowLeft, Info,
   ChevronRight, Users, CheckCheck
 } from "lucide-react";
@@ -18,7 +18,7 @@ const LEVEL_CONFIG: Record<string, { icon: any; color: string; bg: string; avata
   Gold: { icon: Trophy, color: "text-yellow-400", bg: "bg-yellow-400/10", avatarBg: "bg-yellow-900" },
   Platinum: { icon: Crown, color: "text-cyan-400", bg: "bg-cyan-400/10", avatarBg: "bg-cyan-900" },
   Diamond: { icon: Gem, color: "text-blue-400", bg: "bg-blue-400/10", avatarBg: "bg-blue-900" },
-  Elite: { icon: Zap, color: "text-purple-400", bg: "bg-purple-400/10", avatarBg: "bg-purple-900" },
+  Elite: { icon: Flame, color: "text-amber-400", bg: "bg-amber-400/10", avatarBg: "bg-amber-950" },
 };
 
 type LevelStatus = {
@@ -135,7 +135,7 @@ export default function CommunityPage() {
 
   if (isLoading) {
     return (
-      <div className="p-4 pt-14 sm:p-8 sm:pt-8 flex items-center justify-center min-h-[60vh]">
+      <div className="p-2 pt-14 sm:p-4 sm:pt-4 flex items-center justify-center min-h-[60vh]">
         <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
       </div>
     );
@@ -144,7 +144,7 @@ export default function CommunityPage() {
   const progress = levelStatus?.currentMonthProgress;
 
   return (
-    <div className="p-4 pt-14 sm:p-8 sm:pt-8 h-[calc(100vh-2rem)] sm:h-[calc(100vh-4rem)] flex flex-col max-w-5xl mx-auto">
+    <div className="p-2 pt-14 sm:p-4 sm:pt-4 h-[calc(100vh-1rem)] sm:h-[calc(100vh-2rem)] flex flex-col">
       <div className="flex-1 min-h-0 flex flex-col sm:flex-row border border-border rounded-xl overflow-hidden bg-card/30">
 
         <div className={cn(
