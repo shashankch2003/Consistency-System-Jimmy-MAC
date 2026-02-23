@@ -1,8 +1,23 @@
 import { AppSidebar } from "@/components/AppSidebar";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect } from "react";
 import { useLocation } from "wouter";
+
+function DashboardContent({ children }: { children: React.ReactNode }) {
+  const { state } = useSidebar();
+
+  return (
+    <main className="flex-1 overflow-y-auto overflow-x-hidden relative">
+      {state === "collapsed" && (
+        <div className="fixed top-3 left-3 z-20">
+          <SidebarTrigger className="bg-card/90 backdrop-blur-sm border border-border shadow-lg rounded-lg" data-testid="button-sidebar-reopen" />
+        </div>
+      )}
+      {children}
+    </main>
+  );
+}
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -26,12 +41,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <SidebarProvider>
       <div className="flex min-h-screen w-full bg-background">
         <AppSidebar />
-        <main className="flex-1 overflow-y-auto overflow-x-hidden relative">
-          <div className="fixed top-3 left-3 z-20 group-data-[state=expanded]/sidebar-wrapper:hidden">
-            <SidebarTrigger className="bg-card/90 backdrop-blur-sm border border-border shadow-lg rounded-lg" data-testid="button-sidebar-reopen" />
-          </div>
-          {children}
-        </main>
+        <DashboardContent>{children}</DashboardContent>
       </div>
     </SidebarProvider>
   );
