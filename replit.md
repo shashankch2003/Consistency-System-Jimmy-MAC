@@ -54,6 +54,19 @@ The frontend lives in `client/src/` with pages under `client/src/pages/`, reusab
   - `bad_habits` / `bad_habit_entries` — Bad habit tracking with daily entries
   - `hourly_entries` — Hourly time tracking
   - `notes` — Notion-like notes/pages with title, content, and emoji icons
+  - `user_levels` — User ranking level with consecutive month tracking
+  - `monthly_evaluations` — Monthly evaluation results per user
+  - `group_messages` — Group chat messages per level
+  - `admin_inbox` — User-to-admin contact messages
+
+### Level/Ranking System
+- **7 Levels**: Unproductive (default) → Bronze → Silver → Gold → Platinum → Diamond → Elite
+- **Level Engine**: `server/level-engine.ts` computes daily metrics from tasks/habits/hourly data, counts qualifying days per level, runs monthly evaluations
+- **Elite Qualification**: All days 95%+ all metrics OR 26+ days of 100% all metrics, 0% bad habits
+- **Consecutive Months**: Required for Silver+ (Silver=2, Gold=3, Platinum=4, Diamond=5, Elite=6)
+- **Group Messaging**: Each level has a group. Read-only for Unproductive-Gold. Chat enabled for Platinum/Diamond/Elite
+- **Admin**: ADMIN_USER_ID env var identifies admin. Admin can post to any group, view user inbox, delete messages
+- **Frontend Pages**: `/dashboard/community` (level status, group, progress, contact admin), `/dashboard/admin` (admin panel)
 
 ### Shared Code
 The `shared/` directory contains code used by both frontend and backend:

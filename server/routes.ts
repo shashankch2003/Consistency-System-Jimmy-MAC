@@ -8,6 +8,14 @@ import crypto from "crypto";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { LEVELS, LEVEL_INDEX, INTERACTIVE_LEVELS } from "@shared/schema";
+import { getCurrentLevelStatus, runMonthlyEvaluation, computeDailyMetrics } from "./level-engine";
+
+const ADMIN_USER_ID = process.env.ADMIN_USER_ID || "";
+
+function isAdmin(req: any): boolean {
+  return req.user?.claims?.sub === ADMIN_USER_ID && ADMIN_USER_ID !== "";
+}
 
 const uploadDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
@@ -462,6 +470,141 @@ export async function registerRoutes(
       });
       res.json({ success: true });
     } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
+  // Level & Group System
+  app.get("/api/level/status", isAuthenticated, async (req: any, res) => {
+    try {
+      const status = await getCurrentLevelStatus(req.user.claims.sub);
+      res.json(status);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/level/daily-metrics", isAuthenticated, async (req: any, res) => {
+    try {
+      const date = req.query.date as string;
+      if (!date) return res.status(400).json({ message: "date required" });
+      const metrics = await computeDailyMetrics(req.user.claims.sub, date);
+      res.json(metrics);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/level/evaluate", isAuthenticated, async (req: any, res) => {
+    try {
+      const { month } = req.body;
+      if (!month) return res.status(400).json({ message: "month required (YYYY-MM)" });
+      const result = await runMonthlyEvaluation(req.user.claims.sub, month);
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/level/evaluations", isAuthenticated, async (req: any, res) => {
+    const evals = await storage.getMonthlyEvaluations(req.user.claims.sub);
+    res.json(evals);
+  });
+
+  app.get("/api/level/is-admin", isAuthenticated, async (req: any, res) => {
+    res.json({ isAdmin: isAdmin(req) });
+  });
+
+  app.get("/api/groups/:level/messages", isAuthenticated, async (req: any, res) => {
+    try {
+      const level = req.params.level;
+      const userId = req.user.claims.sub;
+      const userLevel = await storage.getUserLevel(userId);
+      const userLevelName = userLevel?.level || "Unproductive";
+
+      if (!isAdmin(req) && userLevelName !== level) {
+        return res.status(403).json({ message: "You don't have access to this group" });
+      }
+
+      const messages = await storage.getGroupMessages(level);
+      res.json(messages);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/groups/:level/messages", isAuthenticated, async (req: any, res) => {
+    try {
+      const level = req.params.level;
+      const userId = req.user.claims.sub;
+      const { content } = req.body;
+      if (!content || !content.trim()) return res.status(400).json({ message: "content required" });
+
+      if (isAdmin(req)) {
+        const msg = await storage.createGroupMessage({
+          level,
+          content: content.trim(),
+          createdBy: userId,
+          senderName: "Admin",
+          isAdmin: true,
+        });
+        return res.status(201).json(msg);
+      }
+
+      if (!INTERACTIVE_LEVELS.includes(level)) {
+        return res.status(403).json({ message: "Chat is not available in this group" });
+      }
+
+      const userLevel = await storage.getUserLevel(userId);
+      const userLevelName = userLevel?.level || "Unproductive";
+      if (userLevelName !== level) {
+        return res.status(403).json({ message: "You don't have access to this group" });
+      }
+
+      const user = await storage.getUser(userId);
+      const senderName = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User" : "User";
+
+      const msg = await storage.createGroupMessage({
+        level,
+        content: content.trim(),
+        createdBy: userId,
+        senderName,
+        isAdmin: false,
+      });
+      res.status(201).json(msg);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/groups/messages/:id", isAuthenticated, async (req: any, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ message: "Admin only" });
+    await storage.deleteGroupMessage(parseInt(req.params.id));
+    res.status(204).end();
+  });
+
+  // Admin inbox
+  app.post("/api/inbox", isAuthenticated, async (req: any, res) => {
+    try {
+      const { content } = req.body;
+      if (!content || !content.trim()) return res.status(400).json({ message: "content required" });
+      const msg = await storage.createAdminInboxMessage({
+        userId: req.user.claims.sub,
+        content: content.trim(),
+      });
+      res.status(201).json(msg);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/admin/inbox", isAuthenticated, async (req: any, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ message: "Admin only" });
+    const messages = await storage.getAdminInbox();
+    res.json(messages);
+  });
+
+  app.patch("/api/admin/inbox/:id", isAuthenticated, async (req: any, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ message: "Admin only" });
+    try {
+      const { status } = req.body;
+      if (!["read", "dismissed"].includes(status)) return res.status(400).json({ message: "Invalid status" });
+      const updated = await storage.updateAdminInboxStatus(parseInt(req.params.id), status);
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Admin: get all users with levels
+  app.get("/api/admin/users", isAuthenticated, async (req: any, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ message: "Admin only" });
+    const levels = await storage.getAllUserLevels();
+    res.json(levels);
   });
 
   // Image upload

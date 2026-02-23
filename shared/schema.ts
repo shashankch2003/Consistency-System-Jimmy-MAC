@@ -132,14 +132,45 @@ export const notes = pgTable("notes", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const LEVELS = ["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Elite"] as const;
+export const LEVELS = ["Unproductive", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Elite"] as const;
 export type Level = typeof LEVELS[number];
+
+export const LEVEL_INDEX: Record<string, number> = {
+  Unproductive: 0, Bronze: 1, Silver: 2, Gold: 3, Platinum: 4, Diamond: 5, Elite: 6,
+};
+
+export const LEVEL_REQUIREMENTS: Record<string, { percent: number; days: number; consecutiveMonths: number }> = {
+  Unproductive: { percent: 0, days: 0, consecutiveMonths: 0 },
+  Bronze: { percent: 60, days: 25, consecutiveMonths: 1 },
+  Silver: { percent: 70, days: 25, consecutiveMonths: 2 },
+  Gold: { percent: 80, days: 25, consecutiveMonths: 2 },
+  Platinum: { percent: 90, days: 25, consecutiveMonths: 2 },
+  Diamond: { percent: 90, days: 26, consecutiveMonths: 3 },
+  Elite: { percent: 95, days: 0, consecutiveMonths: 3 },
+};
+
+export const INTERACTIVE_LEVELS = ["Platinum", "Diamond", "Elite"];
 
 export const userLevels = pgTable("user_levels", {
   id: serial("id").primaryKey(),
   userId: varchar("user_id").notNull().unique(),
-  level: text("level").notNull().default("Bronze"),
+  level: text("level").notNull().default("Unproductive"),
+  consecutiveMonths: integer("consecutive_months").notNull().default(0),
+  lastEvaluatedMonth: text("last_evaluated_month"),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const monthlyEvaluations = pgTable("monthly_evaluations", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  month: text("month").notNull(),
+  qualifyingDays: integer("qualifying_days").notNull().default(0),
+  highestQualifiedLevel: text("highest_qualified_level").notNull().default("Unproductive"),
+  avgTaskCompletion: integer("avg_task_completion").default(0),
+  avgGoodHabits: integer("avg_good_habits").default(0),
+  avgHourlyCompletion: integer("avg_hourly_completion").default(0),
+  badHabitDays: integer("bad_habit_days").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const groupMessages = pgTable("group_messages", {
@@ -147,6 +178,8 @@ export const groupMessages = pgTable("group_messages", {
   level: text("level").notNull(),
   content: text("content").notNull(),
   createdBy: varchar("created_by").notNull(),
+  senderName: varchar("sender_name"),
+  isAdmin: boolean("is_admin").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -159,6 +192,7 @@ export const adminInbox = pgTable("admin_inbox", {
 });
 
 export const insertUserLevelSchema = createInsertSchema(userLevels).omit({ id: true, updatedAt: true });
+export const insertMonthlyEvaluationSchema = createInsertSchema(monthlyEvaluations).omit({ id: true, createdAt: true });
 export const insertGroupMessageSchema = createInsertSchema(groupMessages).omit({ id: true, createdAt: true });
 export const insertAdminInboxSchema = createInsertSchema(adminInbox).omit({ id: true, createdAt: true, status: true });
 

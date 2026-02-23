@@ -1,8 +1,9 @@
 import { db } from "./db";
-import { eq, and, asc, like } from "drizzle-orm";
+import { eq, and, asc, like, desc } from "drizzle-orm";
 import {
   yearlyGoals, monthlyOverviewGoals, monthlyDynamicGoals,
   tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, payments, taskBankItems, dailyReasons, notes,
+  userLevels, groupMessages, adminInbox, monthlyEvaluations,
 } from "@shared/schema";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
 
@@ -19,6 +20,8 @@ type InsertPayment = typeof payments.$inferInsert;
 type InsertTaskBankItem = typeof taskBankItems.$inferInsert;
 type InsertDailyReason = typeof dailyReasons.$inferInsert;
 type InsertNote = typeof notes.$inferInsert;
+type InsertGroupMessage = typeof groupMessages.$inferInsert;
+type InsertAdminInbox = typeof adminInbox.$inferInsert;
 
 export interface IStorage extends IAuthStorage {
   getYearlyGoals(userId: string, year?: number): Promise<(typeof yearlyGoals.$inferSelect)[]>;
@@ -73,6 +76,19 @@ export interface IStorage extends IAuthStorage {
   createNote(note: InsertNote): Promise<typeof notes.$inferSelect>;
   updateNote(id: number, userId: string, updates: Partial<InsertNote>): Promise<typeof notes.$inferSelect>;
   deleteNote(id: number, userId: string): Promise<void>;
+
+  getUserLevel(userId: string): Promise<(typeof userLevels.$inferSelect) | undefined>;
+  getAllUserLevels(): Promise<(typeof userLevels.$inferSelect)[]>;
+
+  getGroupMessages(level: string): Promise<(typeof groupMessages.$inferSelect)[]>;
+  createGroupMessage(msg: InsertGroupMessage): Promise<typeof groupMessages.$inferSelect>;
+  deleteGroupMessage(id: number): Promise<void>;
+
+  getAdminInbox(): Promise<(typeof adminInbox.$inferSelect)[]>;
+  createAdminInboxMessage(msg: InsertAdminInbox): Promise<typeof adminInbox.$inferSelect>;
+  updateAdminInboxStatus(id: number, status: string): Promise<typeof adminInbox.$inferSelect>;
+
+  getMonthlyEvaluations(userId: string): Promise<(typeof monthlyEvaluations.$inferSelect)[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -290,6 +306,41 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteNote(id: number, userId: string) {
     await db.delete(notes).where(and(eq(notes.id, id), eq(notes.userId, userId)));
+  }
+
+  async getUserLevel(userId: string) {
+    const [level] = await db.select().from(userLevels).where(eq(userLevels.userId, userId));
+    return level;
+  }
+  async getAllUserLevels() {
+    return await db.select().from(userLevels).orderBy(asc(userLevels.userId));
+  }
+
+  async getGroupMessages(level: string) {
+    return await db.select().from(groupMessages).where(eq(groupMessages.level, level)).orderBy(desc(groupMessages.createdAt));
+  }
+  async createGroupMessage(msg: InsertGroupMessage) {
+    const [created] = await db.insert(groupMessages).values(msg).returning();
+    return created;
+  }
+  async deleteGroupMessage(id: number) {
+    await db.delete(groupMessages).where(eq(groupMessages.id, id));
+  }
+
+  async getAdminInbox() {
+    return await db.select().from(adminInbox).orderBy(desc(adminInbox.createdAt));
+  }
+  async createAdminInboxMessage(msg: InsertAdminInbox) {
+    const [created] = await db.insert(adminInbox).values(msg).returning();
+    return created;
+  }
+  async updateAdminInboxStatus(id: number, status: string) {
+    const [updated] = await db.update(adminInbox).set({ status }).where(eq(adminInbox.id, id)).returning();
+    return updated;
+  }
+
+  async getMonthlyEvaluations(userId: string) {
+    return await db.select().from(monthlyEvaluations).where(eq(monthlyEvaluations.userId, userId)).orderBy(desc(monthlyEvaluations.month));
   }
 }
 

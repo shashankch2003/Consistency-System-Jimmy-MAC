@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { useQuery } from "@tanstack/react-query";
 import {
   Sidebar,
   SidebarContent,
@@ -23,7 +24,9 @@ import {
   LayoutDashboard,
   Lightbulb,
   Gauge,
-  FileText
+  FileText,
+  Users,
+  Shield
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -36,11 +39,15 @@ const menuItems = [
   { title: "Hourly Tracker", icon: Clock, url: "/dashboard/hourly" },
   { title: "Daily Score", icon: Gauge, url: "/dashboard/daily-score" },
   { title: "Notes", icon: FileText, url: "/dashboard/notes" },
+  { title: "Community", icon: Users, url: "/dashboard/community" },
 ];
 
 export function AppSidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
+  const { data: adminCheck } = useQuery<{ isAdmin: boolean }>({
+    queryKey: ["/api/level/is-admin"],
+  });
 
   return (
     <Sidebar className="border-r border-border bg-card/95 backdrop-blur-xl">
@@ -74,6 +81,20 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              {adminCheck?.isAdmin && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={location === "/dashboard/admin"}
+                    className="data-[active=true]:bg-white/10 data-[active=true]:text-white"
+                  >
+                    <Link href="/dashboard/admin" className="flex items-center gap-3 px-3 py-2">
+                      <Shield className="w-4 h-4" />
+                      <span>Admin</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

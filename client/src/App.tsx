@@ -14,6 +14,8 @@ import HourlyPage from "@/pages/dashboard/hourly";
 import TaskBankPage from "@/pages/dashboard/task-bank";
 import DailyScorePage from "@/pages/dashboard/daily-score";
 import NotesPage from "@/pages/dashboard/notes";
+import CommunityPage from "@/pages/dashboard/community";
+import AdminPage from "@/pages/dashboard/admin";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -65,6 +67,16 @@ function Router() {
       <Route path="/dashboard/notes">
         <DashboardLayout>
           <NotesPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/community">
+        <DashboardLayout>
+          <CommunityPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/admin">
+        <DashboardLayout>
+          <AdminPage />
         </DashboardLayout>
       </Route>
 
