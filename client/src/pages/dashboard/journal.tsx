@@ -219,6 +219,7 @@ function DailyEditor({
   const [selectedEmoji, setSelectedEmoji] = useState<string | null>(entry?.emoji || null);
   const [imageUrls, setImageUrls] = useState<string[]>(entry?.imageUrls || []);
   const [extractedText, setExtractedText] = useState(entry?.extractedText || "");
+  const [showDayTypes, setShowDayTypes] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isOcring, setIsOcring] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -302,14 +303,39 @@ function DailyEditor({
       </div>
 
       <div>
-        <p className="text-sm font-medium mb-3 text-muted-foreground">How was your day?</p>
-        <DayTypeSelector
-          dayTypes={dayTypes}
-          selectedName={selectedDayType}
-          onSelect={handleSelectDayType}
-          onCreateCustom={onCreateCustomDayType}
-          onDeleteCustom={onDeleteCustomDayType}
-        />
+        <button
+          onClick={() => setShowDayTypes(v => !v)}
+          className={cn(
+            "w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-all text-left",
+            selectedDayType
+              ? "bg-primary/10 border-primary/30"
+              : "bg-white/5 border-white/10 hover:bg-white/8"
+          )}
+          data-testid="button-toggle-daytype"
+        >
+          <div className="flex items-center gap-2">
+            {selectedDayType ? (
+              <>
+                <span className="text-lg">{selectedEmoji}</span>
+                <span className="text-sm font-medium">{selectedDayType}</span>
+              </>
+            ) : (
+              <span className="text-sm text-muted-foreground">How was your day? Tap to select...</span>
+            )}
+          </div>
+          <ChevronRight className={cn("w-4 h-4 text-muted-foreground transition-transform", showDayTypes && "rotate-90")} />
+        </button>
+        {showDayTypes && (
+          <div className="mt-3 p-4 rounded-lg border border-white/10 bg-white/[0.02]">
+            <DayTypeSelector
+              dayTypes={dayTypes}
+              selectedName={selectedDayType}
+              onSelect={(dt) => { handleSelectDayType(dt); setShowDayTypes(false); }}
+              onCreateCustom={onCreateCustomDayType}
+              onDeleteCustom={onDeleteCustomDayType}
+            />
+          </div>
+        )}
       </div>
 
       <div>
