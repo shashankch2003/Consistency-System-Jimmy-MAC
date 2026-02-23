@@ -21,6 +21,8 @@ import {
   Grid3X3,
   List,
   CalendarDays,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 
 type DayType = {
@@ -254,6 +256,7 @@ function DailyEditor({
   isSaving: boolean;
 }) {
   const [journalText, setJournalText] = useState(entry?.journalText || "");
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedDayType, setSelectedDayType] = useState<string | null>(entry?.customDayName || null);
   const [selectedEmoji, setSelectedEmoji] = useState<string | null>(entry?.emoji || null);
   const [imageUrls, setImageUrls] = useState<string[]>(entry?.imageUrls || []);
@@ -388,15 +391,62 @@ function DailyEditor({
       </div>
 
       <div className="flex-1 flex flex-col">
-        <p className="text-sm font-medium mb-2 text-muted-foreground">Journal Entry</p>
-        <Textarea
-          placeholder="Write about your day..."
-          value={journalText}
-          onChange={(e) => setJournalText(e.target.value)}
-          className="flex-1 w-full min-h-[300px] bg-white/5 border-white/10 resize-y"
-          data-testid="textarea-journal"
-        />
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm font-medium text-muted-foreground">Journal Entry</p>
+        </div>
+        <div className="relative flex-1">
+          <Textarea
+            placeholder="Write about your day..."
+            value={journalText}
+            onChange={(e) => setJournalText(e.target.value)}
+            className="flex-1 w-full min-h-[300px] bg-white/5 border-white/10 resize-y pr-10"
+            data-testid="textarea-journal"
+          />
+          <button
+            onClick={() => setIsFullscreen(true)}
+            className="absolute top-2 right-2 p-1.5 rounded-md text-muted-foreground hover:text-white hover:bg-white/10 transition-colors"
+            title="Expand to fullscreen"
+            data-testid="button-fullscreen-journal"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
+        </div>
       </div>
+
+      {isFullscreen && (
+        <div className="fixed inset-0 z-50 bg-background flex flex-col" data-testid="fullscreen-journal">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-semibold">Journal Entry</h2>
+              {selectedDayType && (
+                <span className="text-sm text-muted-foreground">{selectedEmoji} {selectedDayType}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">{journalText.length} characters</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsFullscreen(false)}
+                data-testid="button-exit-fullscreen"
+              >
+                <Minimize2 className="w-4 h-4 mr-1" />
+                Exit Fullscreen
+              </Button>
+            </div>
+          </div>
+          <div className="flex-1 p-6">
+            <Textarea
+              placeholder="Write about your day... Let your thoughts flow freely."
+              value={journalText}
+              onChange={(e) => setJournalText(e.target.value)}
+              className="w-full h-full bg-white/5 border-white/10 text-base leading-relaxed resize-none focus:ring-1 focus:ring-primary/30"
+              autoFocus
+              data-testid="textarea-journal-fullscreen"
+            />
+          </div>
+        </div>
+      )}
 
       <div>
         <div className="flex items-center justify-between mb-2">
