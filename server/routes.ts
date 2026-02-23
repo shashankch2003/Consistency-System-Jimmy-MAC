@@ -1088,15 +1088,43 @@ export async function registerRoutes(
     }
   });
 
-  // OCR: extract text from image
+  // OCR: extract text from image using OpenAI Vision
   app.post("/api/ocr", isAuthenticated, upload.single("image"), async (req: any, res) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No image provided" });
-      const Tesseract = await import("tesseract.js");
-      const result = await Tesseract.recognize(req.file.path, "eng");
-      const text = result.data.text.trim();
-      res.json({ text, imageUrl: `/uploads/${req.file.filename}` });
-    } catch (e: any) { res.status(500).json({ message: "OCR failed: " + e.message }); }
+      const imageBuffer = fs.readFileSync(req.file.path);
+      const base64Image = imageBuffer.toString("base64");
+      const mimeType = req.file.mimetype || "image/png";
+
+      const { openai } = await import("./replit_integrations/image/client");
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Extract ALL text from this image. If it contains handwriting, transcribe it as accurately as possible. Return ONLY the extracted text, nothing else. If no text is found, return an empty string.",
+              },
+              {
+                type: "image_url",
+                image_url: { url: `data:${mimeType};base64,${base64Image}` },
+              },
+            ],
+          },
+        ],
+        max_tokens: 4096,
+      });
+
+      const text = (response.choices[0]?.message?.content || "").trim();
+      try { fs.unlinkSync(req.file.path); } catch {}
+      res.json({ text });
+    } catch (e: any) {
+      console.error("OCR failed:", e);
+      if (req.file?.path) try { fs.unlinkSync(req.file.path); } catch {}
+      res.status(500).json({ message: "OCR failed: " + e.message });
+    }
   });
 
   // Image upload

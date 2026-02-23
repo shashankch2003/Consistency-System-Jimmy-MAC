@@ -17,6 +17,7 @@ import {
   Trash2,
   ScanText,
   Loader2,
+  ClipboardPaste,
   Grid3X3,
   List,
   CalendarDays,
@@ -424,7 +425,7 @@ function DailyEditor({
                   <button
                     onClick={() => handleOcr(url)}
                     className="p-1.5 rounded-md bg-black/70 hover:bg-black/90 text-white"
-                    title="Extract text (OCR)"
+                    title="Extract text (AI Vision)"
                     disabled={isOcring}
                     data-testid={`button-ocr-${i}`}
                   >
@@ -447,10 +448,24 @@ function DailyEditor({
       {extractedText && (
         <div>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-muted-foreground">Extracted Text (OCR)</p>
-            <Button variant="ghost" size="sm" onClick={() => setExtractedText("")} data-testid="button-clear-ocr">
-              <Trash2 className="w-3.5 h-3.5" />
-            </Button>
+            <p className="text-sm font-medium text-muted-foreground">Extracted Text (AI Vision)</p>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setJournalText(prev => (prev ? prev + "\n\n" : "") + extractedText);
+                  toast({ title: "Text pasted into journal" });
+                }}
+                data-testid="button-paste-ocr"
+              >
+                <ClipboardPaste className="w-3.5 h-3.5 mr-1" />
+                Paste into Journal
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setExtractedText("")} data-testid="button-clear-ocr">
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            </div>
           </div>
           <div className="p-3 rounded-lg bg-white/5 border border-white/10 text-sm whitespace-pre-wrap" data-testid="text-extracted-ocr">
             {extractedText}
