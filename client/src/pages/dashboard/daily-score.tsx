@@ -419,7 +419,7 @@ export default function DailyScorePage() {
         </div>
 
         {/* 3. Weekly History Line Chart */}
-        {weeklyChartData.length > 1 && (
+        {weeklyChartData.length > 0 && (
           <div className="bg-card/50 border border-border rounded-xl p-6" data-testid="weekly-trend-chart">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Weekly Progression</h3>
             <div className="h-52">
@@ -483,7 +483,7 @@ export default function DailyScorePage() {
         </div>
 
         {/* Monthly Bar Chart */}
-        {monthlyChartData.length > 1 && (
+        {monthlyChartData.length > 0 && (
           <div className="bg-card/50 border border-border rounded-xl p-6" data-testid="monthly-bar-chart">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Monthly Comparison</h3>
             <div className="h-52">
