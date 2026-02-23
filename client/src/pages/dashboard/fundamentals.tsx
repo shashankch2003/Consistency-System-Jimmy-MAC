@@ -1,13 +1,30 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { FUNDAMENTALS_LIST } from "@shared/schema";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Check, Circle, CheckCircle2, Save, Trophy, Plus, Trash2, PenLine } from "lucide-react";
+import { ArrowLeft, Circle, CheckCircle2, Save, Trophy, Plus, Trash2, PenLine, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import RichEditor from "@/components/rich-editor";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 type FundamentalEntry = {
   id: number;
@@ -15,15 +32,112 @@ type FundamentalEntry = {
   fundamentalKey: string;
   customTitle: string | null;
   content: string | null;
+  completed: boolean;
+  sortOrder: number | null;
   updatedAt: string | null;
   createdAt: string | null;
 };
 
-function getCompletionStatus(content: string | null | undefined): "empty" | "partial" | "detailed" {
-  if (!content || content.trim().length === 0 || content === "<p></p>") return "empty";
-  const textLength = content.replace(/<[^>]*>/g, "").trim().length;
-  if (textLength < 50) return "partial";
-  return "detailed";
+type FundamentalItem = {
+  key: string;
+  title: string;
+  description: string;
+  isCustom: boolean;
+  entry?: FundamentalEntry;
+};
+
+function SortableCard({
+  item,
+  index,
+  onSelect,
+  onToggle,
+  onDelete,
+}: {
+  item: FundamentalItem;
+  index: number;
+  onSelect: () => void;
+  onToggle: (e: React.MouseEvent) => void;
+  onDelete?: (e: React.MouseEvent) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.key });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : "auto" as any,
+  };
+
+  const isCompleted = item.entry?.completed || false;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "w-full bg-card/40 hover:bg-card/70 border border-border/50 hover:border-border rounded-xl p-4 flex items-center gap-3 transition-all duration-150 group",
+        isDragging && "shadow-xl ring-2 ring-primary/30"
+      )}
+      data-testid={`fundamental-card-${item.key}`}
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        className="shrink-0 cursor-grab active:cursor-grabbing touch-none p-1 rounded hover:bg-white/10 transition-colors"
+        data-testid={`drag-handle-${item.key}`}
+      >
+        <GripVertical className="w-4 h-4 text-muted-foreground/50" />
+      </div>
+
+      <button
+        onClick={onToggle}
+        className="shrink-0 p-0.5 rounded-full transition-all hover:scale-110"
+        data-testid={`toggle-complete-${item.key}`}
+      >
+        {isCompleted ? (
+          <CheckCircle2 className="w-6 h-6 text-green-400" />
+        ) : (
+          <Circle className="w-6 h-6 text-muted-foreground/40 hover:text-muted-foreground/70" />
+        )}
+      </button>
+
+      <button
+        className="flex-1 flex items-center gap-3 text-left min-w-0"
+        onClick={onSelect}
+        data-testid={`button-select-${item.key}`}
+      >
+        <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-white/5 text-muted-foreground text-xs font-mono shrink-0">
+          {item.isCustom ? <PenLine className="w-3.5 h-3.5" /> : index + 1}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className={cn(
+            "font-semibold text-sm group-hover:text-white transition-colors",
+            isCompleted && "line-through text-muted-foreground"
+          )} data-testid={`text-fundamental-name-${item.key}`}>
+            {item.title}
+          </h3>
+          <p className="text-xs text-muted-foreground/70 mt-0.5 line-clamp-1">{item.description}</p>
+        </div>
+      </button>
+
+      {item.isCustom && onDelete && (
+        <button
+          onClick={onDelete}
+          className="shrink-0 p-1.5 rounded-md text-muted-foreground/40 hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"
+          data-testid={`button-delete-custom-${item.key}`}
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      )}
+    </div>
+  );
 }
 
 export default function FundamentalsPage() {
@@ -36,7 +150,44 @@ export default function FundamentalsPage() {
 
   const { data: allEntries = [] } = useQuery<FundamentalEntry[]>({ queryKey: ["/api/fundamentals"] });
 
-  const customEntries = allEntries.filter(e => e.fundamentalKey.startsWith("custom-"));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const orderedItems = useMemo((): FundamentalItem[] => {
+    const entryMap = new Map(allEntries.map(e => [e.fundamentalKey, e]));
+    const builtInItems: FundamentalItem[] = FUNDAMENTALS_LIST.map(f => ({
+      key: f.key,
+      title: f.title,
+      description: f.description,
+      isCustom: false,
+      entry: entryMap.get(f.key),
+    }));
+    const customItems: FundamentalItem[] = allEntries
+      .filter(e => e.fundamentalKey.startsWith("custom-"))
+      .map(e => ({
+        key: e.fundamentalKey,
+        title: e.customTitle || "Untitled",
+        description: "Your own fundamental — write anything that matters to your success.",
+        isCustom: true,
+        entry: e,
+      }));
+    const allItems = [...builtInItems, ...customItems];
+
+    const hasSortOrder = allEntries.some(e => e.sortOrder !== null);
+    if (hasSortOrder) {
+      allItems.sort((a, b) => {
+        const orderA = a.entry?.sortOrder;
+        const orderB = b.entry?.sortOrder;
+        if (orderA != null && orderB != null) return orderA - orderB;
+        if (orderA != null) return -1;
+        if (orderB != null) return 1;
+        return 0;
+      });
+    }
+    return allItems;
+  }, [allEntries]);
 
   const createCustom = useMutation({
     mutationFn: async (title: string) => {
@@ -57,6 +208,26 @@ export default function FundamentalsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/fundamentals"] });
       toast({ title: "Deleted", description: "Custom fundamental removed." });
+    },
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: async ({ id, completed }: { id: number; completed: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/fundamentals/${id}/toggle`, { completed });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/fundamentals"] });
+    },
+  });
+
+  const reorderMutation = useMutation({
+    mutationFn: async (orderedKeys: string[]) => {
+      const res = await apiRequest("POST", "/api/fundamentals/reorder", { orderedKeys });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/fundamentals"] });
     },
   });
 
@@ -116,8 +287,36 @@ export default function FundamentalsPage() {
     setHasUnsaved(false);
   };
 
-  const getEntryForKey = (key: string) => allEntries.find(e => e.fundamentalKey === key);
-  const completedCount = FUNDAMENTALS_LIST.filter(f => getCompletionStatus(getEntryForKey(f.key)?.content) !== "empty").length;
+  const handleToggle = async (item: FundamentalItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      if (item.entry) {
+        toggleMutation.mutate({ id: item.entry.id, completed: !item.entry.completed });
+      } else {
+        const res = await apiRequest("PUT", `/api/fundamentals/${item.key}`, { content: null });
+        const created = await res.json();
+        if (created?.id) {
+          toggleMutation.mutate({ id: created.id, completed: true });
+        }
+      }
+    } catch {
+      toast({ title: "Failed to update", variant: "destructive" });
+    }
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = orderedItems.findIndex(item => item.key === active.id);
+    const newIndex = orderedItems.findIndex(item => item.key === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(orderedItems, oldIndex, newIndex);
+    reorderMutation.mutate(reordered.map(item => item.key));
+  };
+
+  const completedCount = orderedItems.filter(item => item.entry?.completed).length;
 
   const selectedFundamental = FUNDAMENTALS_LIST.find(f => f.key === selectedKey);
   const selectedCustomEntry = selectedKey?.startsWith("custom-") ? allEntries.find(e => e.fundamentalKey === selectedKey) : null;
@@ -166,7 +365,6 @@ export default function FundamentalsPage() {
             <RichEditor
               content={editorContent}
               onChange={handleContentChange}
-              placeholder="Start writing your thoughts here..."
             />
           )}
         </div>
@@ -181,70 +379,48 @@ export default function FundamentalsPage() {
           <Trophy className="w-7 h-7 text-amber-400" />
           Successful Fundamentals
         </h1>
-        <p className="text-muted-foreground mt-1 text-sm">Deep clarity on business and personal success foundations.</p>
+        <p className="text-muted-foreground mt-1 text-sm">Deep clarity on business and personal success foundations. Drag to reorder, tap the circle to mark complete.</p>
       </div>
 
       <div className="flex items-center gap-3">
         <div className="flex-1 bg-card/30 rounded-full h-2 overflow-hidden">
           <div
             className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all duration-500"
-            style={{ width: `${(completedCount / FUNDAMENTALS_LIST.length) * 100}%` }}
+            style={{ width: `${(completedCount / orderedItems.length) * 100}%` }}
             data-testid="progress-bar"
           />
         </div>
         <span className="text-sm font-medium text-muted-foreground whitespace-nowrap" data-testid="text-progress">
-          {completedCount}/{FUNDAMENTALS_LIST.length} completed
+          {completedCount}/{orderedItems.length} completed
         </span>
       </div>
 
-      <div className="grid grid-cols-1 gap-2" data-testid="fundamentals-list">
-        {FUNDAMENTALS_LIST.map((fundamental, index) => {
-          const entry = getEntryForKey(fundamental.key);
-          const status = getCompletionStatus(entry?.content);
-
-          return (
-            <motion.button
-              key={fundamental.key}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.02 }}
-              className={cn(
-                "w-full text-left bg-card/40 hover:bg-card/70 border border-border/50 hover:border-border rounded-xl p-4 flex items-start gap-4 transition-all duration-150 group cursor-pointer",
-              )}
-              onClick={() => setSelectedKey(fundamental.key)}
-              data-testid={`fundamental-card-${fundamental.key}`}
-            >
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/5 text-muted-foreground text-sm font-mono shrink-0 mt-0.5">
-                {index + 1}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-sm group-hover:text-white transition-colors" data-testid={`text-fundamental-name-${fundamental.key}`}>
-                    {fundamental.title}
-                  </h3>
-                </div>
-                <p className="text-xs text-muted-foreground/70 mt-0.5 line-clamp-1">{fundamental.description}</p>
-              </div>
-              <div className="shrink-0 mt-1">
-                {status === "detailed" ? (
-                  <CheckCircle2 className="w-5 h-5 text-green-400" data-testid={`status-detailed-${fundamental.key}`} />
-                ) : status === "partial" ? (
-                  <Check className="w-5 h-5 text-amber-400" data-testid={`status-partial-${fundamental.key}`} />
-                ) : (
-                  <Circle className="w-5 h-5 text-muted-foreground/30" data-testid={`status-empty-${fundamental.key}`} />
-                )}
-              </div>
-            </motion.button>
-          );
-        })}
-      </div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={orderedItems.map(i => i.key)} strategy={verticalListSortingStrategy}>
+          <div className="grid grid-cols-1 gap-2" data-testid="fundamentals-list">
+            {orderedItems.map((item, index) => (
+              <SortableCard
+                key={item.key}
+                item={item}
+                index={index}
+                onSelect={() => setSelectedKey(item.key)}
+                onToggle={(e) => handleToggle(item, e)}
+                onDelete={item.isCustom && item.entry ? (e) => { e.stopPropagation(); deleteCustom.mutate(item.entry!.id); } : undefined}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
 
       <div className="space-y-3 pt-4 border-t border-border/30">
         <div className="flex items-center gap-2">
           <PenLine className="w-5 h-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold" data-testid="text-custom-fundamentals-title">Your Own Fundamentals</h2>
+          <h2 className="text-lg font-semibold" data-testid="text-custom-fundamentals-title">Add Your Own Fundamental</h2>
         </div>
-        <p className="text-sm text-muted-foreground">Add your own topics that matter to your success journey.</p>
 
         <div className="flex gap-2">
           <input
@@ -270,61 +446,6 @@ export default function FundamentalsPage() {
             Add
           </Button>
         </div>
-
-        {customEntries.length > 0 && (
-          <div className="grid grid-cols-1 gap-2">
-            {customEntries.map((entry, index) => {
-              const status = getCompletionStatus(entry.content);
-              return (
-                <motion.div
-                  key={entry.fundamentalKey}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="w-full bg-card/40 hover:bg-card/70 border border-border/50 hover:border-border rounded-xl p-4 flex items-center gap-4 transition-all duration-150 group"
-                >
-                  <button
-                    className="flex-1 flex items-center gap-4 text-left min-w-0"
-                    onClick={() => setSelectedKey(entry.fundamentalKey)}
-                    data-testid={`fundamental-card-${entry.fundamentalKey}`}
-                  >
-                    <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/5 text-muted-foreground shrink-0">
-                      <PenLine className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-sm group-hover:text-white transition-colors">
-                        {entry.customTitle || "Untitled"}
-                      </h3>
-                      {entry.updatedAt && (
-                        <p className="text-xs text-muted-foreground/50 mt-0.5">
-                          Updated {new Date(entry.updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-                        </p>
-                      )}
-                    </div>
-                    <div className="shrink-0">
-                      {status === "detailed" ? (
-                        <CheckCircle2 className="w-5 h-5 text-green-400" />
-                      ) : status === "partial" ? (
-                        <Check className="w-5 h-5 text-amber-400" />
-                      ) : (
-                        <Circle className="w-5 h-5 text-muted-foreground/30" />
-                      )}
-                    </div>
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteCustom.mutate(entry.id);
-                    }}
-                    className="shrink-0 p-1.5 rounded-md text-muted-foreground/40 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                    data-testid={`button-delete-custom-${entry.fundamentalKey}`}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </motion.div>
-              );
-            })}
-          </div>
-        )}
       </div>
     </div>
   );
