@@ -115,6 +115,7 @@ export interface IStorage extends IAuthStorage {
   getFundamentals(userId: string): Promise<(typeof successfulFundamentals.$inferSelect)[]>;
   getFundamental(userId: string, fundamentalKey: string): Promise<(typeof successfulFundamentals.$inferSelect) | undefined>;
   upsertFundamental(data: InsertSuccessfulFundamental): Promise<typeof successfulFundamentals.$inferSelect>;
+  deleteFundamental(id: number, userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -451,6 +452,9 @@ export class DatabaseStorage implements IStorage {
     }
     const [created] = await db.insert(successfulFundamentals).values(data).returning();
     return created;
+  }
+  async deleteFundamental(id: number, userId: string) {
+    await db.delete(successfulFundamentals).where(and(eq(successfulFundamentals.id, id), eq(successfulFundamentals.userId, userId)));
   }
 }
 

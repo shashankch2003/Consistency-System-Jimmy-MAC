@@ -800,11 +800,33 @@ export async function registerRoutes(
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  app.post("/api/fundamentals/custom", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const schema = z.object({ title: z.string().min(1).max(200) });
+      const parsed = schema.parse(req.body);
+      const key = "custom-" + Date.now();
+      const entry = await storage.upsertFundamental({ userId, fundamentalKey: key, customTitle: parsed.title, content: null });
+      res.json(entry);
+    } catch (e: any) {
+      if (e instanceof z.ZodError) return res.status(400).json({ message: "Invalid input", errors: e.errors });
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.delete("/api/fundamentals/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      await storage.deleteFundamental(parseInt(req.params.id), userId);
+      res.status(204).send();
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   app.put("/api/fundamentals/:key", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const key = req.params.key;
-      if (!FUNDAMENTALS_LIST.some(f => f.key === key)) {
+      if (!FUNDAMENTALS_LIST.some(f => f.key === key) && !key.startsWith("custom-")) {
         return res.status(400).json({ message: "Invalid fundamental key" });
       }
       const contentSchema = z.object({ content: z.string().nullable() });

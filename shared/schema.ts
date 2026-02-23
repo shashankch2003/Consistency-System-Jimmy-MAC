@@ -295,6 +295,7 @@ export const successfulFundamentals = pgTable("successful_fundamentals", {
   id: serial("id").primaryKey(),
   userId: varchar("user_id").notNull(),
   fundamentalKey: text("fundamental_key").notNull(),
+  customTitle: text("custom_title"),
   content: text("content"),
   updatedAt: timestamp("updated_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
