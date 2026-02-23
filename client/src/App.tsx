@@ -20,6 +20,7 @@ import JournalPage from "@/pages/dashboard/journal";
 import FundamentalsPage from "@/pages/dashboard/fundamentals";
 import SettingsPage from "@/pages/dashboard/settings";
 import MoneyTrackingPage from "@/pages/dashboard/money-tracking";
+import KnowMorePage from "@/pages/dashboard/know-more";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -91,6 +92,11 @@ function Router() {
       <Route path="/dashboard/money">
         <DashboardLayout>
           <MoneyTrackingPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/know-more">
+        <DashboardLayout>
+          <KnowMorePage />
         </DashboardLayout>
       </Route>
       <Route path="/dashboard/settings">

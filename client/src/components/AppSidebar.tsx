@@ -30,7 +30,8 @@ import {
   BookOpen,
   Trophy,
   Settings,
-  Wallet
+  Wallet,
+  PlayCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -46,6 +47,7 @@ const menuItems = [
   { title: "Notes", icon: FileText, url: "/dashboard/notes" },
   { title: "Fundamentals", icon: Trophy, url: "/dashboard/fundamentals" },
   { title: "Money", icon: Wallet, url: "/dashboard/money" },
+  { title: "Know More", icon: PlayCircle, url: "/dashboard/know-more" },
   { title: "Community", icon: Users, url: "/dashboard/community" },
   { title: "Settings", icon: Settings, url: "/dashboard/settings" },
 ];

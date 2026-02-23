@@ -1394,5 +1394,118 @@ export async function registerRoutes(
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  // ==================== Know More - Videos ====================
+
+  // List published videos (for all authenticated users)
+  app.get("/api/videos", isAuthenticated, async (req: any, res) => {
+    try {
+      const vids = await storage.getVideos(true);
+      res.json(vids);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Get single video
+  app.get("/api/videos/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const video = await storage.getVideo(parseInt(req.params.id));
+      if (!video) return res.status(404).json({ message: "Video not found" });
+      if (!video.isPublished && !isAdmin(req)) return res.status(404).json({ message: "Video not found" });
+      res.json(video);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Admin: List all videos (including unpublished)
+  app.get("/api/admin/videos", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!isAdmin(req)) return res.status(403).json({ message: "Admin only" });
+      const vids = await storage.getVideos(false);
+      res.json(vids);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Admin: Create video
+  app.post("/api/admin/videos", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!isAdmin(req)) return res.status(403).json({ message: "Admin only" });
+      const { title, description, category, youtubeUrl, thumbnailUrl, duration, sortOrder, isPublished } = req.body;
+      if (!title || !youtubeUrl) return res.status(400).json({ message: "Title and YouTube URL are required" });
+      const video = await storage.createVideo({
+        title, description: description || "", category: category || "general",
+        youtubeUrl, thumbnailUrl: thumbnailUrl || null,
+        duration: duration || "", videoProvider: "youtube",
+        sortOrder: sortOrder || 0, isPublished: isPublished !== false,
+      });
+      res.status(201).json(video);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Admin: Update video
+  app.patch("/api/admin/videos/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!isAdmin(req)) return res.status(403).json({ message: "Admin only" });
+      const updated = await storage.updateVideo(parseInt(req.params.id), req.body);
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Admin: Delete video
+  app.delete("/api/admin/videos/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!isAdmin(req)) return res.status(403).json({ message: "Admin only" });
+      await storage.deleteVideo(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // User: Get own feedback for a video
+  app.get("/api/videos/:id/feedback", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const feedback = await storage.getVideoFeedbackByUser(parseInt(req.params.id), userId);
+      res.json(feedback);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // User: Submit feedback for a video
+  app.post("/api/videos/:id/feedback", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const videoId = parseInt(req.params.id);
+      const { feedbackType, message } = req.body;
+      if (!feedbackType || !message) return res.status(400).json({ message: "Feedback type and message are required" });
+      const fb = await storage.createVideoFeedback({ videoId, userId, feedbackType, message, status: "pending" });
+      res.status(201).json(fb);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Admin: Get all feedback (optionally filtered by video)
+  app.get("/api/admin/video-feedback", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!isAdmin(req)) return res.status(403).json({ message: "Admin only" });
+      const videoId = req.query.videoId ? parseInt(req.query.videoId as string) : undefined;
+      const feedback = await storage.getAllVideoFeedback(videoId);
+      res.json(feedback);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Admin: Update feedback status
+  app.patch("/api/admin/video-feedback/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!isAdmin(req)) return res.status(403).json({ message: "Admin only" });
+      const { status } = req.body;
+      const updated = await storage.updateVideoFeedbackStatus(parseInt(req.params.id), status);
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Admin: Delete feedback
+  app.delete("/api/admin/video-feedback/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!isAdmin(req)) return res.status(403).json({ message: "Admin only" });
+      await storage.deleteVideoFeedback(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   return httpServer;
 }
