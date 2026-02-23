@@ -675,41 +675,17 @@ export default function JournalPage() {
       </div>
 
       {viewMode === "daily" && (
-        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
-          <div className="space-y-4">
-            <div className="bg-card rounded-xl border border-white/10 p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium">{MONTH_NAMES[selectedDate.getMonth()]} {yearNum}</span>
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigateMonth(-1)} data-testid="button-cal-prev-month">
-                    <ChevronLeft className="w-3 h-3" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigateMonth(1)} data-testid="button-cal-next-month">
-                    <ChevronRight className="w-3 h-3" />
-                  </Button>
-                </div>
-              </div>
-              <MonthlyCalendar
-                currentMonth={selectedDate}
-                entries={monthEntries}
-                selectedDate={selectedDate}
-                onSelectDate={(d) => setSelectedDate(d)}
-              />
-            </div>
-            <WeeklyStrip selectedDate={selectedDate} entries={monthEntries} onSelectDate={(d) => setSelectedDate(d)} />
-          </div>
-          <div className="bg-card rounded-xl border border-white/10 p-6">
-            <DailyEditor
-              key={dateStr}
-              selectedDate={selectedDate}
-              entry={currentEntry || null}
-              dayTypes={dayTypes}
-              onSave={(data) => saveMutation.mutate(data)}
-              onCreateCustomDayType={(name, emoji) => createCustomDayType.mutate({ name, emoji })}
-              onDeleteCustomDayType={(id) => deleteCustomDayType.mutate(id)}
-              isSaving={saveMutation.isPending}
-            />
-          </div>
+        <div className="bg-card rounded-xl border border-white/10 p-6">
+          <DailyEditor
+            key={dateStr}
+            selectedDate={selectedDate}
+            entry={currentEntry || null}
+            dayTypes={dayTypes}
+            onSave={(data) => saveMutation.mutate(data)}
+            onCreateCustomDayType={(name, emoji) => createCustomDayType.mutate({ name, emoji })}
+            onDeleteCustomDayType={(id) => deleteCustomDayType.mutate(id)}
+            isSaving={saveMutation.isPending}
+          />
         </div>
       )}
 
