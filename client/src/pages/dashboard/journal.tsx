@@ -909,11 +909,11 @@ export default function JournalPage() {
       )}
 
       {viewMode === "yearly" && (
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-6">
           <div className="bg-card rounded-xl border border-white/10 p-6">
             <YearlyGrid entries={yearEntries} year={yearNum} onSelectDate={(d) => setYearlyPreviewDate(d)} />
           </div>
-          <div className="bg-card rounded-xl border border-white/10 p-6 hidden lg:flex flex-col" data-testid="yearly-preview-panel">
+          <div className="bg-card rounded-xl border border-white/10 p-6 hidden lg:flex flex-col min-w-[400px]" data-testid="yearly-preview-panel">
             {yearlyPreviewDate && yearlyPreviewEntry ? (
               <>
                 <div className="flex items-center justify-between mb-4">
