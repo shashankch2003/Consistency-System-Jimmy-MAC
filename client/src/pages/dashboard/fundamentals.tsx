@@ -119,7 +119,7 @@ function SortableCard({
         <div className="flex-1 min-w-0">
           <h3 className={cn(
             "font-semibold text-sm group-hover:text-white transition-colors",
-            isCompleted && "line-through text-muted-foreground"
+            isCompleted && "text-muted-foreground"
           )} data-testid={`text-fundamental-name-${item.key}`}>
             {item.title}
           </h3>
