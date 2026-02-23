@@ -419,26 +419,26 @@ function DailyEditor({
         {imageUrls.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {imageUrls.map((url, i) => (
-              <div key={i} className="relative group rounded-lg overflow-hidden border border-white/10 bg-white/5">
-                <img src={url} alt="" className="w-full h-32 object-cover" />
-                <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => handleOcr(url)}
-                    className="p-1.5 rounded-md bg-black/70 hover:bg-black/90 text-white"
-                    title="Extract text (AI Vision)"
-                    disabled={isOcring}
-                    data-testid={`button-ocr-${i}`}
-                  >
-                    {isOcring ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ScanText className="w-3.5 h-3.5" />}
-                  </button>
+              <div key={i} className="rounded-lg overflow-hidden border border-white/10 bg-white/5">
+                <div className="relative group">
+                  <img src={url} alt="" className="w-full h-32 object-cover" />
                   <button
                     onClick={() => setImageUrls(prev => prev.filter((_, j) => j !== i))}
-                    className="p-1.5 rounded-md bg-black/70 hover:bg-red-500/70 text-white"
+                    className="absolute top-1 right-1 p-1.5 rounded-md bg-black/70 hover:bg-red-500/70 text-white opacity-0 group-hover:opacity-100 transition-opacity"
                     data-testid={`button-remove-image-${i}`}
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
+                <button
+                  onClick={() => handleOcr(url)}
+                  className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors border-t border-white/10"
+                  disabled={isOcring}
+                  data-testid={`button-ocr-${i}`}
+                >
+                  {isOcring ? <Loader2 className="w-3 h-3 animate-spin" /> : <ScanText className="w-3 h-3" />}
+                  Extract Text
+                </button>
               </div>
             ))}
           </div>
