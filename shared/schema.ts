@@ -132,6 +132,36 @@ export const notes = pgTable("notes", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const LEVELS = ["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Elite"] as const;
+export type Level = typeof LEVELS[number];
+
+export const userLevels = pgTable("user_levels", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().unique(),
+  level: text("level").notNull().default("Bronze"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const groupMessages = pgTable("group_messages", {
+  id: serial("id").primaryKey(),
+  level: text("level").notNull(),
+  content: text("content").notNull(),
+  createdBy: varchar("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const adminInbox = pgTable("admin_inbox", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  content: text("content").notNull(),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertUserLevelSchema = createInsertSchema(userLevels).omit({ id: true, updatedAt: true });
+export const insertGroupMessageSchema = createInsertSchema(groupMessages).omit({ id: true, createdAt: true });
+export const insertAdminInboxSchema = createInsertSchema(adminInbox).omit({ id: true, createdAt: true, status: true });
+
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
 export const insertYearlyGoalSchema = createInsertSchema(yearlyGoals).omit({ id: true, createdAt: true });
 export const insertMonthlyOverviewGoalSchema = createInsertSchema(monthlyOverviewGoals).omit({ id: true, createdAt: true });
