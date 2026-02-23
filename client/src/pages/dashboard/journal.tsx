@@ -449,8 +449,7 @@ function DailyEditor({
       )}
 
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-medium text-muted-foreground">Images ({imageUrls.length}/10, max 5MB each)</p>
+        <div className="flex items-center justify-end mb-2">
           <div className="flex gap-2">
             <input
               ref={fileInputRef}
