@@ -280,6 +280,16 @@ export const dayTypeUsage = pgTable("day_type_usage", {
   lastUsed: timestamp("last_used").defaultNow(),
 });
 
+// Streaks
+export const userStreaks = pgTable("user_streaks", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  currentStreak: integer("current_streak").notNull().default(0),
+  longestStreak: integer("longest_streak").notNull().default(0),
+  totalStreakDays: integer("total_streak_days").notNull().default(0),
+  lastStreakUpdateDate: text("last_streak_update_date"),
+});
+
 export const insertJournalEntrySchema = createInsertSchema(journalEntries).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertCustomDayTypeSchema = createInsertSchema(customDayTypes).omit({ id: true, createdAt: true });
 export const insertDayTypeUsageSchema = createInsertSchema(dayTypeUsage).omit({ id: true });

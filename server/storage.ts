@@ -4,7 +4,7 @@ import {
   yearlyGoals, monthlyOverviewGoals, monthlyDynamicGoals,
   tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, payments, taskBankItems, dailyReasons, notes,
   userLevels, groupMessages, adminInbox, monthlyEvaluations,
-  journalEntries, customDayTypes, dayTypeUsage,
+  journalEntries, customDayTypes, dayTypeUsage, userStreaks,
 } from "@shared/schema";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
 
@@ -106,6 +106,9 @@ export interface IStorage extends IAuthStorage {
 
   getDayTypeUsage(userId: string): Promise<(typeof dayTypeUsage.$inferSelect)[]>;
   incrementDayTypeUsage(userId: string, dayTypeName: string): Promise<void>;
+
+  getUserStreak(userId: string): Promise<(typeof userStreaks.$inferSelect) | undefined>;
+  upsertUserStreak(userId: string, data: { currentStreak: number; longestStreak: number; totalStreakDays: number; lastStreakUpdateDate: string }): Promise<typeof userStreaks.$inferSelect>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -411,6 +414,20 @@ export class DatabaseStorage implements IStorage {
     } else {
       await db.insert(dayTypeUsage).values({ userId, dayTypeName, usageCount: 1, lastUsed: new Date() });
     }
+  }
+
+  async getUserStreak(userId: string) {
+    const [streak] = await db.select().from(userStreaks).where(eq(userStreaks.userId, userId));
+    return streak;
+  }
+  async upsertUserStreak(userId: string, data: { currentStreak: number; longestStreak: number; totalStreakDays: number; lastStreakUpdateDate: string }) {
+    const existing = await db.select().from(userStreaks).where(eq(userStreaks.userId, userId));
+    if (existing.length > 0) {
+      const [updated] = await db.update(userStreaks).set(data).where(eq(userStreaks.id, existing[0].id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(userStreaks).values({ userId, ...data }).returning();
+    return created;
   }
 }
 

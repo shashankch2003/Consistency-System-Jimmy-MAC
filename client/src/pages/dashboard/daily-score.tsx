@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format, addDays, subDays, subWeeks, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay, isToday, getYear } from "date-fns";
 import { useDailyScore, useDailyScoreRange, useDailyReason, useUpsertDailyReason } from "@/hooks/use-daily-score";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, FileText, Save, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileText, Save, X, Flame, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { useToast } from "@/hooks/use-toast";
@@ -72,9 +74,33 @@ export default function DailyScorePage() {
   const calMonthEndStr = format(calMonthEnd, "yyyy-MM-dd");
   const { data: calMonthScores } = useDailyScoreRange(calMonthStartStr, calMonthEndStr);
 
+  const { data: streakData } = useQuery<{ currentStreak: number; longestStreak: number; totalStreakDays: number; lastStreakUpdateDate: string | null }>({ queryKey: ["/api/streak"] });
+  const updateStreak = useMutation({
+    mutationFn: async (d: string) => {
+      const res = await apiRequest("POST", "/api/streak/update", { date: d });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/streak"] });
+    },
+  });
+
+  useEffect(() => {
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+    if (score && dateStr === todayStr && streakData !== undefined && streakData?.lastStreakUpdateDate !== todayStr && !updateStreak.isPending) {
+      updateStreak.mutate(todayStr);
+    }
+  }, [score, dateStr, streakData]);
+
   const calDays = eachDayOfInterval({ start: calMonthStart, end: calMonthEnd });
   const startDayOfWeek = getDay(calMonthStart);
   const offset = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
+
+  const streakAwayMessage = streakData && streakData.longestStreak > streakData.currentStreak
+    ? `${streakData.longestStreak - streakData.currentStreak} day${streakData.longestStreak - streakData.currentStreak !== 1 ? "s" : ""} away from your highest streak!`
+    : streakData && streakData.currentStreak > 0 && streakData.currentStreak >= streakData.longestStreak
+    ? "You're at your highest streak!"
+    : null;
 
   const openReason = () => {
     setReasonText(reason?.reason || "");
@@ -117,6 +143,32 @@ export default function DailyScorePage() {
             <ChevronRight className="w-4 h-4" />
           </Button>
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:flex sm:gap-4">
+        <div className="bg-card/50 border border-border rounded-xl p-4 flex items-center gap-3" data-testid="streak-current">
+          <div className="w-10 h-10 rounded-lg bg-orange-500/15 flex items-center justify-center">
+            <Flame className="w-5 h-5 text-orange-400" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold" data-testid="text-current-streak">{streakData?.currentStreak || 0}</p>
+            <p className="text-xs text-muted-foreground">Current Streak</p>
+          </div>
+        </div>
+        <div className="bg-card/50 border border-border rounded-xl p-4 flex items-center gap-3" data-testid="streak-longest">
+          <div className="w-10 h-10 rounded-lg bg-amber-500/15 flex items-center justify-center">
+            <Trophy className="w-5 h-5 text-amber-400" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold" data-testid="text-longest-streak">{streakData?.longestStreak || 0}</p>
+            <p className="text-xs text-muted-foreground">Longest Streak</p>
+          </div>
+        </div>
+        {streakAwayMessage && (
+          <div className="col-span-2 sm:col-span-1 bg-card/50 border border-border rounded-xl p-4 flex items-center" data-testid="streak-message">
+            <p className="text-sm text-muted-foreground">{streakAwayMessage}</p>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
