@@ -65,12 +65,15 @@ export function AppSidebar() {
   return (
     <Sidebar className="border-r border-border bg-card/95 backdrop-blur-xl">
       <SidebarHeader className="p-4 border-b border-border/50">
-        <Link href="/dashboard" className="flex items-center gap-2 px-2">
-          <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-            <LayoutDashboard className="w-5 h-5 text-white" />
-          </div>
-          <span className="font-display font-bold text-lg">Consistency System</span>
-        </Link>
+        <div className="flex items-center justify-between">
+          <Link href="/dashboard" className="flex items-center gap-2 px-2">
+            <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+              <LayoutDashboard className="w-5 h-5 text-white" />
+            </div>
+            <span className="font-display font-bold text-lg">Consistency System</span>
+          </Link>
+          <SidebarTrigger className="h-8 w-8 rounded-lg border border-border/50 hover:bg-white/10" data-testid="button-sidebar-close" />
+        </div>
       </SidebarHeader>
       
       <SidebarContent>
@@ -127,13 +130,10 @@ export function AppSidebar() {
             <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" className="flex-1 justify-start gap-2" onClick={() => logout()}>
-            <LogOut className="w-4 h-4" />
-            Logout
-          </Button>
-          <SidebarTrigger className="border border-border rounded-lg h-9 w-9" data-testid="button-sidebar-toggle" />
-        </div>
+        <Button variant="outline" className="w-full justify-start gap-2" onClick={() => logout()}>
+          <LogOut className="w-4 h-4" />
+          Logout
+        </Button>
       </SidebarFooter>
     </Sidebar>
   );
