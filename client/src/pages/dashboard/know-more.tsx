@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import {
   Play, ArrowLeft, Send, MessageSquare, Clock, Search,
   Video, AlertCircle, Lightbulb, Bug, Sparkles,
-  ExternalLink, Plus, Edit2, Trash2, Shield, Eye, EyeOff
+  ExternalLink, Plus, Edit2, Trash2, Shield, Eye, EyeOff, Reply, X
 } from "lucide-react";
 
 type VideoItem = {
@@ -39,6 +39,8 @@ type FeedbackItem = {
   feedbackType: string;
   message: string;
   status: string;
+  adminReply: string | null;
+  adminRepliedAt: string | null;
   createdAt: string | null;
 };
 
@@ -113,7 +115,7 @@ export default function KnowMorePage() {
   }
 
   return (
-    <div className="p-2 pt-14 sm:p-4 sm:pt-4 max-w-6xl mx-auto" data-testid="know-more-page">
+    <div className="p-2 pt-14 sm:p-4 sm:pt-4" data-testid="know-more-page">
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold mb-1" data-testid="text-page-title">Know More About Consistency System</h1>
@@ -263,7 +265,7 @@ function VideoPlayerView({ video, onBack }: { video: VideoItem; onBack: () => vo
   });
 
   return (
-    <div className="p-2 pt-14 sm:p-4 sm:pt-4 max-w-5xl mx-auto" data-testid="video-player-view">
+    <div className="p-2 pt-14 sm:p-4 sm:pt-4" data-testid="video-player-view">
       <Button variant="ghost" size="sm" onClick={onBack} className="mb-4" data-testid="button-back-to-videos">
         <ArrowLeft className="w-4 h-4 mr-2" /> Back to Videos
       </Button>
@@ -425,6 +427,18 @@ function VideoPlayerView({ video, onBack }: { video: VideoItem; onBack: () => vo
                           </Badge>
                         </div>
                         <p className="text-sm">{fb.message}</p>
+                        {fb.adminReply && (
+                          <div className="bg-primary/10 border border-primary/20 rounded-md p-2.5 mt-2">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <Reply className="w-3 h-3 text-primary" />
+                              <span className="text-[10px] font-medium text-primary">Admin Reply</span>
+                              {fb.adminRepliedAt && (
+                                <span className="text-[10px] text-muted-foreground">· {new Date(fb.adminRepliedAt).toLocaleDateString()}</span>
+                              )}
+                            </div>
+                            <p className="text-sm">{fb.adminReply}</p>
+                          </div>
+                        )}
                         {fb.createdAt && (
                           <p className="text-[10px] text-muted-foreground mt-1">
                             {new Date(fb.createdAt).toLocaleDateString()}
@@ -549,6 +563,9 @@ function AdminVideoManagement({ onBack }: { onBack: () => void }) {
     },
   });
 
+  const [replyingTo, setReplyingTo] = useState<number | null>(null);
+  const [replyText, setReplyText] = useState("");
+
   const updateFeedbackStatus = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: string }) => {
       await apiRequest("PATCH", `/api/admin/video-feedback/${id}`, { status });
@@ -558,8 +575,21 @@ function AdminVideoManagement({ onBack }: { onBack: () => void }) {
     },
   });
 
+  const replyToFeedback = useMutation({
+    mutationFn: async ({ id, reply }: { id: number; reply: string }) => {
+      await apiRequest("POST", `/api/admin/video-feedback/${id}/reply`, { reply });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/video-feedback"] });
+      setReplyingTo(null);
+      setReplyText("");
+      toast({ title: "Reply sent" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
   return (
-    <div className="p-2 pt-14 sm:p-4 sm:pt-4 max-w-6xl mx-auto" data-testid="admin-video-management">
+    <div className="p-2 pt-14 sm:p-4 sm:pt-4" data-testid="admin-video-management">
       <Button variant="ghost" size="sm" onClick={onBack} className="mb-4" data-testid="button-back-from-admin">
         <ArrowLeft className="w-4 h-4 mr-2" /> Back to Videos
       </Button>
@@ -736,6 +766,18 @@ function AdminVideoManagement({ onBack }: { onBack: () => void }) {
                           <span className="text-[10px] text-muted-foreground">User: {fb.userId.slice(0, 8)}...</span>
                         </div>
                         <p className="text-sm mb-2">{fb.message}</p>
+                        {fb.adminReply && (
+                          <div className="bg-primary/10 border border-primary/20 rounded-md p-2.5 mb-2">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <Reply className="w-3 h-3 text-primary" />
+                              <span className="text-[10px] font-medium text-primary">Admin Reply</span>
+                              {fb.adminRepliedAt && (
+                                <span className="text-[10px] text-muted-foreground">· {new Date(fb.adminRepliedAt).toLocaleDateString()}</span>
+                              )}
+                            </div>
+                            <p className="text-sm">{fb.adminReply}</p>
+                          </div>
+                        )}
                         <div className="flex items-center gap-2">
                           <Select
                             value={fb.status}
@@ -750,10 +792,50 @@ function AdminVideoManagement({ onBack }: { onBack: () => void }) {
                               <SelectItem value="resolved">Resolved</SelectItem>
                             </SelectContent>
                           </Select>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs gap-1"
+                            onClick={() => { setReplyingTo(replyingTo === fb.id ? null : fb.id); setReplyText(fb.adminReply || ""); }}
+                            data-testid={`button-reply-feedback-${fb.id}`}
+                          >
+                            <Reply className="w-3.5 h-3.5" /> {fb.adminReply ? "Edit Reply" : "Reply"}
+                          </Button>
                           {fb.createdAt && (
                             <span className="text-[10px] text-muted-foreground">{new Date(fb.createdAt).toLocaleDateString()}</span>
                           )}
                         </div>
+                        {replyingTo === fb.id && (
+                          <div className="mt-2 flex gap-2">
+                            <Textarea
+                              value={replyText}
+                              onChange={(e) => setReplyText(e.target.value)}
+                              placeholder="Type your reply..."
+                              rows={2}
+                              className="text-sm"
+                              data-testid={`input-reply-${fb.id}`}
+                            />
+                            <div className="flex flex-col gap-1">
+                              <Button
+                                size="sm"
+                                className="h-8"
+                                disabled={!replyText.trim() || replyToFeedback.isPending}
+                                onClick={() => replyToFeedback.mutate({ id: fb.id, reply: replyText })}
+                                data-testid={`button-send-reply-${fb.id}`}
+                              >
+                                <Send className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setReplyingTo(null)}
+                                data-testid={`button-cancel-reply-${fb.id}`}
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
