@@ -261,20 +261,26 @@ export async function registerRoutes(
 
       const gHabits = await storage.getGoodHabits(userId);
       let goodHabitScore = 0;
+      let dayGoodEntryCount = 0;
       if (gHabits.length > 0) {
         const gEntries = await storage.getGoodHabitEntries(gHabits.map(h => h.id));
         const dayGoodEntries = gEntries.filter(e => e.date === date);
+        dayGoodEntryCount = dayGoodEntries.length;
         const completedCount = dayGoodEntries.filter(e => e.completed).length;
-        goodHabitScore = (completedCount / gHabits.length) * 100;
+        goodHabitScore = dayGoodEntryCount > 0 ? (completedCount / gHabits.length) * 100 : 0;
       }
 
       const bHabits = await storage.getBadHabits(userId);
-      let badHabitScore = 100;
+      let badHabitScore = 0;
+      let dayBadEntryCount = 0;
       if (bHabits.length > 0) {
         const bEntries = await storage.getBadHabitEntries(bHabits.map(h => h.id));
         const dayBadEntries = bEntries.filter(e => e.date === date);
-        const occurredCount = dayBadEntries.filter(e => e.occurred).length;
-        badHabitScore = ((bHabits.length - occurredCount) / bHabits.length) * 100;
+        dayBadEntryCount = dayBadEntries.length;
+        if (dayBadEntryCount > 0) {
+          const occurredCount = dayBadEntries.filter(e => e.occurred).length;
+          badHabitScore = ((bHabits.length - occurredCount) / bHabits.length) * 100;
+        }
       }
 
       const hEntries = await storage.getHourlyEntries(userId, date);
@@ -285,8 +291,8 @@ export async function registerRoutes(
       const weights = { task: 0.3, goodHabit: 0.25, badHabit: 0.2, hourly: 0.25 };
       const activeSections: string[] = [];
       if (dayTasks.length > 0) activeSections.push('task');
-      if (gHabits.length > 0) activeSections.push('goodHabit');
-      if (bHabits.length > 0) activeSections.push('badHabit');
+      if (dayGoodEntryCount > 0) activeSections.push('goodHabit');
+      if (dayBadEntryCount > 0) activeSections.push('badHabit');
       if (hEntries.length > 0) activeSections.push('hourly');
 
       let totalScore = 0;
@@ -332,16 +338,17 @@ export async function registerRoutes(
         const dayTasks = await storage.getTasks(userId, dateStr);
         const taskScore = dayTasks.length > 0 ? dayTasks.reduce((sum, t) => sum + (t.completionPercentage || 0), 0) / dayTasks.length : 0;
 
+        const dayGoodEntries = allGoodEntries.filter(e => e.date === dateStr);
         let goodHabitScore = 0;
-        if (gHabits.length > 0) {
-          const dayGoodEntries = allGoodEntries.filter(e => e.date === dateStr);
+        if (gHabits.length > 0 && dayGoodEntries.length > 0) {
           goodHabitScore = (dayGoodEntries.filter(e => e.completed).length / gHabits.length) * 100;
         }
 
-        let badHabitScore = 100;
-        if (bHabits.length > 0) {
-          const dayBadEntries = allBadEntries.filter(e => e.date === dateStr);
-          badHabitScore = ((bHabits.length - dayBadEntries.filter(e => e.occurred).length) / bHabits.length) * 100;
+        const dayBadEntries = allBadEntries.filter(e => e.date === dateStr);
+        let badHabitScore = 0;
+        if (bHabits.length > 0 && dayBadEntries.length > 0) {
+          const occurredCount = dayBadEntries.filter(e => e.occurred).length;
+          badHabitScore = ((bHabits.length - occurredCount) / bHabits.length) * 100;
         }
 
         const hEntries = await storage.getHourlyEntries(userId, dateStr);
@@ -350,8 +357,8 @@ export async function registerRoutes(
         const weights = { task: 0.3, goodHabit: 0.25, badHabit: 0.2, hourly: 0.25 };
         const activeSections: string[] = [];
         if (dayTasks.length > 0) activeSections.push('task');
-        if (gHabits.length > 0) activeSections.push('goodHabit');
-        if (bHabits.length > 0) activeSections.push('badHabit');
+        if (dayGoodEntries.length > 0) activeSections.push('goodHabit');
+        if (dayBadEntries.length > 0) activeSections.push('badHabit');
         if (hEntries.length > 0) activeSections.push('hourly');
 
         let totalScore = 0;
@@ -637,18 +644,26 @@ export async function registerRoutes(
 
       const gHabits = await storage.getGoodHabits(userId);
       let goodHabitScore = 0;
+      let dayGoodEntryCount = 0;
       if (gHabits.length > 0) {
         const gEntries = await storage.getGoodHabitEntries(gHabits.map(h => h.id));
         const dayGoodEntries = gEntries.filter((e: any) => e.date === date);
-        goodHabitScore = (dayGoodEntries.filter((e: any) => e.completed).length / gHabits.length) * 100;
+        dayGoodEntryCount = dayGoodEntries.length;
+        if (dayGoodEntryCount > 0) {
+          goodHabitScore = (dayGoodEntries.filter((e: any) => e.completed).length / gHabits.length) * 100;
+        }
       }
 
       const bHabits = await storage.getBadHabits(userId);
-      let badHabitScore = 100;
+      let badHabitScore = 0;
+      let dayBadEntryCount = 0;
       if (bHabits.length > 0) {
         const bEntries = await storage.getBadHabitEntries(bHabits.map(h => h.id));
         const dayBadEntries = bEntries.filter((e: any) => e.date === date);
-        badHabitScore = ((bHabits.length - dayBadEntries.filter((e: any) => e.occurred).length) / bHabits.length) * 100;
+        dayBadEntryCount = dayBadEntries.length;
+        if (dayBadEntryCount > 0) {
+          badHabitScore = ((bHabits.length - dayBadEntries.filter((e: any) => e.occurred).length) / bHabits.length) * 100;
+        }
       }
 
       const hEntries = await storage.getHourlyEntries(userId, date);
@@ -659,8 +674,8 @@ export async function registerRoutes(
       const weights = { task: 0.3, goodHabit: 0.25, badHabit: 0.2, hourly: 0.25 };
       const activeSections: string[] = [];
       if (dayTasks.length > 0) activeSections.push('task');
-      if (gHabits.length > 0) activeSections.push('goodHabit');
-      if (bHabits.length > 0) activeSections.push('badHabit');
+      if (dayGoodEntryCount > 0) activeSections.push('goodHabit');
+      if (dayBadEntryCount > 0) activeSections.push('badHabit');
       if (hEntries.length > 0) activeSections.push('hourly');
 
       let dailyScore = 0;
@@ -899,15 +914,15 @@ export async function registerRoutes(
         const dayTasks = allTasks.filter(t => t.date === dateStr);
         const taskScore = dayTasks.length > 0 ? dayTasks.reduce((sum, t) => sum + (t.completionPercentage || 0), 0) / dayTasks.length : 0;
 
+        const dayGE = allGoodEntries.filter(e => e.date === dateStr);
         let goodHabitScore = 0;
-        if (gHabits.length > 0) {
-          const dayGE = allGoodEntries.filter(e => e.date === dateStr);
+        if (gHabits.length > 0 && dayGE.length > 0) {
           goodHabitScore = (dayGE.filter(e => e.completed).length / gHabits.length) * 100;
         }
 
-        let badHabitScore = 100;
-        if (bHabits.length > 0) {
-          const dayBE = allBadEntries.filter(e => e.date === dateStr);
+        const dayBE = allBadEntries.filter(e => e.date === dateStr);
+        let badHabitScore = 0;
+        if (bHabits.length > 0 && dayBE.length > 0) {
           badHabitScore = ((bHabits.length - dayBE.filter(e => e.occurred).length) / bHabits.length) * 100;
         }
 
@@ -917,8 +932,8 @@ export async function registerRoutes(
         const weights = { task: 0.3, goodHabit: 0.25, badHabit: 0.2, hourly: 0.25 };
         const active: string[] = [];
         if (dayTasks.length > 0) active.push('task');
-        if (gHabits.length > 0) active.push('goodHabit');
-        if (bHabits.length > 0) active.push('badHabit');
+        if (dayGE.length > 0) active.push('goodHabit');
+        if (dayBE.length > 0) active.push('badHabit');
         if (hEntries.length > 0) active.push('hourly');
 
         if (active.length === 0) return null;
