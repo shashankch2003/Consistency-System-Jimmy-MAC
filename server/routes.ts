@@ -269,12 +269,14 @@ export async function registerRoutes(
       }
 
       const bHabits = await storage.getBadHabits(userId);
-      let badHabitScore = 100;
+      let badHabitScore = 0;
       if (bHabits.length > 0) {
         const bEntries = await storage.getBadHabitEntries(bHabits.map(h => h.id));
         const dayBadEntries = bEntries.filter(e => e.date === date);
-        const occurredCount = dayBadEntries.filter(e => e.occurred).length;
-        badHabitScore = ((bHabits.length - occurredCount) / bHabits.length) * 100;
+        if (dayBadEntries.length > 0) {
+          const occurredCount = dayBadEntries.filter(e => e.occurred).length;
+          badHabitScore = ((bHabits.length - occurredCount) / bHabits.length) * 100;
+        }
       }
 
       const hEntries = await storage.getHourlyEntries(userId, date);
@@ -338,10 +340,12 @@ export async function registerRoutes(
           goodHabitScore = (dayGoodEntries.filter(e => e.completed).length / gHabits.length) * 100;
         }
 
-        let badHabitScore = 100;
+        let badHabitScore = 0;
         if (bHabits.length > 0) {
           const dayBadEntries = allBadEntries.filter(e => e.date === dateStr);
-          badHabitScore = ((bHabits.length - dayBadEntries.filter(e => e.occurred).length) / bHabits.length) * 100;
+          if (dayBadEntries.length > 0) {
+            badHabitScore = ((bHabits.length - dayBadEntries.filter(e => e.occurred).length) / bHabits.length) * 100;
+          }
         }
 
         const hEntries = await storage.getHourlyEntries(userId, dateStr);
@@ -644,11 +648,13 @@ export async function registerRoutes(
       }
 
       const bHabits = await storage.getBadHabits(userId);
-      let badHabitScore = 100;
+      let badHabitScore = 0;
       if (bHabits.length > 0) {
         const bEntries = await storage.getBadHabitEntries(bHabits.map(h => h.id));
         const dayBadEntries = bEntries.filter((e: any) => e.date === date);
-        badHabitScore = ((bHabits.length - dayBadEntries.filter((e: any) => e.occurred).length) / bHabits.length) * 100;
+        if (dayBadEntries.length > 0) {
+          badHabitScore = ((bHabits.length - dayBadEntries.filter((e: any) => e.occurred).length) / bHabits.length) * 100;
+        }
       }
 
       const hEntries = await storage.getHourlyEntries(userId, date);
@@ -905,10 +911,12 @@ export async function registerRoutes(
           goodHabitScore = (dayGE.filter(e => e.completed).length / gHabits.length) * 100;
         }
 
-        let badHabitScore = 100;
+        let badHabitScore = 0;
         if (bHabits.length > 0) {
           const dayBE = allBadEntries.filter(e => e.date === dateStr);
-          badHabitScore = ((bHabits.length - dayBE.filter(e => e.occurred).length) / bHabits.length) * 100;
+          if (dayBE.length > 0) {
+            badHabitScore = ((bHabits.length - dayBE.filter(e => e.occurred).length) / bHabits.length) * 100;
+          }
         }
 
         const hEntries = hourlyByDate[dateStr] || [];
