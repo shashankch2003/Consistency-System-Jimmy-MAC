@@ -196,6 +196,94 @@ export const insertMonthlyEvaluationSchema = createInsertSchema(monthlyEvaluatio
 export const insertGroupMessageSchema = createInsertSchema(groupMessages).omit({ id: true, createdAt: true });
 export const insertAdminInboxSchema = createInsertSchema(adminInbox).omit({ id: true, createdAt: true, status: true });
 
+// Journaling System
+export const journalEntries = pgTable("journal_entries", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  date: text("date").notNull(), // YYYY-MM-DD
+  dayTypeId: integer("day_type_id"),
+  customDayName: text("custom_day_name"),
+  emoji: text("emoji"),
+  journalText: text("journal_text").default(""),
+  imageUrls: text("image_urls").array().default([]),
+  extractedText: text("extracted_text"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const DAY_TYPE_CATEGORIES = [
+  "Focus & Productivity",
+  "Positive & Stable",
+  "Business & Learning",
+  "Peak Positive",
+  "Neutral / Mixed",
+  "Negative",
+] as const;
+
+export const DEFAULT_DAY_TYPES: { name: string; emoji: string; category: string }[] = [
+  // Focus & Productivity
+  { name: "Deep Focus Day", emoji: "🎯", category: "Focus & Productivity" },
+  { name: "High Productivity Day", emoji: "🚀", category: "Focus & Productivity" },
+  { name: "Disciplined Execution Day", emoji: "⚡", category: "Focus & Productivity" },
+  { name: "Very Focused Day", emoji: "🔬", category: "Focus & Productivity" },
+  { name: "Slightly Distracted Day", emoji: "😐", category: "Focus & Productivity" },
+  { name: "Unfocused / Scattered Day", emoji: "🌀", category: "Focus & Productivity" },
+  // Positive & Stable
+  { name: "Happy Day", emoji: "😊", category: "Positive & Stable" },
+  { name: "Peaceful Day", emoji: "🕊️", category: "Positive & Stable" },
+  { name: "Productive Day", emoji: "✅", category: "Positive & Stable" },
+  { name: "Motivated Day", emoji: "💪", category: "Positive & Stable" },
+  { name: "Connected Day", emoji: "🤝", category: "Positive & Stable" },
+  { name: "Grateful Day", emoji: "🙏", category: "Positive & Stable" },
+  // Business & Learning
+  { name: "Massive Learning Day", emoji: "📚", category: "Business & Learning" },
+  { name: "Strategic Thinking Day", emoji: "🧠", category: "Business & Learning" },
+  { name: "Skill-Building Day", emoji: "🛠️", category: "Business & Learning" },
+  { name: "Breakthrough Business Day", emoji: "💡", category: "Business & Learning" },
+  { name: "Slow Progress Day", emoji: "🐢", category: "Business & Learning" },
+  { name: "Stagnant Business Day", emoji: "📉", category: "Business & Learning" },
+  // Peak Positive
+  { name: "Best Ever Day", emoji: "🏆", category: "Peak Positive" },
+  { name: "Life Achievement Day", emoji: "🎖️", category: "Peak Positive" },
+  { name: "Dream Come True Day", emoji: "🌟", category: "Peak Positive" },
+  { name: "Very Happy Day", emoji: "😄", category: "Peak Positive" },
+  { name: "Unforgettable Day", emoji: "💎", category: "Peak Positive" },
+  { name: "Special Day", emoji: "✨", category: "Peak Positive" },
+  { name: "Proud of Myself Day", emoji: "😎", category: "Peak Positive" },
+  { name: "Victory Day", emoji: "🏅", category: "Peak Positive" },
+  // Neutral / Mixed
+  { name: "Normal Day", emoji: "😶", category: "Neutral / Mixed" },
+  { name: "Confusing Day", emoji: "🤔", category: "Neutral / Mixed" },
+  { name: "Overthinking Day", emoji: "🧐", category: "Neutral / Mixed" },
+  { name: "Tiring Day", emoji: "😩", category: "Neutral / Mixed" },
+  // Negative
+  { name: "Sad Day", emoji: "😢", category: "Negative" },
+  { name: "Very Sad Day", emoji: "😭", category: "Negative" },
+  { name: "Regretful Day", emoji: "😞", category: "Negative" },
+  { name: "Worst Day", emoji: "💔", category: "Negative" },
+  { name: "Emotionally Drained Day", emoji: "😵", category: "Negative" },
+];
+
+export const customDayTypes = pgTable("custom_day_types", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  name: text("name").notNull(),
+  emoji: text("emoji").notNull().default("📝"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const dayTypeUsage = pgTable("day_type_usage", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  dayTypeName: text("day_type_name").notNull(),
+  usageCount: integer("usage_count").notNull().default(0),
+  lastUsed: timestamp("last_used").defaultNow(),
+});
+
+export const insertJournalEntrySchema = createInsertSchema(journalEntries).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertCustomDayTypeSchema = createInsertSchema(customDayTypes).omit({ id: true, createdAt: true });
+export const insertDayTypeUsageSchema = createInsertSchema(dayTypeUsage).omit({ id: true });
+
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
 export const insertYearlyGoalSchema = createInsertSchema(yearlyGoals).omit({ id: true, createdAt: true });
 export const insertMonthlyOverviewGoalSchema = createInsertSchema(monthlyOverviewGoals).omit({ id: true, createdAt: true });
