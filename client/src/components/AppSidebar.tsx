@@ -27,7 +27,8 @@ import {
   FileText,
   Users,
   Shield,
-  BookOpen
+  BookOpen,
+  Trophy
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -41,6 +42,7 @@ const menuItems = [
   { title: "Daily Score", icon: Gauge, url: "/dashboard/daily-score" },
   { title: "Journal", icon: BookOpen, url: "/dashboard/journal" },
   { title: "Notes", icon: FileText, url: "/dashboard/notes" },
+  { title: "Fundamentals", icon: Trophy, url: "/dashboard/fundamentals" },
   { title: "Community", icon: Users, url: "/dashboard/community" },
 ];
 

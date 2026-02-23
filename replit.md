@@ -58,6 +58,10 @@ The frontend lives in `client/src/` with pages under `client/src/pages/`, reusab
   - `monthly_evaluations` — Monthly evaluation results per user
   - `group_messages` — Group chat messages per level
   - `admin_inbox` — User-to-admin contact messages
+  - `journal_entries` — Daily journal with day types, text, images, OCR
+  - `custom_day_types` / `day_type_usage` — Custom journal day types and usage tracking
+  - `user_streaks` — Consecutive productive day streak tracking
+  - `successful_fundamentals` — Business/success foundation notes (32 predefined topics)
 
 ### Level/Ranking System
 - **7 Levels**: Unproductive (default) → Bronze → Silver → Gold → Platinum → Diamond → Elite

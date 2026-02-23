@@ -5,6 +5,7 @@ import {
   tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, payments, taskBankItems, dailyReasons, notes,
   userLevels, groupMessages, adminInbox, monthlyEvaluations,
   journalEntries, customDayTypes, dayTypeUsage, userStreaks,
+  successfulFundamentals,
 } from "@shared/schema";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
 
@@ -26,6 +27,7 @@ type InsertAdminInbox = typeof adminInbox.$inferInsert;
 type InsertJournalEntry = typeof journalEntries.$inferInsert;
 type InsertCustomDayType = typeof customDayTypes.$inferInsert;
 type InsertDayTypeUsage = typeof dayTypeUsage.$inferInsert;
+type InsertSuccessfulFundamental = typeof successfulFundamentals.$inferInsert;
 
 export interface IStorage extends IAuthStorage {
   getYearlyGoals(userId: string, year?: number): Promise<(typeof yearlyGoals.$inferSelect)[]>;
@@ -109,6 +111,10 @@ export interface IStorage extends IAuthStorage {
 
   getUserStreak(userId: string): Promise<(typeof userStreaks.$inferSelect) | undefined>;
   upsertUserStreak(userId: string, data: { currentStreak: number; longestStreak: number; totalStreakDays: number; lastStreakUpdateDate: string }): Promise<typeof userStreaks.$inferSelect>;
+
+  getFundamentals(userId: string): Promise<(typeof successfulFundamentals.$inferSelect)[]>;
+  getFundamental(userId: string, fundamentalKey: string): Promise<(typeof successfulFundamentals.$inferSelect) | undefined>;
+  upsertFundamental(data: InsertSuccessfulFundamental): Promise<typeof successfulFundamentals.$inferSelect>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -427,6 +433,23 @@ export class DatabaseStorage implements IStorage {
       return updated;
     }
     const [created] = await db.insert(userStreaks).values({ userId, ...data }).returning();
+    return created;
+  }
+
+  async getFundamentals(userId: string) {
+    return await db.select().from(successfulFundamentals).where(eq(successfulFundamentals.userId, userId)).orderBy(asc(successfulFundamentals.id));
+  }
+  async getFundamental(userId: string, fundamentalKey: string) {
+    const [entry] = await db.select().from(successfulFundamentals).where(and(eq(successfulFundamentals.userId, userId), eq(successfulFundamentals.fundamentalKey, fundamentalKey)));
+    return entry;
+  }
+  async upsertFundamental(data: InsertSuccessfulFundamental) {
+    const existing = await db.select().from(successfulFundamentals).where(and(eq(successfulFundamentals.userId, data.userId), eq(successfulFundamentals.fundamentalKey, data.fundamentalKey)));
+    if (existing.length > 0) {
+      const [updated] = await db.update(successfulFundamentals).set({ content: data.content, updatedAt: new Date() }).where(eq(successfulFundamentals.id, existing[0].id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(successfulFundamentals).values(data).returning();
     return created;
   }
 }

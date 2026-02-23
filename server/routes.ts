@@ -8,7 +8,7 @@ import crypto from "crypto";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { LEVELS, LEVEL_INDEX, INTERACTIVE_LEVELS } from "@shared/schema";
+import { LEVELS, LEVEL_INDEX, INTERACTIVE_LEVELS, FUNDAMENTALS_LIST } from "@shared/schema";
 import { getCurrentLevelStatus, runMonthlyEvaluation, computeDailyMetrics } from "./level-engine";
 
 const ADMIN_USER_ID = process.env.ADMIN_USER_ID || "";
@@ -781,6 +781,40 @@ export async function registerRoutes(
       await storage.deleteCustomDayType(parseInt(req.params.id), req.user.claims.sub);
       res.status(204).send();
     } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ===== SUCCESSFUL FUNDAMENTALS ROUTES =====
+  app.get("/api/fundamentals", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const entries = await storage.getFundamentals(userId);
+      res.json(entries);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/fundamentals/:key", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const entry = await storage.getFundamental(userId, req.params.key);
+      res.json(entry || null);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.put("/api/fundamentals/:key", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const key = req.params.key;
+      if (!FUNDAMENTALS_LIST.some(f => f.key === key)) {
+        return res.status(400).json({ message: "Invalid fundamental key" });
+      }
+      const contentSchema = z.object({ content: z.string().nullable() });
+      const parsed = contentSchema.parse(req.body);
+      const entry = await storage.upsertFundamental({ userId, fundamentalKey: key, content: parsed.content });
+      res.json(entry);
+    } catch (e: any) {
+      if (e instanceof z.ZodError) return res.status(400).json({ message: "Invalid input", errors: e.errors });
+      res.status(500).json({ message: e.message });
+    }
   });
 
   // OCR: extract text from image
