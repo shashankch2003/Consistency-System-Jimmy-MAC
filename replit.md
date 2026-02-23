@@ -70,6 +70,19 @@ The frontend lives in `client/src/` with pages under `client/src/pages/`, reusab
   - `bills` — Bill tracking with due dates, frequencies, and mark-as-paid flow
   - `credit_cards` — Credit card management with limits, balances, statement/due dates
   - `savings_goals` — Savings goals with target amounts, progress tracking, and monthly contributions
+  - `videos` — YouTube video entries for the Know More section (title, description, category, youtube_url, duration, provider, sort_order, is_published)
+  - `video_feedback` — User feedback on videos (video_id, user_id, feedback_type, message, status)
+
+### Know More Section
+- **Route**: `/dashboard/know-more` — Video learning center with YouTube embedding
+- **Video Hosting**: Videos stored on YouTube (unlisted), only URLs stored in database
+- **Embedding**: YouTube iframe embeds with `rel=0&modestbranding=1` for clean player; lazy-loads thumbnail first, loads iframe on play click
+- **Fallback**: If embedding fails, opens YouTube link in new tab
+- **Feedback System**: In-app private feedback (Ask a Doubt, Suggest Improvement, Report Issue, Request Feature); users see only their own feedback
+- **Admin Management**: Admin can add/edit/delete videos, toggle publish status, view all user feedback with status management (pending/reviewed/resolved)
+- **Categories**: general, getting-started, features, tips, updates — filterable with search
+- **Provider-based Design**: video_provider field supports future migration to Vimeo/CDN/self-hosted
+- **API**: `/api/videos` for user access, `/api/admin/videos` and `/api/admin/video-feedback` for admin CRUD
 
 ### Money Tracking Module
 - **Route**: `/dashboard/money` — 8 sub-tabs: Dashboard, Expenses, Budget, Subscriptions, Bills & Cards, Reports, Goals, Settings

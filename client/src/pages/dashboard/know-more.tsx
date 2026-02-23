@@ -1,8 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,11 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  Play, ArrowLeft, Send, MessageSquare, Clock, Filter, Search,
-  ChevronRight, Video, AlertCircle, Lightbulb, Bug, Sparkles,
-  ExternalLink
+  Play, ArrowLeft, Send, MessageSquare, Clock, Search,
+  Video, AlertCircle, Lightbulb, Bug, Sparkles,
+  ExternalLink, Plus, Edit2, Trash2, Shield, Eye, EyeOff
 } from "lucide-react";
 
 type VideoItem = {
@@ -51,6 +51,8 @@ const VIDEO_CATEGORIES = [
   { value: "updates", label: "Updates" },
 ];
 
+const CATEGORY_OPTIONS = VIDEO_CATEGORIES.filter(c => c.value !== "all");
+
 const FEEDBACK_TYPES = [
   { value: "doubt", label: "Ask a Doubt", icon: AlertCircle, color: "text-blue-400" },
   { value: "improvement", label: "Suggest Improvement", icon: Lightbulb, color: "text-yellow-400" },
@@ -78,12 +80,14 @@ function getThumbnailUrl(video: VideoItem): string {
 }
 
 export default function KnowMorePage() {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
   const [selectedVideo, setSelectedVideo] = useState<VideoItem | null>(null);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [playerLoaded, setPlayerLoaded] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+
+  const { data: adminCheck } = useQuery<{ isAdmin: boolean }>({
+    queryKey: ["/api/level/is-admin"],
+  });
 
   const { data: videos = [], isLoading } = useQuery<VideoItem[]>({
     queryKey: ["/api/videos"],
@@ -100,15 +104,26 @@ export default function KnowMorePage() {
     (c) => c.value === "all" || videos.some((v) => v.category === c.value)
   );
 
+  if (showAdmin && adminCheck?.isAdmin) {
+    return <AdminVideoManagement onBack={() => setShowAdmin(false)} />;
+  }
+
   if (selectedVideo) {
-    return <VideoPlayerView video={selectedVideo} onBack={() => { setSelectedVideo(null); setPlayerLoaded(false); }} />;
+    return <VideoPlayerView video={selectedVideo} onBack={() => setSelectedVideo(null)} />;
   }
 
   return (
     <div className="p-2 pt-14 sm:p-4 sm:pt-4 max-w-6xl mx-auto" data-testid="know-more-page">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold mb-1" data-testid="text-page-title">Know More About Consistency System</h1>
-        <p className="text-muted-foreground text-sm">Learn how to get the most out of every feature</p>
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold mb-1" data-testid="text-page-title">Know More About Consistency System</h1>
+          <p className="text-muted-foreground text-sm">Learn how to get the most out of every feature</p>
+        </div>
+        {adminCheck?.isAdmin && (
+          <Button variant="outline" size="sm" onClick={() => setShowAdmin(true)} data-testid="button-admin-videos">
+            <Shield className="w-4 h-4 mr-2" /> Manage Videos
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
@@ -178,7 +193,7 @@ function VideoCard({ video, onClick }: { video: VideoItem; onClick: () => void }
       onClick={onClick}
       data-testid={`card-video-${video.id}`}
     >
-      <div className="aspect-video relative bg-muted overflow-hidden">
+      <div className="aspect-video relative bg-muted overflow-hidden" data-testid={`button-play-card-${video.id}`}>
         {thumbnail && (
           <img
             src={thumbnail}
@@ -222,16 +237,11 @@ function VideoPlayerView({ video, onBack }: { video: VideoItem; onBack: () => vo
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
 
-  const videoId = extractVideoId(video.youtubeUrl);
-  const embedUrl = videoId ? `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1` : null;
+  const ytVideoId = extractVideoId(video.youtubeUrl);
+  const embedUrl = ytVideoId ? `https://www.youtube.com/embed/${ytVideoId}?rel=0&modestbranding=1` : null;
 
   const { data: feedback = [] } = useQuery<FeedbackItem[]>({
-    queryKey: ["/api/videos", video.id, "feedback"],
-    queryFn: async () => {
-      const res = await fetch(`/api/videos/${video.id}/feedback`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch feedback");
-      return res.json();
-    },
+    queryKey: [`/api/videos/${video.id}/feedback`],
   });
 
   const submitFeedback = useMutation({
@@ -241,7 +251,7 @@ function VideoPlayerView({ video, onBack }: { video: VideoItem; onBack: () => vo
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/videos", video.id, "feedback"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/videos/${video.id}/feedback`] });
       setFeedbackMessage("");
       setFeedbackType("");
       setFeedbackDialogOpen(false);
@@ -266,6 +276,9 @@ function VideoPlayerView({ video, onBack }: { video: VideoItem; onBack: () => vo
                 <div
                   className="absolute inset-0 cursor-pointer group"
                   onClick={() => setPlayerLoaded(true)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === "Enter") setPlayerLoaded(true); }}
                   data-testid="button-play-video"
                 >
                   <img
@@ -297,7 +310,7 @@ function VideoPlayerView({ video, onBack }: { video: VideoItem; onBack: () => vo
               <div className="text-center">
                 <Video className="w-12 h-12 mx-auto mb-2" />
                 <p className="text-sm">Unable to embed this video</p>
-                <a href={video.youtubeUrl} target="_blank" rel="noopener noreferrer" className="text-primary text-sm inline-flex items-center gap-1 mt-2">
+                <a href={video.youtubeUrl} target="_blank" rel="noopener noreferrer" className="text-primary text-sm inline-flex items-center gap-1 mt-2" data-testid="link-youtube-fallback">
                   Open on YouTube <ExternalLink className="w-3 h-3" />
                 </a>
               </div>
@@ -319,7 +332,7 @@ function VideoPlayerView({ video, onBack }: { video: VideoItem; onBack: () => vo
               </div>
             </div>
             {!embedUrl && (
-              <a href={video.youtubeUrl} target="_blank" rel="noopener noreferrer">
+              <a href={video.youtubeUrl} target="_blank" rel="noopener noreferrer" data-testid="link-open-youtube">
                 <Button variant="outline" size="sm" data-testid="button-open-youtube">
                   <ExternalLink className="w-4 h-4 mr-2" /> Watch on YouTube
                 </Button>
@@ -327,7 +340,7 @@ function VideoPlayerView({ video, onBack }: { video: VideoItem; onBack: () => vo
             )}
           </div>
           {video.description && (
-            <p className="text-sm text-muted-foreground mt-3 leading-relaxed">{video.description}</p>
+            <p className="text-sm text-muted-foreground mt-3 leading-relaxed" data-testid="text-video-description">{video.description}</p>
           )}
         </div>
 
@@ -335,7 +348,7 @@ function VideoPlayerView({ video, onBack }: { video: VideoItem; onBack: () => vo
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base flex items-center gap-2">
-                <MessageSquare className="w-4 h-4" /> Feedback
+                <MessageSquare className="w-4 h-4" /> Your Feedback
               </CardTitle>
               <Dialog open={feedbackDialogOpen} onOpenChange={setFeedbackDialogOpen}>
                 <DialogTrigger asChild>
@@ -373,6 +386,7 @@ function VideoPlayerView({ video, onBack }: { video: VideoItem; onBack: () => vo
                         value={feedbackMessage}
                         onChange={(e) => setFeedbackMessage(e.target.value)}
                         rows={4}
+                        maxLength={2000}
                         data-testid="input-feedback-message"
                       />
                     </div>
@@ -425,6 +439,330 @@ function VideoPlayerView({ video, onBack }: { video: VideoItem; onBack: () => vo
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function AdminVideoManagement({ onBack }: { onBack: () => void }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [editingVideo, setEditingVideo] = useState<VideoItem | null>(null);
+  const [feedbackTab, setFeedbackTab] = useState(false);
+
+  const [formTitle, setFormTitle] = useState("");
+  const [formDescription, setFormDescription] = useState("");
+  const [formCategory, setFormCategory] = useState("general");
+  const [formYoutubeUrl, setFormYoutubeUrl] = useState("");
+  const [formDuration, setFormDuration] = useState("");
+  const [formSortOrder, setFormSortOrder] = useState("0");
+  const [formPublished, setFormPublished] = useState(true);
+
+  const { data: videos = [], isLoading } = useQuery<VideoItem[]>({
+    queryKey: ["/api/admin/videos"],
+  });
+
+  const { data: allFeedback = [] } = useQuery<FeedbackItem[]>({
+    queryKey: ["/api/admin/video-feedback"],
+    enabled: feedbackTab,
+  });
+
+  const resetForm = () => {
+    setFormTitle("");
+    setFormDescription("");
+    setFormCategory("general");
+    setFormYoutubeUrl("");
+    setFormDuration("");
+    setFormSortOrder("0");
+    setFormPublished(true);
+    setEditingVideo(null);
+  };
+
+  const openEdit = (v: VideoItem) => {
+    setFormTitle(v.title);
+    setFormDescription(v.description || "");
+    setFormCategory(v.category);
+    setFormYoutubeUrl(v.youtubeUrl);
+    setFormDuration(v.duration || "");
+    setFormSortOrder(String(v.sortOrder));
+    setFormPublished(v.isPublished);
+    setEditingVideo(v);
+    setAddDialogOpen(true);
+  };
+
+  const createVideo = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/admin/videos", {
+        title: formTitle, description: formDescription, category: formCategory,
+        youtubeUrl: formYoutubeUrl, duration: formDuration,
+        sortOrder: parseInt(formSortOrder) || 0, isPublished: formPublished,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/videos"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/videos"] });
+      resetForm();
+      setAddDialogOpen(false);
+      toast({ title: "Video added successfully" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const updateVideo = useMutation({
+    mutationFn: async () => {
+      if (!editingVideo) return;
+      await apiRequest("PATCH", `/api/admin/videos/${editingVideo.id}`, {
+        title: formTitle, description: formDescription, category: formCategory,
+        youtubeUrl: formYoutubeUrl, duration: formDuration,
+        sortOrder: parseInt(formSortOrder) || 0, isPublished: formPublished,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/videos"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/videos"] });
+      resetForm();
+      setAddDialogOpen(false);
+      toast({ title: "Video updated successfully" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteVideo = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/admin/videos/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/videos"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/videos"] });
+      toast({ title: "Video deleted" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const togglePublish = useMutation({
+    mutationFn: async ({ id, published }: { id: number; published: boolean }) => {
+      await apiRequest("PATCH", `/api/admin/videos/${id}`, { isPublished: published });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/videos"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/videos"] });
+    },
+  });
+
+  const updateFeedbackStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+      await apiRequest("PATCH", `/api/admin/video-feedback/${id}`, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/video-feedback"] });
+    },
+  });
+
+  return (
+    <div className="p-2 pt-14 sm:p-4 sm:pt-4 max-w-6xl mx-auto" data-testid="admin-video-management">
+      <Button variant="ghost" size="sm" onClick={onBack} className="mb-4" data-testid="button-back-from-admin">
+        <ArrowLeft className="w-4 h-4 mr-2" /> Back to Videos
+      </Button>
+
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold mb-1">Manage Videos</h1>
+          <p className="text-muted-foreground text-sm">Add, edit, and manage video content</p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant={feedbackTab ? "outline" : "default"}
+            size="sm"
+            onClick={() => setFeedbackTab(false)}
+            data-testid="button-tab-videos"
+          >
+            <Video className="w-4 h-4 mr-2" /> Videos ({videos.length})
+          </Button>
+          <Button
+            variant={feedbackTab ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFeedbackTab(true)}
+            data-testid="button-tab-feedback"
+          >
+            <MessageSquare className="w-4 h-4 mr-2" /> Feedback
+          </Button>
+        </div>
+      </div>
+
+      {!feedbackTab ? (
+        <>
+          <div className="flex justify-end mb-4">
+            <Dialog open={addDialogOpen} onOpenChange={(open) => { setAddDialogOpen(open); if (!open) resetForm(); }}>
+              <DialogTrigger asChild>
+                <Button size="sm" data-testid="button-add-video">
+                  <Plus className="w-4 h-4 mr-2" /> Add Video
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>{editingVideo ? "Edit Video" : "Add New Video"}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3 mt-2">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Title</label>
+                    <Input value={formTitle} onChange={(e) => setFormTitle(e.target.value)} placeholder="Video title" data-testid="input-video-title" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">YouTube URL</label>
+                    <Input value={formYoutubeUrl} onChange={(e) => setFormYoutubeUrl(e.target.value)} placeholder="https://www.youtube.com/watch?v=..." data-testid="input-video-url" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Description</label>
+                    <Textarea value={formDescription} onChange={(e) => setFormDescription(e.target.value)} placeholder="Brief description" rows={3} data-testid="input-video-description" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Category</label>
+                      <Select value={formCategory} onValueChange={setFormCategory}>
+                        <SelectTrigger data-testid="select-video-category">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CATEGORY_OPTIONS.map((c) => (
+                            <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Duration</label>
+                      <Input value={formDuration} onChange={(e) => setFormDuration(e.target.value)} placeholder="e.g. 5:30" data-testid="input-video-duration" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Sort Order</label>
+                      <Input type="number" value={formSortOrder} onChange={(e) => setFormSortOrder(e.target.value)} data-testid="input-video-sort" />
+                    </div>
+                    <div className="flex items-center gap-2 pt-6">
+                      <Switch checked={formPublished} onCheckedChange={setFormPublished} data-testid="switch-video-published" />
+                      <label className="text-sm">Published</label>
+                    </div>
+                  </div>
+                  <Button
+                    className="w-full"
+                    disabled={!formTitle.trim() || !formYoutubeUrl.trim() || createVideo.isPending || updateVideo.isPending}
+                    onClick={() => editingVideo ? updateVideo.mutate() : createVideo.mutate()}
+                    data-testid="button-save-video"
+                  >
+                    {(createVideo.isPending || updateVideo.isPending) ? "Saving..." : editingVideo ? "Update Video" : "Add Video"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          {isLoading ? (
+            <div className="text-center py-8 text-muted-foreground">Loading...</div>
+          ) : videos.length === 0 ? (
+            <div className="text-center py-16">
+              <Video className="w-12 h-12 mx-auto mb-4 text-muted-foreground/30" />
+              <p className="text-muted-foreground">No videos yet. Add your first video above.</p>
+            </div>
+          ) : (
+            <Card>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Duration</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {videos.map((v) => (
+                    <TableRow key={v.id} data-testid={`row-video-${v.id}`}>
+                      <TableCell className="font-medium">{v.title}</TableCell>
+                      <TableCell><Badge variant="secondary" className="text-xs">{v.category}</Badge></TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{v.duration || "-"}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 gap-1"
+                          onClick={() => togglePublish.mutate({ id: v.id, published: !v.isPublished })}
+                          data-testid={`button-toggle-publish-${v.id}`}
+                        >
+                          {v.isPublished ? <Eye className="w-3.5 h-3.5 text-emerald-400" /> : <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />}
+                          <span className="text-xs">{v.isPublished ? "Published" : "Draft"}</span>
+                        </Button>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(v)} data-testid={`button-edit-video-${v.id}`}>
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteVideo.mutate(v.id)} data-testid={`button-delete-video-${v.id}`}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
+          )}
+        </>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">All User Feedback</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {allFeedback.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No feedback received yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {allFeedback.map((fb) => {
+                  const ft = FEEDBACK_TYPES.find((t) => t.value === fb.feedbackType);
+                  const vid = videos.find((v) => v.id === fb.videoId);
+                  return (
+                    <div key={fb.id} className="flex gap-3 p-3 rounded-lg bg-muted/50" data-testid={`admin-feedback-${fb.id}`}>
+                      <div className="mt-0.5">
+                        {ft && <ft.icon className={`w-4 h-4 ${ft.color}`} />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <Badge variant="outline" className="text-[10px]">{ft?.label || fb.feedbackType}</Badge>
+                          <Badge variant="secondary" className="text-[10px]">{vid?.title || `Video #${fb.videoId}`}</Badge>
+                          <span className="text-[10px] text-muted-foreground">User: {fb.userId.slice(0, 8)}...</span>
+                        </div>
+                        <p className="text-sm mb-2">{fb.message}</p>
+                        <div className="flex items-center gap-2">
+                          <Select
+                            value={fb.status}
+                            onValueChange={(status) => updateFeedbackStatus.mutate({ id: fb.id, status })}
+                          >
+                            <SelectTrigger className="w-28 h-7 text-xs" data-testid={`select-feedback-status-${fb.id}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pending">Pending</SelectItem>
+                              <SelectItem value="reviewed">Reviewed</SelectItem>
+                              <SelectItem value="resolved">Resolved</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {fb.createdAt && (
+                            <span className="text-[10px] text-muted-foreground">{new Date(fb.createdAt).toLocaleDateString()}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

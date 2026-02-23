@@ -1471,8 +1471,13 @@ export async function registerRoutes(
     try {
       const userId = req.user.claims.sub;
       const videoId = parseInt(req.params.id);
+      const video = await storage.getVideo(videoId);
+      if (!video || !video.isPublished) return res.status(404).json({ message: "Video not found" });
       const { feedbackType, message } = req.body;
       if (!feedbackType || !message) return res.status(400).json({ message: "Feedback type and message are required" });
+      if (message.length > 2000) return res.status(400).json({ message: "Message too long (max 2000 chars)" });
+      const validTypes = ["doubt", "improvement", "issue", "feature"];
+      if (!validTypes.includes(feedbackType)) return res.status(400).json({ message: "Invalid feedback type" });
       const fb = await storage.createVideoFeedback({ videoId, userId, feedbackType, message, status: "pending" });
       res.status(201).json(fb);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
