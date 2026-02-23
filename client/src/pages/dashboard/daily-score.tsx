@@ -180,7 +180,7 @@ export default function DailyScorePage() {
     const now = new Date();
     const months: { name: string; average: number }[] = [];
     for (let i = 0; i < 12; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1);
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       const match = stats?.monthlyAverages?.find(m => m.month === key);
       months.push({ name: formatMonthLabel(key), average: match ? match.average : 0 });
