@@ -167,15 +167,26 @@ export default function DailyScorePage() {
   const currentMonthAvg = stats?.monthlyAverages?.length ? stats.monthlyAverages[stats.monthlyAverages.length - 1] : null;
   const lastMonthAvg = stats?.monthlyAverages?.length && stats.monthlyAverages.length > 1 ? stats.monthlyAverages[stats.monthlyAverages.length - 2] : null;
 
-  const weeklyChartData = stats?.weeklyAverages?.map((w, i) => ({
-    name: formatWeekLabel(w.weekStart, i),
-    average: w.average,
-  })) || [];
+  const weeklyChartData = (() => {
+    const data: { name: string; average: number }[] = [];
+    for (let i = 1; i <= 54; i++) {
+      const match = stats?.weeklyAverages?.find((_, idx) => idx + 1 === i);
+      data.push({ name: `${i}`, average: match ? match.average : 0 });
+    }
+    return data;
+  })();
 
-  const monthlyChartData = stats?.monthlyAverages?.map(m => ({
-    name: formatMonthLabel(m.month),
-    average: m.average,
-  })) || [];
+  const monthlyChartData = (() => {
+    const now = new Date();
+    const months: { name: string; average: number }[] = [];
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const match = stats?.monthlyAverages?.find(m => m.month === key);
+      months.push({ name: formatMonthLabel(key), average: match ? match.average : 0 });
+    }
+    return months;
+  })();
 
   if (showReasonPage) {
     return (
@@ -437,27 +448,27 @@ export default function DailyScorePage() {
         )}
 
         {/* Weekly History List */}
-        {stats?.weeklyAverages && stats.weeklyAverages.length > 0 && (
-          <div className="bg-background border border-border rounded-xl p-6" data-testid="weekly-history-list">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Weekly History</h3>
-            <div className="max-h-64 overflow-y-auto space-y-1 dark-scrollbar">
-              {stats.weeklyAverages.map((w, i) => (
-                <div key={w.weekStart} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/5">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-medium text-muted-foreground w-8">{i + 1}</span>
-                    <span className="text-xs text-muted-foreground/60">{format(new Date(w.weekStart + "T00:00:00"), "MMM d")}</span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-1 ml-4">
-                    <div className="flex-1 h-1.5 bg-muted/20 rounded-full overflow-hidden">
-                      <div className={cn("h-full rounded-full", getScoreColor(w.average))} style={{ width: `${w.average}%` }} />
-                    </div>
-                    <span className={cn("text-sm font-semibold w-12 text-right", getScoreTextColor(w.average))}>{w.average}%</span>
-                  </div>
+        <div className="bg-background border border-border rounded-xl p-6" data-testid="weekly-history-list">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Weekly History</h3>
+          <div className="max-h-64 overflow-y-auto space-y-1 dark-scrollbar">
+            {weeklyChartData.map((w, i) => (
+              <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/5">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-medium text-muted-foreground w-8">{i + 1}</span>
+                  <span className="text-xs text-muted-foreground/60">
+                    {stats?.weeklyAverages?.[i] ? format(new Date(stats.weeklyAverages[i].weekStart + "T00:00:00"), "MMM d") : ""}
+                  </span>
                 </div>
-              ))}
-            </div>
+                <div className="flex items-center gap-2 flex-1 ml-4">
+                  <div className="flex-1 h-1.5 bg-muted/20 rounded-full overflow-hidden">
+                    <div className={cn("h-full rounded-full", getScoreColor(w.average))} style={{ width: `${w.average}%` }} />
+                  </div>
+                  <span className={cn("text-sm font-semibold w-12 text-right", getScoreTextColor(w.average))}>{w.average}%</span>
+                </div>
+              </div>
+            ))}
           </div>
-        )}
+        </div>
 
         {/* 4. This Month vs Last Month */}
         <div className="bg-card/50 border border-border rounded-xl p-6" data-testid="month-comparison">
@@ -501,15 +512,16 @@ export default function DailyScorePage() {
         )}
 
         {/* Monthly History List */}
-        {stats?.monthlyAverages && stats.monthlyAverages.length > 0 && (
-          <div className="bg-background border border-border rounded-xl p-6" data-testid="monthly-history-list">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Monthly History</h3>
-            <div className="max-h-64 overflow-y-auto space-y-1 dark-scrollbar">
-              {[...stats.monthlyAverages].sort((a, b) => a.month.localeCompare(b.month)).map((m) => (
-                <div key={m.month} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/5">
+        <div className="bg-background border border-border rounded-xl p-6" data-testid="monthly-history-list">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Monthly History</h3>
+          <div className="max-h-64 overflow-y-auto space-y-1 dark-scrollbar">
+            {monthlyChartData.map((m) => {
+              const match = stats?.monthlyAverages?.find(ma => formatMonthLabel(ma.month) === m.name);
+              return (
+                <div key={m.name} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/5">
                   <div className="flex items-center gap-3">
-                    <span className="text-xs font-medium text-muted-foreground w-16">{formatMonthLabel(m.month)}</span>
-                    <span className="text-xs text-muted-foreground/60">{m.days} days</span>
+                    <span className="text-xs font-medium text-muted-foreground w-16">{m.name}</span>
+                    <span className="text-xs text-muted-foreground/60">{match ? `${match.days} days` : "0 days"}</span>
                   </div>
                   <div className="flex items-center gap-2 flex-1 ml-4">
                     <div className="flex-1 h-1.5 bg-muted/20 rounded-full overflow-hidden">
@@ -518,10 +530,10 @@ export default function DailyScorePage() {
                     <span className={cn("text-sm font-semibold w-12 text-right", getScoreTextColor(m.average))}>{m.average}%</span>
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
-        )}
+        </div>
 
         {/* 6. Lifetime Statistics */}
         {stats?.lifetime && (
