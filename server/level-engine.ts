@@ -2,7 +2,7 @@ import { db } from "./db";
 import { eq, and, inArray } from "drizzle-orm";
 import {
   tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries,
-  hourlyEntries, userLevels, monthlyEvaluations,
+  hourlyEntries, userLevels, monthlyEvaluations, userSettings,
   LEVELS, LEVEL_INDEX, LEVEL_REQUIREMENTS, type Level,
 } from "@shared/schema";
 
@@ -88,26 +88,22 @@ export async function computeDailyMetrics(userId: string, date: string): Promise
   return { date, taskCompletionPct, goodHabitsPct, hourlyCompletionPct, badHabitsPct };
 }
 
-function doesDayQualifyForLevel(metrics: DailyMetrics, level: string): boolean {
+function doesDayQualifyForLevel(metrics: DailyMetrics, level: string, hourlyTrackingEnabled: boolean = true): boolean {
   if (level === "Unproductive") return true;
   const req = LEVEL_REQUIREMENTS[level];
   if (!req) return false;
 
   if (level === "Elite") {
-    return (
-      metrics.taskCompletionPct >= 95 &&
+    const baseQualifies = metrics.taskCompletionPct >= 95 &&
       metrics.goodHabitsPct >= 95 &&
-      metrics.hourlyCompletionPct >= 95 &&
-      metrics.badHabitsPct === 0
-    );
+      metrics.badHabitsPct === 0;
+    return hourlyTrackingEnabled ? (baseQualifies && metrics.hourlyCompletionPct >= 95) : baseQualifies;
   }
 
-  return (
-    metrics.taskCompletionPct >= req.percent &&
+  const baseQualifies = metrics.taskCompletionPct >= req.percent &&
     metrics.goodHabitsPct >= req.percent &&
-    metrics.hourlyCompletionPct >= req.percent &&
-    metrics.badHabitsPct === 0
-  );
+    metrics.badHabitsPct === 0;
+  return hourlyTrackingEnabled ? (baseQualifies && metrics.hourlyCompletionPct >= req.percent) : baseQualifies;
 }
 
 export async function evaluateMonth(userId: string, yearMonth: string): Promise<{
@@ -123,6 +119,9 @@ export async function evaluateMonth(userId: string, yearMonth: string): Promise<
   const month = parseInt(monthStr);
   const daysInMonth = new Date(year, month, 0).getDate();
 
+  const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
+  const hourlyTrackingEnabled = settings?.hourlyTrackingEnabled ?? true;
+
   const allMetrics: DailyMetrics[] = [];
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${yearMonth}-${d.toString().padStart(2, "0")}`;
@@ -135,16 +134,14 @@ export async function evaluateMonth(userId: string, yearMonth: string): Promise<
   const qualifyingDaysPerLevel: Record<string, number> = {};
   for (const level of LEVELS) {
     if (level === "Unproductive") continue;
-    qualifyingDaysPerLevel[level] = allMetrics.filter(m => doesDayQualifyForLevel(m, level)).length;
+    qualifyingDaysPerLevel[level] = allMetrics.filter(m => doesDayQualifyForLevel(m, level, hourlyTrackingEnabled)).length;
   }
 
-  const eliteDays95 = allMetrics.filter(m => doesDayQualifyForLevel(m, "Elite")).length;
-  const perfectDays = allMetrics.filter(m =>
-    m.taskCompletionPct === 100 &&
-    m.goodHabitsPct === 100 &&
-    m.hourlyCompletionPct === 100 &&
-    m.badHabitsPct === 0
-  ).length;
+  const eliteDays95 = allMetrics.filter(m => doesDayQualifyForLevel(m, "Elite", hourlyTrackingEnabled)).length;
+  const perfectDays = allMetrics.filter(m => {
+    const base = m.taskCompletionPct === 100 && m.goodHabitsPct === 100 && m.badHabitsPct === 0;
+    return hourlyTrackingEnabled ? (base && m.hourlyCompletionPct === 100) : base;
+  }).length;
 
   if (eliteDays95 === allMetrics.length && allMetrics.length > 0) {
     qualifyingDaysPerLevel["Elite"] = allMetrics.length;

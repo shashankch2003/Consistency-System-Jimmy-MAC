@@ -257,6 +257,17 @@ export const api = {
       responses: { 200: z.object({ success: z.boolean() }) }
     }
   },
+  settings: {
+    get: {
+      method: 'GET' as const, path: '/api/settings' as const,
+      responses: { 200: z.custom<typeof import("@shared/schema").userSettings.$inferSelect>() }
+    },
+    update: {
+      method: 'PUT' as const, path: '/api/settings' as const,
+      input: z.record(z.any()),
+      responses: { 200: z.custom<typeof import("@shared/schema").userSettings.$inferSelect>() }
+    }
+  },
   comparisonStats: {
     get: {
       method: 'GET' as const, path: '/api/comparison-stats' as const,

@@ -18,6 +18,7 @@ import CommunityPage from "@/pages/dashboard/community";
 import AdminPage from "@/pages/dashboard/admin";
 import JournalPage from "@/pages/dashboard/journal";
 import FundamentalsPage from "@/pages/dashboard/fundamentals";
+import SettingsPage from "@/pages/dashboard/settings";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -84,6 +85,11 @@ function Router() {
       <Route path="/dashboard/fundamentals">
         <DashboardLayout>
           <FundamentalsPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/settings">
+        <DashboardLayout>
+          <SettingsPage />
         </DashboardLayout>
       </Route>
       <Route path="/dashboard/admin">

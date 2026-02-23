@@ -28,7 +28,8 @@ import {
   Users,
   Shield,
   BookOpen,
-  Trophy
+  Trophy,
+  Settings
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -44,6 +45,7 @@ const menuItems = [
   { title: "Notes", icon: FileText, url: "/dashboard/notes" },
   { title: "Fundamentals", icon: Trophy, url: "/dashboard/fundamentals" },
   { title: "Community", icon: Users, url: "/dashboard/community" },
+  { title: "Settings", icon: Settings, url: "/dashboard/settings" },
 ];
 
 export function AppSidebar() {

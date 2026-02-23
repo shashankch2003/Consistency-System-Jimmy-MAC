@@ -5,7 +5,7 @@ import {
   tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, payments, taskBankItems, dailyReasons, notes,
   userLevels, groupMessages, adminInbox, monthlyEvaluations,
   journalEntries, customDayTypes, dayTypeUsage, userStreaks,
-  successfulFundamentals,
+  successfulFundamentals, userSettings,
 } from "@shared/schema";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
 
@@ -116,6 +116,9 @@ export interface IStorage extends IAuthStorage {
   getFundamental(userId: string, fundamentalKey: string): Promise<(typeof successfulFundamentals.$inferSelect) | undefined>;
   upsertFundamental(data: InsertSuccessfulFundamental): Promise<typeof successfulFundamentals.$inferSelect>;
   deleteFundamental(id: number, userId: string): Promise<void>;
+
+  getUserSettings(userId: string): Promise<typeof userSettings.$inferSelect | undefined>;
+  upsertUserSettings(userId: string, data: Partial<typeof userSettings.$inferInsert>): Promise<typeof userSettings.$inferSelect>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -455,6 +458,21 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteFundamental(id: number, userId: string) {
     await db.delete(successfulFundamentals).where(and(eq(successfulFundamentals.id, id), eq(successfulFundamentals.userId, userId)));
+  }
+
+  async getUserSettings(userId: string) {
+    const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
+    return settings;
+  }
+
+  async upsertUserSettings(userId: string, data: Partial<typeof userSettings.$inferInsert>) {
+    const existing = await this.getUserSettings(userId);
+    if (existing) {
+      const [updated] = await db.update(userSettings).set({ ...data, updatedAt: new Date() }).where(eq(userSettings.userId, userId)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(userSettings).values({ ...data, userId }).returning();
+    return created;
   }
 }
 

@@ -340,6 +340,55 @@ export const FUNDAMENTALS_LIST = [
   { key: "long-term-legacy-vision", title: "Long-Term Legacy Vision", description: "What legacy do you want to leave behind? Think beyond your lifetime." },
 ] as const;
 
+// User Settings
+export const userSettings = pgTable("user_settings", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().unique(),
+
+  // Appearance
+  themeMode: text("theme_mode").notNull().default("dark"), // "dark" | "light" | "system"
+
+  // Productivity Tracking
+  hourlyTrackingEnabled: boolean("hourly_tracking_enabled").notNull().default(true),
+  autoLockTime: text("auto_lock_time").notNull().default("00:00"), // HH:MM format
+  goodHabitStrictMode: boolean("good_habit_strict_mode").notNull().default(false),
+  badHabitStrictZero: boolean("bad_habit_strict_zero").notNull().default(false),
+
+  // Level & Progress
+  performanceDisplayMode: text("performance_display_mode").notNull().default("percentages"), // "percentages" | "points" | "minimal"
+  levelDowngradeWarning: boolean("level_downgrade_warning").notNull().default(true),
+  resetConfirmation: boolean("reset_confirmation").notNull().default(true),
+
+  // Group Settings
+  groupNotifications: text("group_notifications").notNull().default("all"), // "all" | "admin_only" | "mentions" | "off"
+  showLevelPublicly: boolean("show_level_publicly").notNull().default(true),
+  showMonthlyScore: boolean("show_monthly_score").notNull().default(true),
+  showStreakPublicly: boolean("show_streak_publicly").notNull().default(true),
+  allowDirectMessages: boolean("allow_direct_messages").notNull().default(true),
+  showOnlineStatus: boolean("show_online_status").notNull().default(true),
+
+  // Notifications
+  dailyReminder: boolean("daily_reminder").notNull().default(true),
+  dailyReminderTime: text("daily_reminder_time").notNull().default("21:00"),
+  weeklyPerformanceSummary: boolean("weekly_performance_summary").notNull().default(true),
+  monthlyLevelNotification: boolean("monthly_level_notification").notNull().default(true),
+  streakBreakAlert: boolean("streak_break_alert").notNull().default(true),
+  groupAchievementAlerts: boolean("group_achievement_alerts").notNull().default(true),
+
+  // Gamification
+  motivationMode: text("motivation_mode").notNull().default("competitive"), // "competitive" | "private"
+  streakVisibility: text("streak_visibility").notNull().default("public"), // "public" | "private"
+
+  // Data & Privacy
+  dataExportFormat: text("data_export_format").notNull().default("csv"), // "csv" | "json"
+
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({ id: true, updatedAt: true });
+export type InsertUserSettings = z.infer<typeof insertUserSettingsSchema>;
+export type UserSettings = typeof userSettings.$inferSelect;
+
 export const insertJournalEntrySchema = createInsertSchema(journalEntries).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertCustomDayTypeSchema = createInsertSchema(customDayTypes).omit({ id: true, createdAt: true });
 export const insertDayTypeUsageSchema = createInsertSchema(dayTypeUsage).omit({ id: true });

@@ -783,6 +783,85 @@ export async function registerRoutes(
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  // ===== USER SETTINGS ROUTES =====
+  app.get(api.settings.get.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      let settings = await storage.getUserSettings(userId);
+      if (!settings) {
+        settings = await storage.upsertUserSettings(userId, {});
+      }
+      res.json(settings);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  const settingsUpdateSchema = z.object({
+    themeMode: z.enum(["dark", "light", "system"]).optional(),
+    hourlyTrackingEnabled: z.boolean().optional(),
+    autoLockTime: z.string().optional(),
+    goodHabitStrictMode: z.boolean().optional(),
+    badHabitStrictZero: z.boolean().optional(),
+    performanceDisplayMode: z.enum(["percentages", "points", "minimal"]).optional(),
+    levelDowngradeWarning: z.boolean().optional(),
+    resetConfirmation: z.boolean().optional(),
+    groupNotifications: z.enum(["all", "admin_only", "mentions", "off"]).optional(),
+    showLevelPublicly: z.boolean().optional(),
+    showMonthlyScore: z.boolean().optional(),
+    showStreakPublicly: z.boolean().optional(),
+    allowDirectMessages: z.boolean().optional(),
+    showOnlineStatus: z.boolean().optional(),
+    dailyReminder: z.boolean().optional(),
+    dailyReminderTime: z.string().optional(),
+    weeklyPerformanceSummary: z.boolean().optional(),
+    monthlyLevelNotification: z.boolean().optional(),
+    streakBreakAlert: z.boolean().optional(),
+    groupAchievementAlerts: z.boolean().optional(),
+    motivationMode: z.enum(["competitive", "private"]).optional(),
+    streakVisibility: z.enum(["public", "private"]).optional(),
+    dataExportFormat: z.enum(["csv", "json"]).optional(),
+  });
+
+  app.put(api.settings.update.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const parsed = settingsUpdateSchema.parse(req.body);
+      const settings = await storage.upsertUserSettings(userId, parsed);
+      res.json(settings);
+    } catch (e: any) {
+      if (e.name === "ZodError") return res.status(400).json({ message: "Invalid settings data", errors: e.errors });
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  // ===== DATA EXPORT ROUTE =====
+  app.get("/api/export-data", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const format = req.query.format || "csv";
+
+      const [userTasks, gHabits, bHabits, hEntries, jEntries, streakData] = await Promise.all([
+        storage.getTasks(userId),
+        storage.getGoodHabits(userId),
+        storage.getBadHabits(userId),
+        storage.getHourlyEntries(userId),
+        storage.getJournalEntriesByYear(userId, new Date().getFullYear()),
+        storage.getUserStreak(userId),
+      ]);
+
+      if (format === "json") {
+        res.setHeader("Content-Type", "application/json");
+        res.setHeader("Content-Disposition", "attachment; filename=consistency-data.json");
+        res.json({ tasks: userTasks, goodHabits: gHabits, badHabits: bHabits, hourlyEntries: hEntries, journalEntries: jEntries, streak: streakData });
+      } else {
+        res.setHeader("Content-Type", "text/csv");
+        res.setHeader("Content-Disposition", "attachment; filename=consistency-tasks.csv");
+        const header = "Date,Title,Description,Completion%,Priority\n";
+        const rows = userTasks.map(t => `${t.date},"${(t.title || "").replace(/"/g, '""')}","${(t.description || "").replace(/"/g, '""')}",${t.completionPercentage || 0},${t.priority || "Normal"}`).join("\n");
+        res.send(header + rows);
+      }
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   // ===== COMPARISON ANALYTICS ROUTE =====
   app.get(api.comparisonStats.get.path, isAuthenticated, async (req: any, res) => {
     try {
