@@ -703,6 +703,8 @@ function WeeklyStrip({
 export default function JournalPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>("daily");
+  const [yearlyPreviewDate, setYearlyPreviewDate] = useState<Date | null>(null);
+  const [yearlyFullscreen, setYearlyFullscreen] = useState(false);
   const { toast } = useToast();
 
   const monthKey = formatMonthKey(selectedDate);
@@ -712,10 +714,14 @@ export default function JournalPage() {
   const { data: dayTypes = [] } = useQuery<DayType[]>({ queryKey: ["/api/day-types"] });
   const { data: currentEntry } = useQuery<JournalEntry | null>({ queryKey: [`/api/journal?date=${dateStr}`] });
   const { data: monthEntries = [] } = useQuery<JournalEntry[]>({ queryKey: [`/api/journal?month=${monthKey}`] });
+  const yearlyPreviewDateStr = yearlyPreviewDate ? formatDate(yearlyPreviewDate) : null;
   const { data: yearEntries = [] } = useQuery<JournalEntry[]>({
     queryKey: [`/api/journal?year=${yearNum}`],
     enabled: viewMode === "yearly",
   });
+  const yearlyPreviewEntry = yearlyPreviewDate
+    ? yearEntries.find(e => e.date === yearlyPreviewDateStr) || null
+    : null;
 
   const saveMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -903,8 +909,120 @@ export default function JournalPage() {
       )}
 
       {viewMode === "yearly" && (
-        <div className="bg-card rounded-xl border border-white/10 p-6">
-          <YearlyGrid entries={yearEntries} year={yearNum} onSelectDate={(d) => { setSelectedDate(d); setViewMode("daily"); }} />
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
+          <div className="bg-card rounded-xl border border-white/10 p-6">
+            <YearlyGrid entries={yearEntries} year={yearNum} onSelectDate={(d) => setYearlyPreviewDate(d)} />
+          </div>
+          <div className="bg-card rounded-xl border border-white/10 p-6 hidden lg:flex flex-col" data-testid="yearly-preview-panel">
+            {yearlyPreviewDate && yearlyPreviewEntry ? (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-base font-semibold" data-testid="text-preview-date">
+                      {yearlyPreviewDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+                    </h3>
+                    {yearlyPreviewEntry.customDayName && (
+                      <p className="text-sm text-muted-foreground mt-0.5">
+                        {yearlyPreviewEntry.emoji} {yearlyPreviewEntry.customDayName}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedDate(yearlyPreviewDate);
+                      setYearlyFullscreen(true);
+                    }}
+                    className="p-2 rounded-md text-muted-foreground hover:text-white hover:bg-white/10 transition-colors"
+                    title="Open fullscreen"
+                    data-testid="button-yearly-fullscreen"
+                  >
+                    <Maximize2 className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto space-y-4">
+                  {yearlyPreviewEntry.journalText ? (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Journal</p>
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap" data-testid="text-preview-journal">
+                        {yearlyPreviewEntry.journalText}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">No journal text for this day</p>
+                  )}
+                  {yearlyPreviewEntry.imageUrls && yearlyPreviewEntry.imageUrls.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Images</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {yearlyPreviewEntry.imageUrls.map((url: string, i: number) => (
+                          <img key={i} src={url} alt="" className="w-full h-20 object-cover rounded-md border border-white/10" />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {yearlyPreviewEntry.extractedText && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Extracted Text</p>
+                      <p className="text-sm whitespace-pre-wrap text-muted-foreground">{yearlyPreviewEntry.extractedText}</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : yearlyPreviewDate ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center">
+                <p className="text-sm text-muted-foreground">No entry for this day</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => { setSelectedDate(yearlyPreviewDate); setViewMode("daily"); }}
+                  data-testid="button-create-entry"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  Create Entry
+                </Button>
+              </div>
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-sm text-muted-foreground">Click a day to preview</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {yearlyFullscreen && yearlyPreviewDate && (
+        <div className="fixed inset-0 z-50 bg-background flex flex-col" data-testid="yearly-fullscreen-editor">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+            <h2 className="text-lg font-semibold">
+              {yearlyPreviewDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+            </h2>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setYearlyFullscreen(false)}
+              data-testid="button-exit-yearly-fullscreen"
+            >
+              <Minimize2 className="w-4 h-4 mr-1" />
+              Back to Year View
+            </Button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="max-w-3xl mx-auto">
+              <DailyEditor
+                key={formatDate(yearlyPreviewDate)}
+                selectedDate={yearlyPreviewDate}
+                entry={yearlyPreviewEntry || null}
+                dayTypes={dayTypes}
+                onSave={(data) => { saveMutation.mutate(data); }}
+                onCreateCustomDayType={(name, emoji) => createCustomDayType.mutate({ name, emoji })}
+                onDeleteCustomDayType={(id) => deleteCustomDayType.mutate(id)}
+                onEditCustomDayType={(id, emoji) => editCustomDayType.mutate({ id, emoji })}
+                onEditBuiltinEmoji={(dayTypeName, emoji) => editBuiltinEmoji.mutate({ dayTypeName, emoji })}
+                isSaving={saveMutation.isPending}
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>
