@@ -573,7 +573,8 @@ function WeeklyStrip({
           >
             <span className="text-[10px] text-muted-foreground">{DAY_NAMES_SHORT[i]}</span>
             <span className={cn("text-sm", isToday ? "font-bold text-primary" : "")}>{d.getDate()}</span>
-            <span className="text-sm mt-0.5">{entry?.emoji || ""}</span>
+            {entry?.emoji && <span className="text-sm mt-0.5">{entry.emoji}</span>}
+            {entry?.customDayName && <span className="text-[8px] text-muted-foreground mt-0.5 leading-tight text-center line-clamp-2 max-w-full px-0.5">{entry.customDayName}</span>}
           </button>
         );
       })}
