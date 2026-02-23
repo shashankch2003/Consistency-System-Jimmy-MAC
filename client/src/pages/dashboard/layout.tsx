@@ -10,7 +10,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   return (
     <main className="flex-1 overflow-y-auto overflow-x-hidden relative">
       {state === "collapsed" && (
-        <div className="fixed top-3 left-3 z-20">
+        <div className="fixed top-2 left-1 z-20">
           <SidebarTrigger className="bg-card/90 backdrop-blur-sm border border-border shadow-lg rounded-lg" data-testid="button-sidebar-reopen" />
         </div>
       )}
