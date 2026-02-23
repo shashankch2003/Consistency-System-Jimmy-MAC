@@ -7,6 +7,7 @@ import {
   journalEntries, customDayTypes, dayTypeUsage, userStreaks,
   successfulFundamentals, userSettings,
   moneySettings, expenseCategories, expenses, budgets, subscriptions, bills, creditCards, savingsGoals,
+  videos, videoFeedback,
 } from "@shared/schema";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
 
@@ -37,6 +38,8 @@ type InsertSubscription = typeof subscriptions.$inferInsert;
 type InsertBill = typeof bills.$inferInsert;
 type InsertCreditCard = typeof creditCards.$inferInsert;
 type InsertSavingsGoal = typeof savingsGoals.$inferInsert;
+type InsertVideo = typeof videos.$inferInsert;
+type InsertVideoFeedback = typeof videoFeedback.$inferInsert;
 
 export interface IStorage extends IAuthStorage {
   getYearlyGoals(userId: string, year?: number): Promise<(typeof yearlyGoals.$inferSelect)[]>;
@@ -167,6 +170,20 @@ export interface IStorage extends IAuthStorage {
   createSavingsGoal(goal: InsertSavingsGoal): Promise<typeof savingsGoals.$inferSelect>;
   updateSavingsGoal(id: number, userId: string, updates: Partial<InsertSavingsGoal>): Promise<typeof savingsGoals.$inferSelect>;
   deleteSavingsGoal(id: number, userId: string): Promise<void>;
+
+  // Videos
+  getVideos(publishedOnly?: boolean): Promise<(typeof videos.$inferSelect)[]>;
+  getVideo(id: number): Promise<(typeof videos.$inferSelect) | undefined>;
+  createVideo(video: InsertVideo): Promise<typeof videos.$inferSelect>;
+  updateVideo(id: number, updates: Partial<InsertVideo>): Promise<typeof videos.$inferSelect>;
+  deleteVideo(id: number): Promise<void>;
+
+  // Video Feedback
+  getVideoFeedbackByUser(videoId: number, userId: string): Promise<(typeof videoFeedback.$inferSelect)[]>;
+  getAllVideoFeedback(videoId?: number): Promise<(typeof videoFeedback.$inferSelect)[]>;
+  createVideoFeedback(fb: InsertVideoFeedback): Promise<typeof videoFeedback.$inferSelect>;
+  updateVideoFeedbackStatus(id: number, status: string): Promise<typeof videoFeedback.$inferSelect>;
+  deleteVideoFeedback(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -672,6 +689,60 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSavingsGoal(id: number, userId: string) {
     await db.delete(savingsGoals).where(and(eq(savingsGoals.id, id), eq(savingsGoals.userId, userId)));
+  }
+
+  // Videos
+  async getVideos(publishedOnly = false) {
+    if (publishedOnly) {
+      return await db.select().from(videos).where(eq(videos.isPublished, true)).orderBy(asc(videos.sortOrder), asc(videos.id));
+    }
+    return await db.select().from(videos).orderBy(asc(videos.sortOrder), asc(videos.id));
+  }
+
+  async getVideo(id: number) {
+    const [video] = await db.select().from(videos).where(eq(videos.id, id));
+    return video;
+  }
+
+  async createVideo(video: InsertVideo) {
+    const [created] = await db.insert(videos).values(video).returning();
+    return created;
+  }
+
+  async updateVideo(id: number, updates: Partial<InsertVideo>) {
+    const [updated] = await db.update(videos).set({ ...updates, updatedAt: new Date() }).where(eq(videos.id, id)).returning();
+    return updated;
+  }
+
+  async deleteVideo(id: number) {
+    await db.delete(videoFeedback).where(eq(videoFeedback.videoId, id));
+    await db.delete(videos).where(eq(videos.id, id));
+  }
+
+  // Video Feedback
+  async getVideoFeedbackByUser(videoId: number, userId: string) {
+    return await db.select().from(videoFeedback).where(and(eq(videoFeedback.videoId, videoId), eq(videoFeedback.userId, userId))).orderBy(desc(videoFeedback.createdAt));
+  }
+
+  async getAllVideoFeedback(videoId?: number) {
+    if (videoId) {
+      return await db.select().from(videoFeedback).where(eq(videoFeedback.videoId, videoId)).orderBy(desc(videoFeedback.createdAt));
+    }
+    return await db.select().from(videoFeedback).orderBy(desc(videoFeedback.createdAt));
+  }
+
+  async createVideoFeedback(fb: InsertVideoFeedback) {
+    const [created] = await db.insert(videoFeedback).values(fb).returning();
+    return created;
+  }
+
+  async updateVideoFeedbackStatus(id: number, status: string) {
+    const [updated] = await db.update(videoFeedback).set({ status }).where(eq(videoFeedback.id, id)).returning();
+    return updated;
+  }
+
+  async deleteVideoFeedback(id: number) {
+    await db.delete(videoFeedback).where(eq(videoFeedback.id, id));
   }
 }
 

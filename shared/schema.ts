@@ -540,6 +540,40 @@ export const savingsGoals = pgTable("savings_goals", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Know More - Videos
+export const videos = pgTable("videos", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").default(""),
+  category: text("category").notNull().default("general"),
+  youtubeUrl: text("youtube_url").notNull(),
+  thumbnailUrl: text("thumbnail_url"),
+  duration: text("duration").default(""),
+  videoProvider: text("video_provider").notNull().default("youtube"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isPublished: boolean("is_published").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const videoFeedback = pgTable("video_feedback", {
+  id: serial("id").primaryKey(),
+  videoId: integer("video_id").notNull(),
+  userId: varchar("user_id").notNull(),
+  feedbackType: text("feedback_type").notNull(),
+  message: text("message").notNull(),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertVideoSchema = createInsertSchema(videos).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertVideo = z.infer<typeof insertVideoSchema>;
+export type Video = typeof videos.$inferSelect;
+
+export const insertVideoFeedbackSchema = createInsertSchema(videoFeedback).omit({ id: true, createdAt: true });
+export type InsertVideoFeedback = z.infer<typeof insertVideoFeedbackSchema>;
+export type VideoFeedback = typeof videoFeedback.$inferSelect;
+
 export const insertMoneySettingsSchema = createInsertSchema(moneySettings).omit({ id: true, updatedAt: true });
 export type InsertMoneySettings = z.infer<typeof insertMoneySettingsSchema>;
 export type MoneySettings = typeof moneySettings.$inferSelect;
