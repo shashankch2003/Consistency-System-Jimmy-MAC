@@ -1,24 +1,24 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import {
   Shield, Trophy, Crown, Star, Gem, Zap, Send, Lock,
-  TrendingUp, Calendar, Target, MessageCircle, ChevronRight, Info
+  TrendingUp, Target, MessageCircle, ArrowLeft, Info,
+  ChevronRight, Users, CheckCheck
 } from "lucide-react";
 import { LEVELS, LEVEL_INDEX, LEVEL_REQUIREMENTS, INTERACTIVE_LEVELS } from "@shared/schema";
 
-const LEVEL_CONFIG: Record<string, { icon: any; color: string; bg: string; border: string; gradient: string }> = {
-  Unproductive: { icon: Shield, color: "text-gray-400", bg: "bg-gray-500/10", border: "border-gray-500/30", gradient: "from-gray-600 to-gray-800" },
-  Bronze: { icon: Shield, color: "text-amber-600", bg: "bg-amber-600/10", border: "border-amber-600/30", gradient: "from-amber-700 to-amber-900" },
-  Silver: { icon: Star, color: "text-gray-300", bg: "bg-gray-300/10", border: "border-gray-300/30", gradient: "from-gray-400 to-gray-600" },
-  Gold: { icon: Trophy, color: "text-yellow-400", bg: "bg-yellow-400/10", border: "border-yellow-400/30", gradient: "from-yellow-500 to-yellow-700" },
-  Platinum: { icon: Crown, color: "text-cyan-400", bg: "bg-cyan-400/10", border: "border-cyan-400/30", gradient: "from-cyan-500 to-cyan-700" },
-  Diamond: { icon: Gem, color: "text-blue-400", bg: "bg-blue-400/10", border: "border-blue-400/30", gradient: "from-blue-500 to-blue-700" },
-  Elite: { icon: Zap, color: "text-purple-400", bg: "bg-purple-400/10", border: "border-purple-400/30", gradient: "from-purple-500 to-purple-700" },
+const LEVEL_CONFIG: Record<string, { icon: any; color: string; bg: string; avatarBg: string }> = {
+  Unproductive: { icon: Shield, color: "text-gray-400", bg: "bg-gray-500/10", avatarBg: "bg-gray-700" },
+  Bronze: { icon: Shield, color: "text-amber-600", bg: "bg-amber-600/10", avatarBg: "bg-amber-900" },
+  Silver: { icon: Star, color: "text-gray-300", bg: "bg-gray-300/10", avatarBg: "bg-gray-600" },
+  Gold: { icon: Trophy, color: "text-yellow-400", bg: "bg-yellow-400/10", avatarBg: "bg-yellow-900" },
+  Platinum: { icon: Crown, color: "text-cyan-400", bg: "bg-cyan-400/10", avatarBg: "bg-cyan-900" },
+  Diamond: { icon: Gem, color: "text-blue-400", bg: "bg-blue-400/10", avatarBg: "bg-blue-900" },
+  Elite: { icon: Zap, color: "text-purple-400", bg: "bg-purple-400/10", avatarBg: "bg-purple-900" },
 };
 
 type LevelStatus = {
@@ -46,12 +46,22 @@ type GroupMessage = {
   createdAt: string | null;
 };
 
+function formatMsgTime(dateStr: string | null) {
+  if (!dateStr) return "";
+  return new Date(dateStr).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+type ViewType = "groups" | "chat" | "progress" | "contact";
+
 export default function CommunityPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [chatInput, setChatInput] = useState("");
   const [contactInput, setContactInput] = useState("");
-  const [activeTab, setActiveTab] = useState<"group" | "progress" | "contact">("group");
+  const [activeView, setActiveView] = useState<ViewType>("groups");
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  const [prevView, setPrevView] = useState<ViewType>("groups");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { data: levelStatus, isLoading } = useQuery<LevelStatus>({
     queryKey: ["/api/level/status"],
@@ -63,20 +73,23 @@ export default function CommunityPage() {
 
   const currentLevel = levelStatus?.level || "Unproductive";
   const config = LEVEL_CONFIG[currentLevel];
-  const LevelIcon = config?.icon || Shield;
-  const canChat = INTERACTIVE_LEVELS.includes(currentLevel);
+  const isUserAdmin = adminCheck?.isAdmin === true;
+
+  const activeGroup = selectedGroup || currentLevel;
+  const canChat = INTERACTIVE_LEVELS.includes(currentLevel) && activeGroup === currentLevel;
 
   const { data: messages, isLoading: loadingMessages } = useQuery<GroupMessage[]>({
-    queryKey: ["/api/groups", currentLevel, "messages"],
-    enabled: !!currentLevel,
+    queryKey: ["/api/groups", activeGroup, "messages"],
+    enabled: activeView === "chat",
+    refetchInterval: 10000,
   });
 
   const sendMessage = useMutation({
     mutationFn: async (content: string) => {
-      await apiRequest("POST", `/api/groups/${currentLevel}/messages`, { content });
+      await apiRequest("POST", `/api/groups/${activeGroup}/messages`, { content });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/groups", currentLevel, "messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/groups", activeGroup, "messages"] });
       setChatInput("");
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -93,6 +106,33 @@ export default function CommunityPage() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  useEffect(() => {
+    if (activeView === "chat" && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, activeView]);
+
+  const openGroup = (level: string) => {
+    setSelectedGroup(level);
+    setPrevView(activeView);
+    setActiveView("chat");
+  };
+
+  const openView = (view: ViewType) => {
+    setPrevView(activeView);
+    setActiveView(view);
+  };
+
+  const goBack = () => {
+    if (activeView === "chat") {
+      setActiveView("groups");
+    } else {
+      setActiveView(prevView === activeView ? "groups" : prevView);
+    }
+  };
+
+  const showRightPanel = activeView !== "groups";
+
   if (isLoading) {
     return (
       <div className="p-4 pt-14 sm:p-8 sm:pt-8 flex items-center justify-center min-h-[60vh]">
@@ -102,242 +142,399 @@ export default function CommunityPage() {
   }
 
   const progress = levelStatus?.currentMonthProgress;
-  const nextLevel = levelStatus?.nextLevel;
-  const nextReq = levelStatus?.nextLevelRequirements;
 
   return (
-    <div className="p-4 pt-14 sm:p-8 sm:pt-8 space-y-6 max-w-5xl mx-auto">
-      <div className={cn("rounded-2xl border p-6 relative overflow-hidden", config?.border)}>
-        <div className={cn("absolute inset-0 bg-gradient-to-br opacity-20", config?.gradient)} />
-        <div className="relative flex flex-col sm:flex-row sm:items-center gap-4">
-          <div className={cn("w-16 h-16 rounded-2xl flex items-center justify-center", config?.bg)}>
-            <LevelIcon className={cn("w-8 h-8", config?.color)} />
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl sm:text-3xl font-bold" data-testid="text-level-name">{currentLevel}</h1>
-              <span className={cn("text-xs font-medium px-2 py-0.5 rounded-full", config?.bg, config?.color)}>
-                Level {LEVEL_INDEX[currentLevel]}
-              </span>
-            </div>
-            <p className="text-muted-foreground text-sm mt-1">
-              {levelStatus?.consecutiveMonths || 0} consecutive month{(levelStatus?.consecutiveMonths || 0) !== 1 ? "s" : ""} qualified
-            </p>
-          </div>
-          {nextLevel && nextReq && (
-            <div className="bg-card/50 border border-border rounded-xl p-3 text-sm">
-              <p className="text-muted-foreground text-xs mb-1">Next Level</p>
-              <div className="flex items-center gap-2">
-                {(() => { const NI = LEVEL_CONFIG[nextLevel]?.icon || Shield; return <NI className={cn("w-4 h-4", LEVEL_CONFIG[nextLevel]?.color)} />; })()}
-                <span className="font-semibold">{nextLevel}</span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {nextReq.percent}% · {nextReq.days > 0 ? `${nextReq.days} days` : "All days"} · {nextReq.consecutiveMonths}mo
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
+    <div className="p-4 pt-14 sm:p-8 sm:pt-8 h-[calc(100vh-2rem)] sm:h-[calc(100vh-4rem)] flex flex-col max-w-5xl mx-auto">
+      <div className="flex-1 min-h-0 flex flex-col sm:flex-row border border-border rounded-xl overflow-hidden bg-card/30">
 
-      <div className="flex gap-1 bg-card/50 border border-border rounded-xl p-1">
-        {[
-          { key: "group" as const, label: "Group", icon: MessageCircle },
-          { key: "progress" as const, label: "Progress", icon: TrendingUp },
-          { key: "contact" as const, label: "Contact Admin", icon: Send },
-        ].map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={cn(
-              "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-colors",
-              activeTab === tab.key ? "bg-white/10 text-white" : "text-muted-foreground hover:text-white/70"
-            )}
-            data-testid={`tab-${tab.key}`}
-          >
-            <tab.icon className="w-4 h-4" />
-            <span className="hidden sm:inline">{tab.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {activeTab === "group" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold" data-testid="text-group-title">{currentLevel} Group</h2>
-            {!canChat && (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-card/50 border border-border rounded-lg px-3 py-1.5">
-                <Lock className="w-3 h-3" />
-                Read-only · Chat unlocks at Platinum
-              </div>
-            )}
-            {canChat && (
-              <div className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-1.5">
-                <MessageCircle className="w-3 h-3" />
-                Chat enabled
-              </div>
-            )}
-          </div>
-
-          <div className="bg-card/30 border border-border rounded-xl min-h-[300px] max-h-[500px] overflow-y-auto flex flex-col-reverse p-4 gap-3" data-testid="group-messages">
-            {loadingMessages ? (
-              <div className="text-center text-muted-foreground py-8">Loading messages...</div>
-            ) : !messages || messages.length === 0 ? (
-              <div className="text-center text-muted-foreground py-8">
-                <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                <p>No messages yet in this group.</p>
-              </div>
-            ) : (
-              messages.map(msg => (
-                <div
-                  key={msg.id}
-                  className={cn(
-                    "rounded-xl px-4 py-3 max-w-[85%]",
-                    msg.isAdmin
-                      ? "bg-emerald-500/10 border border-emerald-500/20 self-start"
-                      : "bg-white/5 border border-white/10 self-end"
-                  )}
-                  data-testid={`msg-${msg.id}`}
+        <div className={cn(
+          "sm:w-[320px] sm:min-w-[320px] sm:border-r border-border flex flex-col bg-card/50",
+          showRightPanel && "hidden sm:flex"
+        )}>
+          <div className="p-4 border-b border-border/50">
+            <div className="flex items-center justify-between mb-3">
+              <h1 className="text-lg font-bold" data-testid="text-community-title">Community</h1>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => openView("progress")}
+                  className={cn("p-2 rounded-md hover:bg-white/5 transition-colors", activeView === "progress" ? "text-white bg-white/5" : "text-muted-foreground")}
+                  title="My Progress"
+                  data-testid="btn-progress"
                 >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={cn("text-xs font-semibold", msg.isAdmin ? "text-emerald-400" : "text-white/70")}>
-                      {msg.isAdmin ? "Admin" : msg.senderName || "Member"}
-                    </span>
-                    {msg.createdAt && (
-                      <span className="text-[10px] text-muted-foreground">
-                        {new Date(msg.createdAt).toLocaleDateString()} {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                </div>
-              ))
-            )}
-          </div>
-
-          {canChat && (
-            <div className="flex gap-2">
-              <Input
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Type a message..."
-                className="flex-1"
-                onKeyDown={(e) => e.key === "Enter" && chatInput.trim() && sendMessage.mutate(chatInput)}
-                data-testid="input-chat"
-              />
-              <Button
-                onClick={() => chatInput.trim() && sendMessage.mutate(chatInput)}
-                disabled={!chatInput.trim() || sendMessage.isPending}
-                size="icon"
-                data-testid="button-send-chat"
-              >
-                <Send className="w-4 h-4" />
-              </Button>
+                  <TrendingUp className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => openView("contact")}
+                  className={cn("p-2 rounded-md hover:bg-white/5 transition-colors", activeView === "contact" ? "text-white bg-white/5" : "text-muted-foreground")}
+                  title="Contact Admin"
+                  data-testid="btn-contact-admin"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-          )}
-        </div>
-      )}
 
-      {activeTab === "progress" && progress && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <StatCard label="Tasks Avg" value={`${progress.avgTaskCompletion}%`} icon={Target} />
-            <StatCard label="Good Habits" value={`${progress.avgGoodHabits}%`} icon={TrendingUp} />
-            <StatCard label="Hourly" value={`${progress.avgHourlyCompletion}%`} icon={Calendar} />
-            <StatCard label="Bad Habit Days" value={`${progress.badHabitDays}`} icon={Shield} negative />
+            <div className={cn("flex items-center gap-3 p-2.5 rounded-md", config?.bg)}>
+              <div className={cn("w-10 h-10 rounded-full flex items-center justify-center", config?.avatarBg)}>
+                {(() => { const LI = config?.icon || Shield; return <LI className={cn("w-5 h-5", config?.color)} />; })()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={cn("text-sm font-semibold", config?.color)} data-testid="text-level-name">{currentLevel}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Level {LEVEL_INDEX[currentLevel]} · {levelStatus?.consecutiveMonths || 0} month streak
+                </p>
+              </div>
+            </div>
           </div>
 
-          <div className="bg-card/50 border border-border rounded-xl p-4 space-y-3">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Qualifying Days This Month</h3>
-            <p className="text-xs text-muted-foreground">{progress.daysTracked} days tracked so far</p>
-            <div className="space-y-2">
-              {LEVELS.filter(l => l !== "Unproductive").map(level => {
-                const days = progress.qualifyingDays[level] || 0;
-                const req = LEVEL_REQUIREMENTS[level];
-                const needed = level === "Elite" ? progress.daysTracked : req.days;
-                const pct = needed > 0 ? Math.min(100, Math.round((days / needed) * 100)) : 0;
-                const lc = LEVEL_CONFIG[level];
-                return (
-                  <div key={level} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className={cn("font-medium", lc.color)}>{level}</span>
-                      <span className="text-muted-foreground">{days}/{needed} days ({req.percent}%+ needed)</span>
+          <div className="flex-1 overflow-y-auto">
+            <div className="px-3 py-2">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">Your Group</p>
+            </div>
+            <GroupListItem
+              level={currentLevel}
+              isActive={activeView === "chat" && activeGroup === currentLevel}
+              isCurrent
+              onClick={() => openGroup(currentLevel)}
+            />
+            <div className="px-3 py-2 mt-1">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">All Level Groups</p>
+            </div>
+            {LEVELS.filter(l => l !== currentLevel).map(level => (
+              <GroupListItem
+                key={level}
+                level={level}
+                isActive={activeView === "chat" && activeGroup === level}
+                locked={!isUserAdmin && level !== currentLevel}
+                onClick={() => {
+                  if (isUserAdmin || level === currentLevel) openGroup(level);
+                }}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className={cn(
+          "flex-1 flex flex-col min-h-0",
+          !showRightPanel && "hidden sm:flex"
+        )}>
+          {activeView === "chat" && (
+            <>
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50 bg-card/50">
+                <button onClick={goBack} className="sm:hidden p-1 -ml-1 hover:bg-white/5 rounded-md" data-testid="btn-back">
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+                {(() => {
+                  const gc = LEVEL_CONFIG[activeGroup];
+                  const GI = gc?.icon || Shield;
+                  return (
+                    <>
+                      <div className={cn("w-10 h-10 rounded-full flex items-center justify-center", gc?.avatarBg)}>
+                        <GI className={cn("w-5 h-5", gc?.color)} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h2 className="text-sm font-semibold" data-testid="text-group-title">{activeGroup} Group</h2>
+                        <p className="text-[11px] text-muted-foreground">
+                          {INTERACTIVE_LEVELS.includes(activeGroup) ? "Chat enabled" : "Read-only group"}
+                          {activeGroup !== currentLevel && !isUserAdmin && " · View only"}
+                        </p>
+                      </div>
+                    </>
+                  );
+                })()}
+                {!canChat && !isUserAdmin && (
+                  <div className="flex items-center gap-1 text-[11px] text-muted-foreground bg-white/5 rounded-full px-2.5 py-1">
+                    <Lock className="w-3 h-3" />
+                    <span className="hidden sm:inline">Read-only</span>
+                  </div>
+                )}
+              </div>
+
+              <div
+                className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 space-y-1"
+                data-testid="group-messages"
+              >
+                {loadingMessages ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  </div>
+                ) : !messages || messages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-muted-foreground/50">
+                    <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-3">
+                      <MessageCircle className="w-7 h-7" />
                     </div>
-                    <div className="w-full h-2 bg-muted/20 rounded-full overflow-hidden">
-                      <div
-                        className={cn("h-full rounded-full transition-all", lc.color.replace("text-", "bg-"))}
-                        style={{ width: `${pct}%` }}
+                    <p className="text-sm font-medium">No messages yet</p>
+                    <p className="text-xs mt-1">Be the first to send a message</p>
+                  </div>
+                ) : (
+                  <>
+                    {messages.map((msg, idx) => {
+                      const prev = idx > 0 ? messages[idx - 1] : null;
+                      const showDate = !prev || (msg.createdAt && prev.createdAt &&
+                        new Date(msg.createdAt).toDateString() !== new Date(prev.createdAt).toDateString());
+                      const sameSender = prev && prev.createdBy === msg.createdBy && !showDate;
+
+                      return (
+                        <div key={msg.id}>
+                          {showDate && msg.createdAt && (
+                            <div className="flex justify-center my-3">
+                              <span className="text-[10px] bg-white/10 text-muted-foreground px-3 py-1 rounded-full">
+                                {new Date(msg.createdAt).toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })}
+                              </span>
+                            </div>
+                          )}
+                          <ChatBubble msg={msg} compact={!!sameSender} />
+                        </div>
+                      );
+                    })}
+                    <div ref={messagesEndRef} />
+                  </>
+                )}
+              </div>
+
+              {(canChat || isUserAdmin) && (
+                <div className="px-3 sm:px-4 py-3 border-t border-border/50 bg-card/50">
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1 bg-white/5 border border-border rounded-2xl px-4 py-2.5">
+                      <textarea
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        placeholder="Type a message"
+                        rows={1}
+                        className="w-full bg-transparent text-sm resize-none focus:outline-none max-h-[100px]"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            if (chatInput.trim()) sendMessage.mutate(chatInput);
+                          }
+                        }}
+                        onInput={(e) => {
+                          const t = e.target as HTMLTextAreaElement;
+                          t.style.height = "auto";
+                          t.style.height = Math.min(t.scrollHeight, 100) + "px";
+                        }}
+                        data-testid="input-chat"
                       />
                     </div>
+                    <Button
+                      size="icon"
+                      onClick={() => chatInput.trim() && sendMessage.mutate(chatInput)}
+                      disabled={!chatInput.trim() || sendMessage.isPending}
+                      className="rounded-full shrink-0"
+                      data-testid="button-send-chat"
+                    >
+                      <Send className="w-4 h-4" />
+                    </Button>
                   </div>
-                );
-              })}
-            </div>
-          </div>
+                </div>
+              )}
 
-          <div className="bg-card/50 border border-border rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Level Requirements</h3>
-            <div className="space-y-2">
-              {LEVELS.filter(l => l !== "Unproductive").map(level => {
-                const req = LEVEL_REQUIREMENTS[level];
-                const lc = LEVEL_CONFIG[level];
-                const LI = lc.icon;
-                const isCurrent = level === currentLevel;
-                return (
-                  <div key={level} className={cn("flex items-center gap-3 px-3 py-2 rounded-lg text-sm", isCurrent && "bg-white/5 border border-white/10")}>
-                    <LI className={cn("w-4 h-4 shrink-0", lc.color)} />
-                    <span className={cn("font-medium min-w-[70px]", lc.color)}>{level}</span>
-                    <span className="text-muted-foreground flex-1 text-xs">
-                      {req.percent}% all metrics · {req.days > 0 ? `${req.days} days` : "All days"} · {req.consecutiveMonths} month{req.consecutiveMonths !== 1 ? "s" : ""} · 0% bad habits
-                    </span>
-                    {isCurrent && <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full">Current</span>}
+              {!canChat && !isUserAdmin && (
+                <div className="px-4 py-3 border-t border-border/50 bg-card/50 text-center">
+                  <p className="text-xs text-muted-foreground">
+                    <Lock className="w-3 h-3 inline mr-1" />
+                    Chat is read-only. Reach <strong>Platinum</strong> level to unlock messaging.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+
+          {activeView === "progress" && progress && (
+            <div className="flex-1 overflow-y-auto">
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50 bg-card/50">
+                <button onClick={goBack} className="sm:hidden p-1 -ml-1 hover:bg-white/5 rounded-md" data-testid="btn-back-progress">
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+                <TrendingUp className="w-5 h-5 text-muted-foreground" />
+                <h2 className="text-sm font-semibold">My Progress</h2>
+              </div>
+              <div className="p-4 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <StatCard label="Tasks Avg" value={`${progress.avgTaskCompletion}%`} icon={Target} />
+                  <StatCard label="Good Habits" value={`${progress.avgGoodHabits}%`} icon={TrendingUp} />
+                  <StatCard label="Hourly" value={`${progress.avgHourlyCompletion}%`} icon={Shield} />
+                  <StatCard label="Bad Habit Days" value={`${progress.badHabitDays}`} icon={Shield} negative />
+                </div>
+
+                <div className="bg-white/5 border border-border rounded-md p-4 space-y-3">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Qualifying Days ({progress.daysTracked} tracked)</h3>
+                  <div className="space-y-2.5">
+                    {LEVELS.filter(l => l !== "Unproductive").map(level => {
+                      const days = progress.qualifyingDays[level] || 0;
+                      const req = LEVEL_REQUIREMENTS[level];
+                      const needed = level === "Elite" ? progress.daysTracked : req.days;
+                      const pct = needed > 0 ? Math.min(100, Math.round((days / needed) * 100)) : 0;
+                      const lc = LEVEL_CONFIG[level];
+                      return (
+                        <div key={level} className="space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className={cn("font-medium", lc.color)}>{level}</span>
+                            <span className="text-muted-foreground">{days}/{needed} days</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                            <div className={cn("h-full rounded-full transition-all", lc.color.replace("text-", "bg-"))} style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+                </div>
 
-      {activeTab === "contact" && (
-        <div className="space-y-4">
-          <div className="bg-card/50 border border-border rounded-xl p-4">
-            <div className="flex items-start gap-3 mb-4">
-              <Info className="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
-              <p className="text-sm text-muted-foreground">
-                Send a message directly to the admin. If your content is valuable, the admin may share it with the group.
-              </p>
+                <div className="bg-white/5 border border-border rounded-md p-4">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Level Requirements</h3>
+                  <div className="space-y-1.5">
+                    {LEVELS.filter(l => l !== "Unproductive").map(level => {
+                      const req = LEVEL_REQUIREMENTS[level];
+                      const lc = LEVEL_CONFIG[level];
+                      const LI = lc.icon;
+                      const isCurrent = level === currentLevel;
+                      return (
+                        <div key={level} className={cn("flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs", isCurrent && "bg-white/5 border border-white/10")}>
+                          <LI className={cn("w-3.5 h-3.5 shrink-0", lc.color)} />
+                          <span className={cn("font-medium min-w-[60px]", lc.color)}>{level}</span>
+                          <span className="text-muted-foreground flex-1">
+                            {req.percent}% · {req.days > 0 ? `${req.days}d` : "All"} · {req.consecutiveMonths}mo
+                          </span>
+                          {isCurrent && <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded-full">You</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
             </div>
-            <textarea
-              value={contactInput}
-              onChange={(e) => setContactInput(e.target.value)}
-              placeholder="Write your message to the admin..."
-              className="w-full min-h-[150px] bg-background border border-border rounded-lg p-3 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-white/20"
-              data-testid="textarea-contact-admin"
-            />
-            <div className="flex justify-end mt-3">
-              <Button
-                onClick={() => contactInput.trim() && sendToAdmin.mutate(contactInput)}
-                disabled={!contactInput.trim() || sendToAdmin.isPending}
-                className="gap-2"
-                data-testid="button-send-to-admin"
-              >
-                <Send className="w-4 h-4" />
-                Send to Admin
-              </Button>
+          )}
+
+          {activeView === "contact" && (
+            <div className="flex-1 overflow-y-auto">
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50 bg-card/50">
+                <button onClick={goBack} className="sm:hidden p-1 -ml-1 hover:bg-white/5 rounded-md" data-testid="btn-back-contact">
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+                <Send className="w-5 h-5 text-muted-foreground" />
+                <h2 className="text-sm font-semibold">Contact Admin</h2>
+              </div>
+              <div className="p-4 space-y-4">
+                <div className="flex items-start gap-3 bg-white/5 rounded-md p-4">
+                  <Info className="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
+                  <p className="text-sm text-muted-foreground">
+                    Send a private message to the admin. They may share valuable insights with the community group.
+                  </p>
+                </div>
+                <textarea
+                  value={contactInput}
+                  onChange={(e) => setContactInput(e.target.value)}
+                  placeholder="Write your message..."
+                  className="w-full min-h-[180px] bg-white/5 border border-border rounded-md p-4 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-white/20"
+                  data-testid="textarea-contact-admin"
+                />
+                <Button
+                  onClick={() => contactInput.trim() && sendToAdmin.mutate(contactInput)}
+                  disabled={!contactInput.trim() || sendToAdmin.isPending}
+                  className="w-full gap-2"
+                  data-testid="button-send-to-admin"
+                >
+                  <Send className="w-4 h-4" />
+                  Send Message
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
+
+          {activeView === "groups" && (
+            <div className="hidden sm:flex flex-1 flex-col items-center justify-center text-muted-foreground/40">
+              <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-4">
+                <Users className="w-9 h-9" />
+              </div>
+              <p className="text-sm font-medium">Select a group to view messages</p>
+              <p className="text-xs mt-1">Your current level: <span className={config?.color}>{currentLevel}</span></p>
+            </div>
+          )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function GroupListItem({ level, isActive, isCurrent, locked, onClick }: {
+  level: string; isActive?: boolean; isCurrent?: boolean; locked?: boolean; onClick: () => void;
+}) {
+  const lc = LEVEL_CONFIG[level];
+  const LI = lc?.icon || Shield;
+
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left",
+        isActive && "bg-white/5",
+        locked && "opacity-50 cursor-not-allowed hover:bg-transparent"
       )}
+      disabled={locked}
+      data-testid={`group-item-${level}`}
+    >
+      <div className={cn("w-11 h-11 rounded-full flex items-center justify-center shrink-0", lc?.avatarBg)}>
+        <LI className={cn("w-5 h-5", lc?.color)} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium truncate">{level} Group</span>
+          {isCurrent && (
+            <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full ml-2 shrink-0", lc?.bg, lc?.color)}>
+              You
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+          {locked ? (
+            <span className="flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Not your level</span>
+          ) : INTERACTIVE_LEVELS.includes(level) ? (
+            "Chat enabled"
+          ) : (
+            "Read-only group"
+          )}
+        </p>
+      </div>
+      {!locked && <ChevronRight className="w-4 h-4 text-muted-foreground/30 shrink-0" />}
+    </button>
+  );
+}
+
+function ChatBubble({ msg, compact }: { msg: GroupMessage; compact: boolean }) {
+  const isAdminMsg = msg.isAdmin;
+
+  return (
+    <div className={cn("flex mb-0.5", compact ? "mt-0.5" : "mt-2.5")} data-testid={`msg-${msg.id}`}>
+      <div className={cn(
+        "max-w-[85%] sm:max-w-[70%] rounded-md px-3 py-1.5 relative",
+        isAdminMsg
+          ? "bg-emerald-900/40 border border-emerald-800/30"
+          : "bg-white/[0.07] border border-white/[0.06]"
+      )}>
+        {!compact && (
+          <p className={cn("text-[11px] font-semibold mb-0.5", isAdminMsg ? "text-emerald-400" : "text-cyan-400")}>
+            {isAdminMsg ? "Admin" : msg.senderName || "Member"}
+          </p>
+        )}
+        <div className="flex items-end gap-3">
+          <p className="text-[13px] leading-relaxed whitespace-pre-wrap flex-1">{msg.content}</p>
+          <span className="text-[10px] text-muted-foreground/60 shrink-0 self-end translate-y-0.5 flex items-center gap-0.5">
+            {formatMsgTime(msg.createdAt)}
+            {isAdminMsg && <CheckCheck className="w-3 h-3 text-cyan-400/60 ml-0.5" />}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
 
 function StatCard({ label, value, icon: Icon, negative }: { label: string; value: string; icon: any; negative?: boolean }) {
   return (
-    <div className="bg-card/50 border border-border rounded-xl p-3 text-center">
-      <Icon className={cn("w-5 h-5 mx-auto mb-1", negative ? "text-red-400" : "text-primary")} />
+    <div className="bg-white/5 border border-border rounded-md p-3 text-center">
+      <Icon className={cn("w-4 h-4 mx-auto mb-1", negative ? "text-red-400" : "text-muted-foreground")} />
       <p className={cn("text-lg font-bold", negative && parseInt(value) > 0 ? "text-red-400" : "")}>{value}</p>
-      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-[11px] text-muted-foreground">{label}</p>
     </div>
   );
 }
