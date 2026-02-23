@@ -1615,6 +1615,8 @@ export async function registerRoutes(
   app.post("/api/grow/friends/invite", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      const hasPaid = await storage.hasPaidMembership(userId);
+      if (!hasPaid) return res.status(403).json({ message: "Paid membership required to invite friends" });
       const token = crypto.randomBytes(16).toString("hex");
       const invite = await storage.createFriendInvite({ userId, token, status: "active" });
       res.json({ token: invite.token, link: `/dashboard/grow-together?invite=${invite.token}` });
@@ -1625,6 +1627,8 @@ export async function registerRoutes(
   app.post("/api/grow/friends/accept-invite", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      const hasPaid = await storage.hasPaidMembership(userId);
+      if (!hasPaid) return res.status(403).json({ message: "PAYMENT_REQUIRED" });
       const { token } = req.body;
       if (!token) return res.status(400).json({ message: "Token required" });
       const invite = await storage.getFriendInviteByToken(token);
@@ -1941,7 +1945,6 @@ export async function registerRoutes(
       if (!hasPaid) return res.status(403).json({ message: "Active paid membership required to join groups" });
       const group = await storage.getGrowGroup(groupId);
       if (!group) return res.status(404).json({ message: "Group not found" });
-      if (!group.isPublic) return res.status(403).json({ message: "This is a private group. You need an invite." });
       const existing = await storage.getGroupMember(groupId, userId);
       if (existing) return res.status(400).json({ message: "Already a member" });
       const member = await storage.addGroupMember({ groupId, userId, role: "member" });

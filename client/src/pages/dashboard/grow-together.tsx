@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
 import {
   Users, UserPlus, Link2, Check, X, ArrowLeft, Copy,
   Send, MessageSquare, Crown, Shield, Settings2, Plus,
@@ -101,53 +100,55 @@ type PrivacySettings = {
 };
 
 export default function GrowTogetherPage() {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const params = new URLSearchParams(location.split("?")[1] || "");
   const inviteToken = params.get("invite");
+  const groupInviteId = params.get("group");
+
+  const defaultTab = groupInviteId ? "groups" : "grow";
 
   return (
-    <div className="p-2 pt-14 sm:p-4 sm:pt-4 max-w-6xl mx-auto" data-testid="grow-together-page">
+    <div className="p-2 pt-14 sm:p-4 sm:pt-4" data-testid="grow-together-page">
       <div className="mb-6">
         <h1 className="text-2xl font-bold mb-1" data-testid="text-page-title">Grow Together</h1>
-        <p className="text-muted-foreground text-sm">Compare with friends and grow as a group</p>
+        <p className="text-muted-foreground text-sm">Track your progress alongside friends and grow as a community</p>
       </div>
 
-      <Tabs defaultValue="compare" className="space-y-6">
+      <Tabs defaultValue={defaultTab} className="space-y-6">
         <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger value="compare" data-testid="tab-compare">
-            <BarChart3 className="w-4 h-4 mr-2" /> Compare With Friends
+          <TabsTrigger value="grow" data-testid="tab-compare">
+            <BarChart3 className="w-4 h-4 mr-2" /> Grow Together
           </TabsTrigger>
           <TabsTrigger value="groups" data-testid="tab-groups">
             <MessageSquare className="w-4 h-4 mr-2" /> Groups
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="compare">
-          <CompareWithFriends inviteToken={inviteToken} />
+        <TabsContent value="grow">
+          <GrowTogetherTab inviteToken={inviteToken} />
         </TabsContent>
 
         <TabsContent value="groups">
-          <GroupsSection />
+          <GroupsSection groupInviteId={groupInviteId} />
         </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-// ===== COMPARE WITH FRIENDS =====
-
-function CompareWithFriends({ inviteToken }: { inviteToken: string | null }) {
+function GrowTogetherTab({ inviteToken }: { inviteToken: string | null }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
   const [selectedFriend, setSelectedFriend] = useState<FriendItem | null>(null);
   const [showPrivacy, setShowPrivacy] = useState(false);
-  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [deepDate, setDeepDate] = useState(new Date().toISOString().split("T")[0]);
   const [leaderboardPeriod, setLeaderboardPeriod] = useState("today");
   const [view, setView] = useState<"friends" | "compare" | "deep" | "leaderboard">("friends");
 
   const { data: friendsList = [] } = useQuery<FriendItem[]>({ queryKey: ["/api/grow/friends"] });
   const { data: requests = [] } = useQuery<FriendRequest[]>({ queryKey: ["/api/grow/friends/requests"] });
+  const { data: membership } = useQuery<{ hasPaid: boolean }>({ queryKey: ["/api/grow/membership"] });
 
   useEffect(() => {
     if (inviteToken) {
@@ -155,8 +156,20 @@ function CompareWithFriends({ inviteToken }: { inviteToken: string | null }) {
         .then(() => {
           toast({ title: "Friend added!", description: "You are now connected." });
           queryClient.invalidateQueries({ queryKey: ["/api/grow/friends"] });
+          setLocation("/dashboard/grow-together");
         })
-        .catch((e: any) => toast({ title: "Invite error", description: e.message, variant: "destructive" }));
+        .catch((e: any) => {
+          if (e.message?.includes("PAYMENT_REQUIRED") || e.message?.includes("403")) {
+            toast({
+              title: "Membership required",
+              description: "You need to purchase a membership first to connect with friends. The invite link will work after purchase.",
+              variant: "destructive",
+            });
+            setLocation("/");
+          } else {
+            toast({ title: "Invite error", description: e.message, variant: "destructive" });
+          }
+        });
     }
   }, [inviteToken]);
 
@@ -169,6 +182,9 @@ function CompareWithFriends({ inviteToken }: { inviteToken: string | null }) {
       const fullUrl = `${window.location.origin}${data.link}`;
       navigator.clipboard.writeText(fullUrl);
       toast({ title: "Invite link copied!", description: "Share it with your friend." });
+    },
+    onError: (e: any) => {
+      toast({ title: "Membership required", description: "You need a paid membership to invite friends.", variant: "destructive" });
     },
   });
 
@@ -232,18 +248,32 @@ function CompareWithFriends({ inviteToken }: { inviteToken: string | null }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" onClick={() => generateInvite.mutate()} disabled={generateInvite.isPending} data-testid="button-generate-invite">
-          <Link2 className="w-4 h-4 mr-2" /> Generate Invite Link
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => setShowPrivacy(true)} data-testid="button-privacy-settings">
-          <Settings2 className="w-4 h-4 mr-2" /> Privacy Settings
-        </Button>
-        {friendsList.length > 0 && (
-          <Button variant="outline" size="sm" onClick={() => setView("leaderboard")} data-testid="button-leaderboard">
-            <Trophy className="w-4 h-4 mr-2" /> Leaderboard
+      {!membership?.hasPaid && (
+        <Card className="border-yellow-500/30 bg-yellow-500/5">
+          <CardContent className="p-4 flex items-center gap-3">
+            <Lock className="w-5 h-5 text-yellow-500 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium">Paid Membership Required</p>
+              <p className="text-xs text-muted-foreground">You need an active paid membership to invite friends and use comparison features.</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" onClick={() => generateInvite.mutate()} disabled={generateInvite.isPending || !membership?.hasPaid} data-testid="button-generate-invite">
+            <Link2 className="w-4 h-4 mr-2" /> Generate Invite Link
           </Button>
-        )}
+          {friendsList.length > 0 && (
+            <Button variant="outline" size="sm" onClick={() => setView("leaderboard")} data-testid="button-leaderboard">
+              <Trophy className="w-4 h-4 mr-2" /> Leaderboard
+            </Button>
+          )}
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => setShowPrivacy(true)} data-testid="button-privacy-settings">
+          <Settings2 className="w-4 h-4 mr-2" /> Privacy
+        </Button>
       </div>
 
       {requests.length > 0 && (
@@ -317,8 +347,6 @@ function CompareWithFriends({ inviteToken }: { inviteToken: string | null }) {
     </div>
   );
 }
-
-// ===== HIGH-LEVEL COMPARISON =====
 
 function HighLevelComparison({ friend, onBack, onDeep }: { friend: FriendItem; onBack: () => void; onDeep: () => void }) {
   const { data: comparison } = useQuery<ComparisonData>({
@@ -438,8 +466,6 @@ function HighLevelComparison({ friend, onBack, onDeep }: { friend: FriendItem; o
   );
 }
 
-// ===== DEEP DAILY COMPARISON =====
-
 function DeepDailyComparison({ friend, date, onDateChange, onBack }: { friend: FriendItem; date: string; onDateChange: (d: string) => void; onBack: () => void }) {
   const { data: deep } = useQuery<DeepComparison>({
     queryKey: [`/api/grow/compare/${friend.friendId}/deep`, date],
@@ -514,8 +540,6 @@ function DeepDailyComparison({ friend, date, onDateChange, onBack }: { friend: F
   );
 }
 
-// ===== LEADERBOARD =====
-
 function LeaderboardView({ period, onPeriodChange, onBack }: { period: string; onPeriodChange: (p: string) => void; onBack: () => void }) {
   const { data: entries = [] } = useQuery<LeaderboardEntry[]>({
     queryKey: ["/api/grow/leaderboard", period],
@@ -555,8 +579,8 @@ function LeaderboardView({ period, onPeriodChange, onBack }: { period: string; o
                 data-testid={`leaderboard-entry-${idx}`}
               >
                 <div className="flex items-center gap-3">
-                  <span className={`text-lg w-8 text-center font-bold ${idx < 3 ? medalColors[idx] : "text-muted-foreground"}`}>
-                    {idx < 3 ? <Trophy className={`w-5 h-5 inline ${medalColors[idx]}`} /> : `#${idx + 1}`}
+                  <span className={`text-xl font-bold w-8 ${idx < 3 ? medalColors[idx] : "text-muted-foreground"}`}>
+                    #{idx + 1}
                   </span>
                   <div>
                     <p className="font-medium text-sm">{entry.name} {entry.isMe && <Badge variant="secondary" className="text-[10px] ml-1">You</Badge>}</p>
@@ -585,8 +609,6 @@ function LeaderboardView({ period, onPeriodChange, onBack }: { period: string; o
     </div>
   );
 }
-
-// ===== PRIVACY SETTINGS =====
 
 function PrivacySettingsView({ onBack }: { onBack: () => void }) {
   const { toast } = useToast();
@@ -642,31 +664,58 @@ function PrivacySettingsView({ onBack }: { onBack: () => void }) {
   );
 }
 
-// ===== GROUPS SECTION =====
-
-function GroupsSection() {
+function GroupsSection({ groupInviteId }: { groupInviteId: string | null }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
   const [activeGroup, setActiveGroup] = useState<GrowGroup | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [showDiscover, setShowDiscover] = useState(false);
   const [formName, setFormName] = useState("");
   const [formDescription, setFormDescription] = useState("");
-  const [formIsPublic, setFormIsPublic] = useState(true);
   const [formRules, setFormRules] = useState("");
-  const [formIcon, setFormIcon] = useState("👥");
+  const [formIcon, setFormIcon] = useState("");
+  const groupJoinAttempted = useRef(false);
 
   const { data: membership } = useQuery<{ hasPaid: boolean }>({ queryKey: ["/api/grow/membership"] });
   const { data: myGroups = [] } = useQuery<GrowGroup[]>({ queryKey: ["/api/grow/groups/my"] });
-  const { data: publicGroups = [] } = useQuery<GrowGroup[]>({
-    queryKey: ["/api/grow/groups/discover"],
-    enabled: showDiscover,
-  });
+
+  useEffect(() => {
+    if (!groupInviteId || groupJoinAttempted.current) return;
+    const gid = parseInt(groupInviteId);
+    if (isNaN(gid)) return;
+
+    const alreadyJoined = myGroups.find(g => g.id === gid);
+    if (alreadyJoined) {
+      groupJoinAttempted.current = true;
+      setActiveGroup(alreadyJoined);
+      setLocation("/dashboard/grow-together");
+    } else if (membership?.hasPaid) {
+      groupJoinAttempted.current = true;
+      apiRequest("POST", `/api/grow/groups/${gid}/join`)
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/grow/groups/my"] });
+          toast({ title: "Joined group!" });
+          setLocation("/dashboard/grow-together");
+        })
+        .catch((e: any) => {
+          toast({ title: "Could not join group", description: e.message, variant: "destructive" });
+          setLocation("/dashboard/grow-together");
+        });
+    } else if (membership !== undefined) {
+      groupJoinAttempted.current = true;
+      toast({
+        title: "Membership required",
+        description: "You need to purchase a membership first to join groups.",
+        variant: "destructive",
+      });
+      setLocation("/");
+    }
+  }, [groupInviteId, myGroups.length, membership]);
 
   const createGroup = useMutation({
     mutationFn: async () => {
       await apiRequest("POST", "/api/grow/groups", {
-        name: formName, description: formDescription, isPublic: formIsPublic, rules: formRules, icon: formIcon,
+        name: formName, description: formDescription, isPublic: false, rules: formRules, icon: formIcon || null,
       });
     },
     onSuccess: () => {
@@ -675,19 +724,8 @@ function GroupsSection() {
       setFormName("");
       setFormDescription("");
       setFormRules("");
+      setFormIcon("");
       toast({ title: "Group created!" });
-    },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
-  });
-
-  const joinGroup = useMutation({
-    mutationFn: async (id: number) => {
-      await apiRequest("POST", `/api/grow/groups/${id}/join`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/grow/groups/my"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/grow/groups/discover"] });
-      toast({ title: "Joined group!" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -704,7 +742,7 @@ function GroupsSection() {
             <Lock className="w-5 h-5 text-yellow-500 flex-shrink-0" />
             <div>
               <p className="text-sm font-medium">Paid Membership Required</p>
-              <p className="text-xs text-muted-foreground">You need an active paid membership to create or join groups and send messages.</p>
+              <p className="text-xs text-muted-foreground">You need an active paid membership to create groups and send messages. Share your group link with others to invite them.</p>
             </div>
           </CardContent>
         </Card>
@@ -734,12 +772,9 @@ function GroupsSection() {
                 <label className="text-sm font-medium mb-1 block">Group Rules (optional)</label>
                 <Textarea value={formRules} onChange={(e) => setFormRules(e.target.value)} placeholder="Any rules for members..." rows={2} data-testid="input-group-rules" />
               </div>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <Switch checked={formIsPublic} onCheckedChange={setFormIsPublic} data-testid="switch-group-public" />
-                  <span className="text-sm">{formIsPublic ? "Public" : "Private"}</span>
-                </div>
-                {formIsPublic ? <Globe className="w-4 h-4 text-muted-foreground" /> : <Lock className="w-4 h-4 text-muted-foreground" />}
+              <div>
+                <label className="text-sm font-medium mb-1 block">Group Icon (optional)</label>
+                <Input value={formIcon} onChange={(e) => setFormIcon(e.target.value)} placeholder="Paste an emoji" className="w-24" data-testid="input-group-icon" />
               </div>
               <Button className="w-full" disabled={!formName.trim() || createGroup.isPending} onClick={() => createGroup.mutate()} data-testid="button-save-group">
                 {createGroup.isPending ? "Creating..." : "Create Group"}
@@ -747,90 +782,46 @@ function GroupsSection() {
             </div>
           </DialogContent>
         </Dialog>
-        <Button variant="outline" size="sm" onClick={() => setShowDiscover(!showDiscover)} data-testid="button-discover-groups">
-          <Globe className="w-4 h-4 mr-2" /> {showDiscover ? "My Groups" : "Discover Groups"}
-        </Button>
       </div>
 
-      {!showDiscover ? (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <MessageSquare className="w-4 h-4" /> My Groups ({myGroups.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {myGroups.length === 0 ? (
-              <div className="text-center py-8">
-                <MessageSquare className="w-12 h-12 mx-auto mb-3 text-muted-foreground/30" />
-                <p className="text-sm text-muted-foreground">No groups yet. Create one or discover public groups!</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {myGroups.map((g) => (
-                  <div
-                    key={g.id}
-                    className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
-                    onClick={() => setActiveGroup(g)}
-                    data-testid={`group-${g.id}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">{g.icon || "👥"}</span>
-                      <div>
-                        <p className="font-medium text-sm">{g.name}</p>
-                        <p className="text-xs text-muted-foreground">{g.memberCount} members</p>
-                      </div>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <MessageSquare className="w-4 h-4" /> My Groups ({myGroups.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {myGroups.length === 0 ? (
+            <div className="text-center py-8">
+              <MessageSquare className="w-12 h-12 mx-auto mb-3 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">No groups yet. Create one and share the link to invite others!</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {myGroups.map((g) => (
+                <div
+                  key={g.id}
+                  className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                  onClick={() => setActiveGroup(g)}
+                  data-testid={`group-${g.id}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{g.icon || ""}</span>
+                    <div>
+                      <p className="font-medium text-sm">{g.name}</p>
+                      <p className="text-xs text-muted-foreground">{g.memberCount} members</p>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Globe className="w-4 h-4" /> Public Groups
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {publicGroups.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No public groups available yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {publicGroups.map((g) => {
-                  const alreadyJoined = myGroups.some(mg => mg.id === g.id);
-                  return (
-                    <div key={g.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30" data-testid={`discover-group-${g.id}`}>
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl">{g.icon || "👥"}</span>
-                        <div>
-                          <p className="font-medium text-sm">{g.name}</p>
-                          <p className="text-xs text-muted-foreground">{g.description?.slice(0, 60) || "No description"} · {g.memberCount} members</p>
-                        </div>
-                      </div>
-                      {alreadyJoined ? (
-                        <Badge variant="secondary" className="text-xs">Joined</Badge>
-                      ) : (
-                        <Button size="sm" disabled={!membership?.hasPaid} onClick={() => joinGroup.mutate(g.id)} data-testid={`button-join-group-${g.id}`}>
-                          Join
-                        </Button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
-
-// ===== GROUP CHAT VIEW =====
 
 function GroupChatView({ group, onBack }: { group: GrowGroup; onBack: () => void }) {
   const { toast } = useToast();
@@ -849,6 +840,13 @@ function GroupChatView({ group, onBack }: { group: GrowGroup; onBack: () => void
   });
 
   const { data: membership } = useQuery<{ hasPaid: boolean }>({ queryKey: ["/api/grow/membership"] });
+
+  const groupLink = `${window.location.origin}/dashboard/grow-together?group=${group.id}`;
+
+  const copyGroupLink = () => {
+    navigator.clipboard.writeText(groupLink);
+    toast({ title: "Group link copied!", description: "Share this link to invite people to your group." });
+  };
 
   const sendMessage = useMutation({
     mutationFn: async () => {
@@ -909,13 +907,16 @@ function GroupChatView({ group, onBack }: { group: GrowGroup; onBack: () => void
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onBack} data-testid="button-back-from-chat">
             <ArrowLeft className="w-4 h-4" />
           </Button>
-          <span className="text-xl">{group.icon || "👥"}</span>
+          <span className="text-xl">{group.icon || ""}</span>
           <div>
             <h2 className="font-bold text-sm">{group.name}</h2>
             <p className="text-[10px] text-muted-foreground">{groupDetail?.members?.length || group.memberCount} members</p>
           </div>
         </div>
         <div className="flex gap-1">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={copyGroupLink} data-testid="button-copy-group-link" title="Copy invite link">
+            <Link2 className="w-4 h-4" />
+          </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowMembers(!showMembers)} data-testid="button-toggle-members">
             <Users className="w-4 h-4" />
           </Button>
