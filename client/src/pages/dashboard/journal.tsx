@@ -66,17 +66,21 @@ function DayTypeSelector({
   onSelect,
   onCreateCustom,
   onDeleteCustom,
+  onEditCustom,
 }: {
   dayTypes: DayType[];
   selectedName: string | null;
   onSelect: (dt: DayType) => void;
   onCreateCustom: (name: string, emoji: string) => void;
   onDeleteCustom: (id: number) => void;
+  onEditCustom: (id: number, emoji: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newEmoji, setNewEmoji] = useState("📝");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editEmoji, setEditEmoji] = useState("");
 
   const grouped = useMemo(() => {
     const filtered = search
@@ -145,7 +149,25 @@ function DayTypeSelector({
                 )}
                 data-testid={`button-daytype-${dt.name.replace(/\s+/g, "-")}`}
               >
-                <span>{dt.emoji}</span>
+                {editingId === dt.id ? (
+                  <span onClick={(e) => e.stopPropagation()}>
+                    <Input
+                      value={editEmoji}
+                      onChange={(e) => setEditEmoji(e.target.value)}
+                      className="w-10 h-6 text-center p-0 bg-white/10 border-white/20 text-xs"
+                      onKeyDown={(e) => { if (e.key === "Enter") { onEditCustom(dt.id!, editEmoji); setEditingId(null); } }}
+                      onBlur={() => { onEditCustom(dt.id!, editEmoji); setEditingId(null); }}
+                      autoFocus
+                      data-testid={`input-edit-emoji-${dt.id}`}
+                    />
+                  </span>
+                ) : (
+                  <span
+                    onClick={(e) => { if (dt.isCustom && dt.id) { e.stopPropagation(); setEditingId(dt.id); setEditEmoji(dt.emoji); } }}
+                    className={dt.isCustom ? "cursor-pointer hover:scale-125 transition-transform" : ""}
+                    title={dt.isCustom ? "Click to change emoji" : ""}
+                  >{dt.emoji}</span>
+                )}
                 <span>{dt.name}</span>
                 {dt.isCustom && dt.id && (
                   <span
@@ -204,6 +226,7 @@ function DailyEditor({
   onSave,
   onCreateCustomDayType,
   onDeleteCustomDayType,
+  onEditCustomDayType,
   isSaving,
 }: {
   selectedDate: Date;
@@ -212,6 +235,7 @@ function DailyEditor({
   onSave: (data: any) => void;
   onCreateCustomDayType: (name: string, emoji: string) => void;
   onDeleteCustomDayType: (id: number) => void;
+  onEditCustomDayType: (id: number, emoji: string) => void;
   isSaving: boolean;
 }) {
   const [journalText, setJournalText] = useState(entry?.journalText || "");
@@ -229,6 +253,14 @@ function DailyEditor({
   const isToday = formatDate(new Date()) === dateStr;
 
   const handleImageUpload = useCallback(async (file: File) => {
+    if (imageUrls.length >= 10) {
+      toast({ title: "Maximum 10 images allowed", variant: "destructive" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "Image must be under 5MB", variant: "destructive" });
+      return;
+    }
     setIsUploading(true);
     try {
       const formData = new FormData();
@@ -242,7 +274,7 @@ function DailyEditor({
     } finally {
       setIsUploading(false);
     }
-  }, [toast]);
+  }, [toast, imageUrls.length]);
 
   const handleOcr = useCallback(async (imageUrl: string) => {
     setIsOcring(true);
@@ -284,14 +316,14 @@ function DailyEditor({
   };
 
   return (
-    <div className="space-y-6" data-testid="daily-editor">
+    <div className="flex flex-col gap-6 h-full" data-testid="daily-editor">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold" data-testid="text-journal-date">
+          <h3 className="text-xl font-bold" data-testid="text-journal-date">
             {isToday ? "Today" : selectedDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
           </h3>
           {selectedDayType && (
-            <p className="text-sm text-muted-foreground mt-1" data-testid="text-selected-daytype">
+            <p className="text-base text-muted-foreground mt-1" data-testid="text-selected-daytype">
               {selectedEmoji} {selectedDayType}
             </p>
           )}
@@ -333,25 +365,26 @@ function DailyEditor({
               onSelect={(dt) => { handleSelectDayType(dt); setShowDayTypes(false); }}
               onCreateCustom={onCreateCustomDayType}
               onDeleteCustom={onDeleteCustomDayType}
+              onEditCustom={onEditCustomDayType}
             />
           </div>
         )}
       </div>
 
-      <div>
+      <div className="flex-1 flex flex-col">
         <p className="text-sm font-medium mb-2 text-muted-foreground">Journal Entry</p>
         <Textarea
           placeholder="Write about your day..."
           value={journalText}
           onChange={(e) => setJournalText(e.target.value)}
-          className="min-h-[200px] bg-white/5 border-white/10 resize-y"
+          className="flex-1 min-h-[300px] bg-white/5 border-white/10 resize-y"
           data-testid="textarea-journal"
         />
       </div>
 
       <div>
         <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-medium text-muted-foreground">Images</p>
+          <p className="text-sm font-medium text-muted-foreground">Images ({imageUrls.length}/10, max 5MB each)</p>
           <div className="flex gap-2">
             <input
               ref={fileInputRef}
@@ -361,7 +394,7 @@ function DailyEditor({
               onChange={(e) => { if (e.target.files?.[0]) handleImageUpload(e.target.files[0]); }}
               data-testid="input-image-upload"
             />
-            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isUploading} data-testid="button-upload-image">
+            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isUploading || imageUrls.length >= 10} data-testid="button-upload-image">
               {isUploading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <ImagePlus className="w-4 h-4 mr-1" />}
               Add Image
             </Button>
@@ -634,6 +667,21 @@ export default function JournalPage() {
     },
   });
 
+  const editCustomDayType = useMutation({
+    mutationFn: async ({ id, emoji }: { id: number; emoji: string }) => {
+      if (!emoji.trim()) throw new Error("Emoji cannot be empty");
+      const res = await apiRequest("PATCH", `/api/day-types/custom/${id}`, { emoji: emoji.trim() });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/day-types"] });
+      toast({ title: "Day type updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to update", description: err.message, variant: "destructive" });
+    },
+  });
+
   const navigateMonth = (dir: number) => {
     const d = new Date(selectedDate);
     d.setMonth(d.getMonth() + dir);
@@ -711,6 +759,7 @@ export default function JournalPage() {
             onSave={(data) => saveMutation.mutate(data)}
             onCreateCustomDayType={(name, emoji) => createCustomDayType.mutate({ name, emoji })}
             onDeleteCustomDayType={(id) => deleteCustomDayType.mutate(id)}
+            onEditCustomDayType={(id, emoji) => editCustomDayType.mutate({ id, emoji })}
             isSaving={saveMutation.isPending}
           />
         </div>
@@ -728,6 +777,7 @@ export default function JournalPage() {
               onSave={(data) => saveMutation.mutate(data)}
               onCreateCustomDayType={(name, emoji) => createCustomDayType.mutate({ name, emoji })}
               onDeleteCustomDayType={(id) => deleteCustomDayType.mutate(id)}
+              onEditCustomDayType={(id, emoji) => editCustomDayType.mutate({ id, emoji })}
               isSaving={saveMutation.isPending}
             />
           </div>

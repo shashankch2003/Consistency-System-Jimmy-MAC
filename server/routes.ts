@@ -723,6 +723,9 @@ export async function registerRoutes(
       const userId = req.user.claims.sub;
       const { date, dayTypeName, customDayName, emoji, journalText, imageUrls, extractedText } = req.body;
       if (!date) return res.status(400).json({ message: "Date is required" });
+      if (imageUrls && Array.isArray(imageUrls) && imageUrls.length > 10) {
+        return res.status(400).json({ message: "Maximum 10 images allowed" });
+      }
       const entry = await storage.upsertJournalEntry({
         userId,
         date,
@@ -771,6 +774,17 @@ export async function registerRoutes(
       if (!name) return res.status(400).json({ message: "Name is required" });
       const dt = await storage.createCustomDayType({ userId: req.user.claims.sub, name, emoji: emoji || "📝" });
       res.status(201).json(dt);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/day-types/custom/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const { name, emoji } = req.body;
+      if (emoji !== undefined && !emoji.trim()) {
+        return res.status(400).json({ message: "Emoji cannot be empty" });
+      }
+      const updated = await storage.updateCustomDayType(parseInt(req.params.id), req.user.claims.sub, { name, emoji });
+      res.json(updated);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 

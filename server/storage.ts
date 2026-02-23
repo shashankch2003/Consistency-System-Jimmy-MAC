@@ -126,6 +126,7 @@ export interface IStorage extends IAuthStorage {
 
   getCustomDayTypes(userId: string): Promise<(typeof customDayTypes.$inferSelect)[]>;
   createCustomDayType(dt: InsertCustomDayType): Promise<typeof customDayTypes.$inferSelect>;
+  updateCustomDayType(id: number, userId: string, data: { name?: string; emoji?: string }): Promise<typeof customDayTypes.$inferSelect>;
   deleteCustomDayType(id: number, userId: string): Promise<void>;
 
   getDayTypeUsage(userId: string): Promise<(typeof dayTypeUsage.$inferSelect)[]>;
@@ -531,6 +532,10 @@ export class DatabaseStorage implements IStorage {
   async createCustomDayType(dt: InsertCustomDayType) {
     const [created] = await db.insert(customDayTypes).values(dt).returning();
     return created;
+  }
+  async updateCustomDayType(id: number, userId: string, data: { name?: string; emoji?: string }) {
+    const [updated] = await db.update(customDayTypes).set(data).where(and(eq(customDayTypes.id, id), eq(customDayTypes.userId, userId))).returning();
+    return updated;
   }
   async deleteCustomDayType(id: number, userId: string) {
     await db.delete(customDayTypes).where(and(eq(customDayTypes.id, id), eq(customDayTypes.userId, userId)));

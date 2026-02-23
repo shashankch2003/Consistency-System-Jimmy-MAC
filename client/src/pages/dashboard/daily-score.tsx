@@ -178,11 +178,17 @@ export default function DailyScorePage() {
 
   const monthlyChartData = (() => {
     const now = new Date();
+    const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const existingMonths = stats?.monthlyAverages || [];
+    const firstMonth = existingMonths.length > 0 ? existingMonths[0].month : currentKey;
+    const [startY, startM] = firstMonth.split('-').map(Number);
+    const [endY, endM] = currentKey.split('-').map(Number);
+    const totalMonths = (endY - startY) * 12 + (endM - startM) + 1;
     const months: { name: string; average: number }[] = [];
-    for (let i = 0; i < 12; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    for (let i = 0; i < totalMonths; i++) {
+      const d = new Date(startY, startM - 1 + i, 1);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const match = stats?.monthlyAverages?.find(m => m.month === key);
+      const match = existingMonths.find(m => m.month === key);
       months.push({ name: formatMonthLabel(key), average: match ? match.average : 0 });
     }
     return months;
