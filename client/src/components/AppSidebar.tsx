@@ -12,6 +12,7 @@ import {
   SidebarMenuItem,
   SidebarHeader,
   SidebarFooter,
+  SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { 
   Target, 
@@ -126,10 +127,13 @@ export function AppSidebar() {
             <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
           </div>
         </div>
-        <Button variant="outline" className="w-full justify-start gap-2" onClick={() => logout()}>
-          <LogOut className="w-4 h-4" />
-          Logout
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="flex-1 justify-start gap-2" onClick={() => logout()}>
+            <LogOut className="w-4 h-4" />
+            Logout
+          </Button>
+          <SidebarTrigger className="border border-border rounded-lg h-9 w-9" data-testid="button-sidebar-toggle" />
+        </div>
       </SidebarFooter>
     </Sidebar>
   );
