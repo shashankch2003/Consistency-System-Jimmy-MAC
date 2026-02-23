@@ -141,6 +141,8 @@ export interface IStorage extends IAuthStorage {
   getFundamentals(userId: string): Promise<(typeof successfulFundamentals.$inferSelect)[]>;
   getFundamental(userId: string, fundamentalKey: string): Promise<(typeof successfulFundamentals.$inferSelect) | undefined>;
   upsertFundamental(data: InsertSuccessfulFundamental): Promise<typeof successfulFundamentals.$inferSelect>;
+  toggleFundamentalCompleted(id: number, userId: string, completed: boolean): Promise<typeof successfulFundamentals.$inferSelect>;
+  reorderFundamentals(userId: string, orderedKeys: string[]): Promise<void>;
   deleteFundamental(id: number, userId: string): Promise<void>;
 
   getUserSettings(userId: string): Promise<typeof userSettings.$inferSelect | undefined>;
@@ -607,6 +609,29 @@ export class DatabaseStorage implements IStorage {
     const [created] = await db.insert(successfulFundamentals).values(data).returning();
     return created;
   }
+  async toggleFundamentalCompleted(id: number, userId: string, completed: boolean) {
+    const [updated] = await db.update(successfulFundamentals)
+      .set({ completed, updatedAt: new Date() })
+      .where(and(eq(successfulFundamentals.id, id), eq(successfulFundamentals.userId, userId)))
+      .returning();
+    return updated;
+  }
+
+  async reorderFundamentals(userId: string, orderedKeys: string[]) {
+    for (let i = 0; i < orderedKeys.length; i++) {
+      const existing = await db.select().from(successfulFundamentals)
+        .where(and(eq(successfulFundamentals.userId, userId), eq(successfulFundamentals.fundamentalKey, orderedKeys[i])));
+      if (existing.length > 0) {
+        await db.update(successfulFundamentals)
+          .set({ sortOrder: i })
+          .where(eq(successfulFundamentals.id, existing[0].id));
+      } else {
+        await db.insert(successfulFundamentals)
+          .values({ userId, fundamentalKey: orderedKeys[i], sortOrder: i });
+      }
+    }
+  }
+
   async deleteFundamental(id: number, userId: string) {
     await db.delete(successfulFundamentals).where(and(eq(successfulFundamentals.id, id), eq(successfulFundamentals.userId, userId)));
   }

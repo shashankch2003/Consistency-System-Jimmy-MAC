@@ -304,6 +304,8 @@ export const successfulFundamentals = pgTable("successful_fundamentals", {
   fundamentalKey: text("fundamental_key").notNull(),
   customTitle: text("custom_title"),
   content: text("content"),
+  completed: boolean("completed").notNull().default(false),
+  sortOrder: integer("sort_order"),
   updatedAt: timestamp("updated_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
 });

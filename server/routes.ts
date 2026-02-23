@@ -1050,6 +1050,27 @@ export async function registerRoutes(
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  app.patch("/api/fundamentals/:id/toggle", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { completed } = req.body;
+      if (typeof completed !== "boolean") return res.status(400).json({ message: "completed must be a boolean" });
+      const updated = await storage.toggleFundamentalCompleted(parseInt(req.params.id), userId, completed);
+      if (!updated) return res.status(404).json({ message: "Not found" });
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/fundamentals/reorder", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { orderedKeys } = req.body;
+      if (!Array.isArray(orderedKeys)) return res.status(400).json({ message: "orderedKeys must be an array" });
+      await storage.reorderFundamentals(userId, orderedKeys);
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   app.put("/api/fundamentals/:key", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
