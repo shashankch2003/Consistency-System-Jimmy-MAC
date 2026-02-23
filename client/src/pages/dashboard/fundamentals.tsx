@@ -102,7 +102,7 @@ export default function FundamentalsPage() {
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: -20 }}
         transition={{ duration: 0.2 }}
-        className="p-4 pt-14 sm:p-8 sm:pt-8 space-y-4 max-w-4xl mx-auto"
+        className="p-4 pt-14 sm:p-8 sm:pt-8 space-y-4"
       >
         <div className="flex items-center justify-between">
           <Button variant="ghost" className="gap-2 text-muted-foreground" onClick={handleBack} data-testid="button-back-fundamentals">
