@@ -256,7 +256,25 @@ export const api = {
       input: z.object({ razorpayPaymentId: z.string(), razorpayOrderId: z.string(), razorpaySignature: z.string() }),
       responses: { 200: z.object({ success: z.boolean() }) }
     }
-  }
+  },
+  comparisonStats: {
+    get: {
+      method: 'GET' as const, path: '/api/comparison-stats' as const,
+      responses: { 200: z.object({
+        dailyScores: z.array(z.object({ date: z.string(), score: z.number() })),
+        weeklyAverages: z.array(z.object({ weekStart: z.string(), average: z.number(), days: z.number() })),
+        monthlyAverages: z.array(z.object({ month: z.string(), average: z.number(), days: z.number() })),
+        lifetime: z.object({
+          average: z.number(),
+          totalDays: z.number(),
+          highestDaily: z.number(),
+          lowestDaily: z.number(),
+          bestWeek: z.object({ weekStart: z.string(), average: z.number(), days: z.number() }).nullable(),
+          bestMonth: z.object({ month: z.string(), average: z.number(), days: z.number() }).nullable(),
+        }),
+      }) }
+    }
+  },
 };
 
 export function buildUrl(path: string, params?: Record<string, string | number>): string {

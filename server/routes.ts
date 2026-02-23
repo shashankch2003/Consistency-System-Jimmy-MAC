@@ -783,6 +783,125 @@ export async function registerRoutes(
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  // ===== COMPARISON ANALYTICS ROUTE =====
+  app.get(api.comparisonStats.get.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+
+      const [gHabits, bHabits, allHourlyEntries] = await Promise.all([
+        storage.getGoodHabits(userId),
+        storage.getBadHabits(userId),
+        storage.getHourlyEntries(userId),
+      ]);
+      const [allGoodEntries, allBadEntries] = await Promise.all([
+        gHabits.length > 0 ? storage.getGoodHabitEntries(gHabits.map(h => h.id)) : Promise.resolve([]),
+        bHabits.length > 0 ? storage.getBadHabitEntries(bHabits.map(h => h.id)) : Promise.resolve([]),
+      ]);
+
+      const today = new Date();
+      const currentYear = today.getFullYear();
+      const [thisYearTasks, prevYearTasks] = await Promise.all([
+        storage.getTasksByYear(userId, currentYear),
+        storage.getTasksByYear(userId, currentYear - 1),
+      ]);
+      const allTasks = [...thisYearTasks, ...prevYearTasks];
+
+      const hourlyByDate: Record<string, typeof allHourlyEntries> = {};
+      for (const e of allHourlyEntries) {
+        if (!hourlyByDate[e.date]) hourlyByDate[e.date] = [];
+        hourlyByDate[e.date].push(e);
+      }
+
+      const lookbackDays = 365;
+      const startLookback = new Date(today);
+      startLookback.setDate(startLookback.getDate() - lookbackDays);
+
+      function computeDayScore(dateStr: string) {
+        const dayTasks = allTasks.filter(t => t.date === dateStr);
+        const taskScore = dayTasks.length > 0 ? dayTasks.reduce((sum, t) => sum + (t.completionPercentage || 0), 0) / dayTasks.length : 0;
+
+        let goodHabitScore = 0;
+        if (gHabits.length > 0) {
+          const dayGE = allGoodEntries.filter(e => e.date === dateStr);
+          goodHabitScore = (dayGE.filter(e => e.completed).length / gHabits.length) * 100;
+        }
+
+        let badHabitScore = 100;
+        if (bHabits.length > 0) {
+          const dayBE = allBadEntries.filter(e => e.date === dateStr);
+          badHabitScore = ((bHabits.length - dayBE.filter(e => e.occurred).length) / bHabits.length) * 100;
+        }
+
+        const hEntries = hourlyByDate[dateStr] || [];
+        const hourlyScore = hEntries.length > 0 ? Math.min((hEntries.reduce((sum, e) => sum + e.productivityScore, 0) / hEntries.length) * 10, 100) : 0;
+
+        const weights = { task: 0.3, goodHabit: 0.25, badHabit: 0.2, hourly: 0.25 };
+        const active: string[] = [];
+        if (dayTasks.length > 0) active.push('task');
+        if (gHabits.length > 0) active.push('goodHabit');
+        if (bHabits.length > 0) active.push('badHabit');
+        if (hEntries.length > 0) active.push('hourly');
+
+        if (active.length === 0) return null;
+        const totalWeight = active.reduce((sum, s) => sum + weights[s as keyof typeof weights], 0);
+        const scores: Record<string, number> = { task: taskScore, goodHabit: goodHabitScore, badHabit: badHabitScore, hourly: hourlyScore };
+        const totalScore = active.reduce((sum, s) => sum + (scores[s] * weights[s as keyof typeof weights] / totalWeight), 0);
+        return Math.round(totalScore);
+      }
+
+      const dailyScores: { date: string; score: number }[] = [];
+      for (let d = new Date(startLookback); d <= today; d.setDate(d.getDate() + 1)) {
+        const ds = d.toISOString().split("T")[0];
+        const sc = computeDayScore(ds);
+        if (sc !== null) dailyScores.push({ date: ds, score: sc });
+      }
+
+      function getWeekKey(dateStr: string): string {
+        const d = new Date(dateStr + "T00:00:00");
+        const dayOfWeek = d.getDay();
+        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        const monday = new Date(d);
+        monday.setDate(d.getDate() + mondayOffset);
+        return monday.toISOString().split("T")[0];
+      }
+
+      const weeklyMap: Record<string, number[]> = {};
+      const monthlyMap: Record<string, number[]> = {};
+
+      for (const ds of dailyScores) {
+        const wk = getWeekKey(ds.date);
+        if (!weeklyMap[wk]) weeklyMap[wk] = [];
+        weeklyMap[wk].push(ds.score);
+
+        const mk = ds.date.substring(0, 7);
+        if (!monthlyMap[mk]) monthlyMap[mk] = [];
+        monthlyMap[mk].push(ds.score);
+      }
+
+      const weeklyAverages = Object.entries(weeklyMap)
+        .map(([weekStart, scores]) => ({ weekStart, average: Math.round(scores.reduce((a, b) => a + b, 0) / scores.length), days: scores.length }))
+        .sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+
+      const monthlyAverages = Object.entries(monthlyMap)
+        .map(([month, scores]) => ({ month, average: Math.round(scores.reduce((a, b) => a + b, 0) / scores.length), days: scores.length }))
+        .sort((a, b) => a.month.localeCompare(b.month));
+
+      const allScoreValues = dailyScores.map(d => d.score);
+      const lifetimeAverage = allScoreValues.length > 0 ? Math.round(allScoreValues.reduce((a, b) => a + b, 0) / allScoreValues.length) : 0;
+      const highestDaily = allScoreValues.length > 0 ? Math.max(...allScoreValues) : 0;
+      const lowestDaily = allScoreValues.length > 0 ? Math.min(...allScoreValues) : 0;
+      const bestWeek = weeklyAverages.length > 0 ? weeklyAverages.reduce((best, w) => w.average > best.average ? w : best) : null;
+      const bestMonth = monthlyAverages.length > 0 ? monthlyAverages.reduce((best, m) => m.average > best.average ? m : best) : null;
+
+      res.json({
+        dailyScores,
+        weeklyAverages,
+        monthlyAverages,
+        lifetime: { average: lifetimeAverage, totalDays: allScoreValues.length, highestDaily, lowestDaily, bestWeek, bestMonth },
+      });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   // ===== SUCCESSFUL FUNDAMENTALS ROUTES =====
   app.get("/api/fundamentals", isAuthenticated, async (req: any, res) => {
     try {

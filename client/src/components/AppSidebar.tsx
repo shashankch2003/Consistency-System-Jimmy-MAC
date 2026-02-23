@@ -39,7 +39,7 @@ const menuItems = [
   { title: "Good Habits", icon: CheckCircle, url: "/dashboard/good-habits" },
   { title: "Bad Habits", icon: XCircle, url: "/dashboard/bad-habits" },
   { title: "Hourly Tracker", icon: Clock, url: "/dashboard/hourly" },
-  { title: "Daily Score", icon: Gauge, url: "/dashboard/daily-score" },
+  { title: "Comparison", icon: Gauge, url: "/dashboard/daily-score" },
   { title: "Journal", icon: BookOpen, url: "/dashboard/journal" },
   { title: "Notes", icon: FileText, url: "/dashboard/notes" },
   { title: "Fundamentals", icon: Trophy, url: "/dashboard/fundamentals" },
