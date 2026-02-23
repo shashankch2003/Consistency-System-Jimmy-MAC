@@ -4,7 +4,7 @@ import {
   yearlyGoals, monthlyOverviewGoals, monthlyDynamicGoals,
   tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, payments, taskBankItems, dailyReasons, notes,
   userLevels, groupMessages, adminInbox, monthlyEvaluations,
-  journalEntries, customDayTypes, dayTypeUsage, userStreaks,
+  journalEntries, customDayTypes, dayTypeEmojiOverrides, dayTypeUsage, userStreaks,
   successfulFundamentals, userSettings,
   moneySettings, expenseCategories, expenses, budgets, subscriptions, bills, creditCards, savingsGoals,
   videos, videoFeedback,
@@ -128,6 +128,9 @@ export interface IStorage extends IAuthStorage {
   createCustomDayType(dt: InsertCustomDayType): Promise<typeof customDayTypes.$inferSelect>;
   updateCustomDayType(id: number, userId: string, data: { name?: string; emoji?: string }): Promise<typeof customDayTypes.$inferSelect>;
   deleteCustomDayType(id: number, userId: string): Promise<void>;
+
+  getDayTypeEmojiOverrides(userId: string): Promise<(typeof dayTypeEmojiOverrides.$inferSelect)[]>;
+  upsertDayTypeEmojiOverride(userId: string, dayTypeName: string, emoji: string): Promise<typeof dayTypeEmojiOverrides.$inferSelect>;
 
   getDayTypeUsage(userId: string): Promise<(typeof dayTypeUsage.$inferSelect)[]>;
   incrementDayTypeUsage(userId: string, dayTypeName: string): Promise<void>;
@@ -539,6 +542,27 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteCustomDayType(id: number, userId: string) {
     await db.delete(customDayTypes).where(and(eq(customDayTypes.id, id), eq(customDayTypes.userId, userId)));
+  }
+
+  async getDayTypeEmojiOverrides(userId: string) {
+    return await db.select().from(dayTypeEmojiOverrides).where(eq(dayTypeEmojiOverrides.userId, userId));
+  }
+
+  async upsertDayTypeEmojiOverride(userId: string, dayTypeName: string, emoji: string) {
+    const existing = await db.select().from(dayTypeEmojiOverrides)
+      .where(and(eq(dayTypeEmojiOverrides.userId, userId), eq(dayTypeEmojiOverrides.dayTypeName, dayTypeName)));
+    if (existing.length > 0) {
+      const [updated] = await db.update(dayTypeEmojiOverrides)
+        .set({ emoji })
+        .where(eq(dayTypeEmojiOverrides.id, existing[0].id))
+        .returning();
+      return updated;
+    } else {
+      const [inserted] = await db.insert(dayTypeEmojiOverrides)
+        .values({ userId, dayTypeName, emoji })
+        .returning();
+      return inserted;
+    }
   }
 
   async getDayTypeUsage(userId: string) {

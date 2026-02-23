@@ -272,6 +272,13 @@ export const customDayTypes = pgTable("custom_day_types", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const dayTypeEmojiOverrides = pgTable("day_type_emoji_overrides", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  dayTypeName: text("day_type_name").notNull(),
+  emoji: text("emoji").notNull(),
+});
+
 export const dayTypeUsage = pgTable("day_type_usage", {
   id: serial("id").primaryKey(),
   userId: varchar("user_id").notNull(),

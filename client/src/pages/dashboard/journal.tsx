@@ -67,6 +67,7 @@ function DayTypeSelector({
   onCreateCustom,
   onDeleteCustom,
   onEditCustom,
+  onEditBuiltinEmoji,
 }: {
   dayTypes: DayType[];
   selectedName: string | null;
@@ -74,12 +75,13 @@ function DayTypeSelector({
   onCreateCustom: (name: string, emoji: string) => void;
   onDeleteCustom: (id: number) => void;
   onEditCustom: (id: number, emoji: string) => void;
+  onEditBuiltinEmoji: (dayTypeName: string, emoji: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newEmoji, setNewEmoji] = useState("📝");
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editEmoji, setEditEmoji] = useState("");
 
   const grouped = useMemo(() => {
@@ -149,23 +151,33 @@ function DayTypeSelector({
                 )}
                 data-testid={`button-daytype-${dt.name.replace(/\s+/g, "-")}`}
               >
-                {editingId === dt.id ? (
+                {editingKey === dt.name ? (
                   <span onClick={(e) => e.stopPropagation()}>
                     <Input
                       value={editEmoji}
                       onChange={(e) => setEditEmoji(e.target.value)}
                       className="w-10 h-6 text-center p-0 bg-white/10 border-white/20 text-xs"
-                      onKeyDown={(e) => { if (e.key === "Enter") { onEditCustom(dt.id!, editEmoji); setEditingId(null); } }}
-                      onBlur={() => { onEditCustom(dt.id!, editEmoji); setEditingId(null); }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          if (dt.isCustom && dt.id) onEditCustom(dt.id, editEmoji);
+                          else onEditBuiltinEmoji(dt.name, editEmoji);
+                          setEditingKey(null);
+                        }
+                      }}
+                      onBlur={() => {
+                        if (dt.isCustom && dt.id) onEditCustom(dt.id, editEmoji);
+                        else onEditBuiltinEmoji(dt.name, editEmoji);
+                        setEditingKey(null);
+                      }}
                       autoFocus
-                      data-testid={`input-edit-emoji-${dt.id}`}
+                      data-testid={`input-edit-emoji-${dt.name.replace(/\s+/g, "-")}`}
                     />
                   </span>
                 ) : (
                   <span
-                    onClick={(e) => { if (dt.isCustom && dt.id) { e.stopPropagation(); setEditingId(dt.id); setEditEmoji(dt.emoji); } }}
-                    className={dt.isCustom ? "cursor-pointer hover:scale-125 transition-transform" : ""}
-                    title={dt.isCustom ? "Click to change emoji" : ""}
+                    onClick={(e) => { e.stopPropagation(); setEditingKey(dt.name); setEditEmoji(dt.emoji); }}
+                    className="cursor-pointer hover:scale-125 transition-transform"
+                    title="Click to change emoji"
                   >{dt.emoji}</span>
                 )}
                 <span>{dt.name}</span>
@@ -227,6 +239,7 @@ function DailyEditor({
   onCreateCustomDayType,
   onDeleteCustomDayType,
   onEditCustomDayType,
+  onEditBuiltinEmoji,
   isSaving,
 }: {
   selectedDate: Date;
@@ -236,6 +249,7 @@ function DailyEditor({
   onCreateCustomDayType: (name: string, emoji: string) => void;
   onDeleteCustomDayType: (id: number) => void;
   onEditCustomDayType: (id: number, emoji: string) => void;
+  onEditBuiltinEmoji: (dayTypeName: string, emoji: string) => void;
   isSaving: boolean;
 }) {
   const [journalText, setJournalText] = useState(entry?.journalText || "");
@@ -316,7 +330,7 @@ function DailyEditor({
   };
 
   return (
-    <div className="flex flex-col gap-6 h-full" data-testid="daily-editor">
+    <div className="flex flex-col gap-6 h-full flex-1" data-testid="daily-editor">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-xl font-bold" data-testid="text-journal-date">
@@ -366,6 +380,7 @@ function DailyEditor({
               onCreateCustom={onCreateCustomDayType}
               onDeleteCustom={onDeleteCustomDayType}
               onEditCustom={onEditCustomDayType}
+              onEditBuiltinEmoji={onEditBuiltinEmoji}
             />
           </div>
         )}
@@ -682,6 +697,21 @@ export default function JournalPage() {
     },
   });
 
+  const editBuiltinEmoji = useMutation({
+    mutationFn: async ({ dayTypeName, emoji }: { dayTypeName: string; emoji: string }) => {
+      if (!emoji.trim()) throw new Error("Emoji cannot be empty");
+      const res = await apiRequest("PATCH", "/api/day-types/emoji-override", { dayTypeName, emoji: emoji.trim() });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/day-types"] });
+      toast({ title: "Emoji updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to update emoji", description: err.message, variant: "destructive" });
+    },
+  });
+
   const navigateMonth = (dir: number) => {
     const d = new Date(selectedDate);
     d.setMonth(d.getMonth() + dir);
@@ -750,7 +780,7 @@ export default function JournalPage() {
       </div>
 
       {viewMode === "daily" && (
-        <div className="bg-card rounded-xl border border-white/10 p-6">
+        <div className="bg-card rounded-xl border border-white/10 p-6 min-h-[calc(100vh-280px)] flex flex-col">
           <DailyEditor
             key={dateStr}
             selectedDate={selectedDate}
@@ -760,6 +790,7 @@ export default function JournalPage() {
             onCreateCustomDayType={(name, emoji) => createCustomDayType.mutate({ name, emoji })}
             onDeleteCustomDayType={(id) => deleteCustomDayType.mutate(id)}
             onEditCustomDayType={(id, emoji) => editCustomDayType.mutate({ id, emoji })}
+            onEditBuiltinEmoji={(dayTypeName, emoji) => editBuiltinEmoji.mutate({ dayTypeName, emoji })}
             isSaving={saveMutation.isPending}
           />
         </div>
@@ -768,7 +799,7 @@ export default function JournalPage() {
       {viewMode === "weekly" && (
         <div className="space-y-4">
           <WeeklyStrip selectedDate={selectedDate} entries={monthEntries} onSelectDate={(d) => setSelectedDate(d)} />
-          <div className="bg-card rounded-xl border border-white/10 p-6">
+          <div className="bg-card rounded-xl border border-white/10 p-6 min-h-[calc(100vh-360px)] flex flex-col">
             <DailyEditor
               key={dateStr}
               selectedDate={selectedDate}
@@ -778,6 +809,7 @@ export default function JournalPage() {
               onCreateCustomDayType={(name, emoji) => createCustomDayType.mutate({ name, emoji })}
               onDeleteCustomDayType={(id) => deleteCustomDayType.mutate(id)}
               onEditCustomDayType={(id, emoji) => editCustomDayType.mutate({ id, emoji })}
+              onEditBuiltinEmoji={(dayTypeName, emoji) => editBuiltinEmoji.mutate({ dayTypeName, emoji })}
               isSaving={saveMutation.isPending}
             />
           </div>

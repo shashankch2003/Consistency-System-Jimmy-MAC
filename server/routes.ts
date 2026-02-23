@@ -753,14 +753,21 @@ export async function registerRoutes(
   app.get("/api/day-types", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const [customTypes, usageData] = await Promise.all([
+      const [customTypes, usageData, emojiOverrides] = await Promise.all([
         storage.getCustomDayTypes(userId),
         storage.getDayTypeUsage(userId),
+        storage.getDayTypeEmojiOverrides(userId),
       ]);
       const { DEFAULT_DAY_TYPES } = await import("@shared/schema");
       const usageMap = new Map(usageData.map(u => [u.dayTypeName, u.usageCount]));
+      const overrideMap = new Map(emojiOverrides.map(o => [o.dayTypeName, o.emoji]));
       const allTypes = [
-        ...DEFAULT_DAY_TYPES.map(dt => ({ ...dt, isCustom: false, usageCount: usageMap.get(dt.name) || 0 })),
+        ...DEFAULT_DAY_TYPES.map(dt => ({
+          ...dt,
+          emoji: overrideMap.get(dt.name) || dt.emoji,
+          isCustom: false,
+          usageCount: usageMap.get(dt.name) || 0,
+        })),
         ...customTypes.map(dt => ({ name: dt.name, emoji: dt.emoji, category: "Custom", isCustom: true, id: dt.id, usageCount: usageMap.get(dt.name) || 0 })),
       ];
       allTypes.sort((a, b) => b.usageCount - a.usageCount);
@@ -774,6 +781,17 @@ export async function registerRoutes(
       if (!name) return res.status(400).json({ message: "Name is required" });
       const dt = await storage.createCustomDayType({ userId: req.user.claims.sub, name, emoji: emoji || "📝" });
       res.status(201).json(dt);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/day-types/emoji-override", isAuthenticated, async (req: any, res) => {
+    try {
+      const { dayTypeName, emoji } = req.body;
+      if (!dayTypeName || !emoji?.trim()) {
+        return res.status(400).json({ message: "Day type name and emoji are required" });
+      }
+      const override = await storage.upsertDayTypeEmojiOverride(req.user.claims.sub, dayTypeName, emoji.trim());
+      res.json(override);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
