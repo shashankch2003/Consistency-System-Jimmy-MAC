@@ -618,7 +618,7 @@ function MonthlyListView({ entries, onSelectDate }: { entries: JournalEntry[]; o
   );
 }
 
-function YearlyGrid({ entries, year, onSelectDate }: { entries: JournalEntry[]; year: number; onSelectDate: (d: Date) => void }) {
+function YearlyGrid({ entries, year, selectedDateStr, onSelectDate }: { entries: JournalEntry[]; year: number; selectedDateStr: string | null; onSelectDate: (d: Date, dateStr: string) => void }) {
   const entryMap = new Map(entries.map(e => [e.date, e]));
   return (
     <div className="space-y-4" data-testid="yearly-grid">
@@ -631,13 +631,14 @@ function YearlyGrid({ entries, year, onSelectDate }: { entries: JournalEntry[]; 
               {Array.from({ length: daysInMonth }, (_, dayIdx) => {
                 const dateStr = `${year}-${String(monthIdx + 1).padStart(2, "0")}-${String(dayIdx + 1).padStart(2, "0")}`;
                 const entry = entryMap.get(dateStr);
+                const isSelected = dateStr === selectedDateStr;
                 return (
                   <button
                     key={dayIdx}
-                    onClick={() => onSelectDate(new Date(year, monthIdx, dayIdx + 1))}
+                    onClick={() => onSelectDate(new Date(year, monthIdx, dayIdx + 1), dateStr)}
                     className={cn(
                       "w-5 h-5 rounded-sm flex items-center justify-center text-[9px] transition-all",
-                      entry ? "bg-primary/20 hover:bg-primary/30" : "bg-white/5 hover:bg-white/10"
+                      isSelected ? "ring-2 ring-primary bg-primary/30" : entry ? "bg-primary/20 hover:bg-primary/30" : "bg-white/5 hover:bg-white/10"
                     )}
                     title={`${MONTH_NAMES[monthIdx]} ${dayIdx + 1}: ${entry?.customDayName || "No entry"}`}
                     data-testid={`button-year-day-${dateStr}`}
@@ -704,6 +705,7 @@ export default function JournalPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>("daily");
   const [yearlyPreviewDate, setYearlyPreviewDate] = useState<Date | null>(null);
+  const [yearlyPreviewStr, setYearlyPreviewStr] = useState<string | null>(null);
   const [yearlyFullscreen, setYearlyFullscreen] = useState(false);
   const { toast } = useToast();
 
@@ -714,13 +716,12 @@ export default function JournalPage() {
   const { data: dayTypes = [] } = useQuery<DayType[]>({ queryKey: ["/api/day-types"] });
   const { data: currentEntry } = useQuery<JournalEntry | null>({ queryKey: [`/api/journal?date=${dateStr}`] });
   const { data: monthEntries = [] } = useQuery<JournalEntry[]>({ queryKey: [`/api/journal?month=${monthKey}`] });
-  const yearlyPreviewDateStr = yearlyPreviewDate ? formatDate(yearlyPreviewDate) : null;
   const { data: yearEntries = [] } = useQuery<JournalEntry[]>({
     queryKey: [`/api/journal?year=${yearNum}`],
     enabled: viewMode === "yearly",
   });
-  const yearlyPreviewEntry = yearlyPreviewDate
-    ? yearEntries.find(e => e.date === yearlyPreviewDateStr) || null
+  const yearlyPreviewEntry = yearlyPreviewStr
+    ? yearEntries.find(e => e.date === yearlyPreviewStr) || null
     : null;
 
   const saveMutation = useMutation({
@@ -911,7 +912,7 @@ export default function JournalPage() {
       {viewMode === "yearly" && (
         <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-6">
           <div className="bg-card rounded-xl border border-white/10 p-6">
-            <YearlyGrid entries={yearEntries} year={yearNum} onSelectDate={(d) => setYearlyPreviewDate(d)} />
+            <YearlyGrid entries={yearEntries} year={yearNum} selectedDateStr={yearlyPreviewStr} onSelectDate={(d, ds) => { setYearlyPreviewDate(d); setYearlyPreviewStr(ds); }} />
           </div>
           <div className="bg-card rounded-xl border border-white/10 p-6 hidden lg:flex flex-col min-w-[400px]" data-testid="yearly-preview-panel">
             {yearlyPreviewDate && yearlyPreviewEntry ? (
