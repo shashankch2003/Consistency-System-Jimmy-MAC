@@ -4,6 +4,7 @@ import {
   yearlyGoals, monthlyOverviewGoals, monthlyDynamicGoals,
   tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, payments, taskBankItems, dailyReasons, notes,
   userLevels, groupMessages, adminInbox, monthlyEvaluations,
+  journalEntries, customDayTypes, dayTypeUsage,
 } from "@shared/schema";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
 
@@ -22,6 +23,9 @@ type InsertDailyReason = typeof dailyReasons.$inferInsert;
 type InsertNote = typeof notes.$inferInsert;
 type InsertGroupMessage = typeof groupMessages.$inferInsert;
 type InsertAdminInbox = typeof adminInbox.$inferInsert;
+type InsertJournalEntry = typeof journalEntries.$inferInsert;
+type InsertCustomDayType = typeof customDayTypes.$inferInsert;
+type InsertDayTypeUsage = typeof dayTypeUsage.$inferInsert;
 
 export interface IStorage extends IAuthStorage {
   getYearlyGoals(userId: string, year?: number): Promise<(typeof yearlyGoals.$inferSelect)[]>;
@@ -89,6 +93,19 @@ export interface IStorage extends IAuthStorage {
   updateAdminInboxStatus(id: number, status: string): Promise<typeof adminInbox.$inferSelect>;
 
   getMonthlyEvaluations(userId: string): Promise<(typeof monthlyEvaluations.$inferSelect)[]>;
+
+  getJournalEntry(userId: string, date: string): Promise<(typeof journalEntries.$inferSelect) | undefined>;
+  getJournalEntriesByMonth(userId: string, yearMonth: string): Promise<(typeof journalEntries.$inferSelect)[]>;
+  getJournalEntriesByYear(userId: string, year: number): Promise<(typeof journalEntries.$inferSelect)[]>;
+  upsertJournalEntry(entry: InsertJournalEntry): Promise<typeof journalEntries.$inferSelect>;
+  deleteJournalEntry(id: number, userId: string): Promise<void>;
+
+  getCustomDayTypes(userId: string): Promise<(typeof customDayTypes.$inferSelect)[]>;
+  createCustomDayType(dt: InsertCustomDayType): Promise<typeof customDayTypes.$inferSelect>;
+  deleteCustomDayType(id: number, userId: string): Promise<void>;
+
+  getDayTypeUsage(userId: string): Promise<(typeof dayTypeUsage.$inferSelect)[]>;
+  incrementDayTypeUsage(userId: string, dayTypeName: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -341,6 +358,59 @@ export class DatabaseStorage implements IStorage {
 
   async getMonthlyEvaluations(userId: string) {
     return await db.select().from(monthlyEvaluations).where(eq(monthlyEvaluations.userId, userId)).orderBy(desc(monthlyEvaluations.month));
+  }
+
+  async getJournalEntry(userId: string, date: string) {
+    const [entry] = await db.select().from(journalEntries).where(and(eq(journalEntries.userId, userId), eq(journalEntries.date, date)));
+    return entry;
+  }
+  async getJournalEntriesByMonth(userId: string, yearMonth: string) {
+    return await db.select().from(journalEntries).where(and(eq(journalEntries.userId, userId), like(journalEntries.date, `${yearMonth}%`))).orderBy(asc(journalEntries.date));
+  }
+  async getJournalEntriesByYear(userId: string, year: number) {
+    return await db.select().from(journalEntries).where(and(eq(journalEntries.userId, userId), like(journalEntries.date, `${year}-%`))).orderBy(asc(journalEntries.date));
+  }
+  async upsertJournalEntry(entry: InsertJournalEntry) {
+    const existing = await db.select().from(journalEntries).where(and(eq(journalEntries.userId, entry.userId), eq(journalEntries.date, entry.date)));
+    if (existing.length > 0) {
+      const updates: Record<string, any> = { updatedAt: new Date() };
+      if (entry.dayTypeId !== undefined) updates.dayTypeId = entry.dayTypeId;
+      if (entry.customDayName !== undefined) updates.customDayName = entry.customDayName;
+      if (entry.emoji !== undefined) updates.emoji = entry.emoji;
+      if (entry.journalText !== undefined) updates.journalText = entry.journalText;
+      if (entry.imageUrls !== undefined) updates.imageUrls = entry.imageUrls;
+      if (entry.extractedText !== undefined) updates.extractedText = entry.extractedText;
+      const [updated] = await db.update(journalEntries).set(updates).where(eq(journalEntries.id, existing[0].id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(journalEntries).values(entry).returning();
+    return created;
+  }
+  async deleteJournalEntry(id: number, userId: string) {
+    await db.delete(journalEntries).where(and(eq(journalEntries.id, id), eq(journalEntries.userId, userId)));
+  }
+
+  async getCustomDayTypes(userId: string) {
+    return await db.select().from(customDayTypes).where(eq(customDayTypes.userId, userId)).orderBy(asc(customDayTypes.id));
+  }
+  async createCustomDayType(dt: InsertCustomDayType) {
+    const [created] = await db.insert(customDayTypes).values(dt).returning();
+    return created;
+  }
+  async deleteCustomDayType(id: number, userId: string) {
+    await db.delete(customDayTypes).where(and(eq(customDayTypes.id, id), eq(customDayTypes.userId, userId)));
+  }
+
+  async getDayTypeUsage(userId: string) {
+    return await db.select().from(dayTypeUsage).where(eq(dayTypeUsage.userId, userId)).orderBy(desc(dayTypeUsage.usageCount));
+  }
+  async incrementDayTypeUsage(userId: string, dayTypeName: string) {
+    const existing = await db.select().from(dayTypeUsage).where(and(eq(dayTypeUsage.userId, userId), eq(dayTypeUsage.dayTypeName, dayTypeName)));
+    if (existing.length > 0) {
+      await db.update(dayTypeUsage).set({ usageCount: existing[0].usageCount + 1, lastUsed: new Date() }).where(eq(dayTypeUsage.id, existing[0].id));
+    } else {
+      await db.insert(dayTypeUsage).values({ userId, dayTypeName, usageCount: 1, lastUsed: new Date() });
+    }
   }
 }
 

@@ -607,6 +607,101 @@ export async function registerRoutes(
     res.json(levels);
   });
 
+  // ===== JOURNAL ROUTES =====
+  app.get("/api/journal", isAuthenticated, async (req: any, res) => {
+    try {
+      const { date, month, year } = req.query;
+      const userId = req.user.claims.sub;
+      if (date) {
+        const entry = await storage.getJournalEntry(userId, date as string);
+        return res.json(entry || null);
+      }
+      if (month) {
+        const entries = await storage.getJournalEntriesByMonth(userId, month as string);
+        return res.json(entries);
+      }
+      if (year) {
+        const entries = await storage.getJournalEntriesByYear(userId, parseInt(year as string));
+        return res.json(entries);
+      }
+      return res.status(400).json({ message: "Provide date, month (YYYY-MM), or year" });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/journal", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { date, dayTypeName, customDayName, emoji, journalText, imageUrls, extractedText } = req.body;
+      if (!date) return res.status(400).json({ message: "Date is required" });
+      const entry = await storage.upsertJournalEntry({
+        userId,
+        date,
+        customDayName: customDayName || null,
+        emoji: emoji || null,
+        journalText: journalText || "",
+        imageUrls: imageUrls || [],
+        extractedText: extractedText || null,
+      });
+      if (dayTypeName || customDayName) {
+        await storage.incrementDayTypeUsage(userId, dayTypeName || customDayName);
+      }
+      res.json(entry);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/journal/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteJournalEntry(parseInt(req.params.id), req.user.claims.sub);
+      res.status(204).send();
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Day types (predefined + custom + usage sorting)
+  app.get("/api/day-types", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [customTypes, usageData] = await Promise.all([
+        storage.getCustomDayTypes(userId),
+        storage.getDayTypeUsage(userId),
+      ]);
+      const { DEFAULT_DAY_TYPES } = await import("@shared/schema");
+      const usageMap = new Map(usageData.map(u => [u.dayTypeName, u.usageCount]));
+      const allTypes = [
+        ...DEFAULT_DAY_TYPES.map(dt => ({ ...dt, isCustom: false, usageCount: usageMap.get(dt.name) || 0 })),
+        ...customTypes.map(dt => ({ name: dt.name, emoji: dt.emoji, category: "Custom", isCustom: true, id: dt.id, usageCount: usageMap.get(dt.name) || 0 })),
+      ];
+      allTypes.sort((a, b) => b.usageCount - a.usageCount);
+      res.json(allTypes);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/day-types/custom", isAuthenticated, async (req: any, res) => {
+    try {
+      const { name, emoji } = req.body;
+      if (!name) return res.status(400).json({ message: "Name is required" });
+      const dt = await storage.createCustomDayType({ userId: req.user.claims.sub, name, emoji: emoji || "📝" });
+      res.status(201).json(dt);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/day-types/custom/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteCustomDayType(parseInt(req.params.id), req.user.claims.sub);
+      res.status(204).send();
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // OCR: extract text from image
+  app.post("/api/ocr", isAuthenticated, upload.single("image"), async (req: any, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No image provided" });
+      const Tesseract = await import("tesseract.js");
+      const result = await Tesseract.recognize(req.file.path, "eng");
+      const text = result.data.text.trim();
+      res.json({ text, imageUrl: `/uploads/${req.file.filename}` });
+    } catch (e: any) { res.status(500).json({ message: "OCR failed: " + e.message }); }
+  });
+
   // Image upload
   app.use("/uploads", (await import("express")).default.static(uploadDir));
   app.post("/api/upload-image", isAuthenticated, (req: any, res, next) => {
