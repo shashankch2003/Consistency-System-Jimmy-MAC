@@ -11,6 +11,14 @@ process.on("unhandledRejection", (reason) => {
   console.error("Unhandled Rejection:", reason);
 });
 
+process.on("SIGTERM", () => {
+  console.log("Received SIGTERM — ignoring to stay alive");
+});
+
+process.on("SIGHUP", () => {
+  console.log("Received SIGHUP — ignoring to stay alive");
+});
+
 const app = express();
 const httpServer = createServer(app);
 
@@ -83,12 +91,18 @@ app.use((req, res, next) => {
     return res.status(status).json({ message });
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
+    const originalExit = process.exit;
+    process.exit = ((code?: number) => {
+      if (code === 1) {
+        console.error("Vite error caught — server staying alive");
+        return undefined as never;
+      }
+      return originalExit(code);
+    }) as typeof process.exit;
+
     const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);
   }
