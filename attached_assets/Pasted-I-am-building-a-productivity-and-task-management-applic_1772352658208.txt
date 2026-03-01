@@ -1,0 +1,84 @@
+I am building a productivity and task management application. I want to add an AI-powered feature that automatically converts meeting conversations into summaries and actionable tasks.
+
+Please evaluate whether you can generate a template or implementation for the following feature.
+
+FEATURE OVERVIEW
+The system should work like an intelligent meeting assistant that listens to meetings, understands the discussion, and automatically creates structured outputs.
+
+CORE CAPABILITIES
+
+1. Meeting Audio Capture
+   The system should be able to capture audio from meetings. Meetings may happen in tools such as Zoom, Google Meet, Microsoft Teams, or via a browser microphone.
+
+2. Speech-to-Text Transcription
+   The meeting audio should be converted into text in real time or near real time using a speech recognition system.
+
+3. AI Meeting Understanding
+   An AI model should analyze the meeting transcript and identify:
+
+* Key discussion points
+* Decisions made
+* Important context
+
+4. Automatic Meeting Summary
+   After the meeting ends, the AI should generate a structured summary including:
+
+* Key topics discussed
+* Main decisions
+* Important notes
+
+5. Automatic Task Detection
+   The AI must detect action items mentioned during the meeting and convert them into tasks automatically.
+
+Examples:
+If someone says:
+"Complete the video editing by tomorrow morning"
+
+The system should create a task:
+Task: Complete video editing
+Deadline: Tomorrow morning
+
+If someone says:
+"Let's hire a designer this week"
+
+The system should create:
+Task: Hire a designer
+Deadline: This week
+
+6. Task Creation in the App
+   Detected tasks should automatically appear inside the task management system without users needing to manually enter them.
+
+Each task should include:
+
+* Task title
+* Description (if available)
+* Deadline (if mentioned)
+* Assigned person (if mentioned)
+* Source meeting reference
+
+7. Meeting Notes + Tasks Dashboard
+   After the meeting, users should see:
+
+* Meeting summary
+* Full transcript
+* Extracted tasks
+* Key decisions
+
+8. Real-Time or Post-Meeting Processing
+   The system can either:
+
+* Detect tasks in real time during the meeting
+  or
+* Process the transcript immediately after the meeting.
+
+TECHNICAL EXPECTATIONS
+
+Please suggest:
+
+* Architecture for this feature
+* APIs or tools required (speech-to-text, LLM, etc.)
+* Database schema for storing transcripts, summaries, and tasks
+* How the system detects action items from conversation
+* Whether browser extension or meeting integration is required
+
+Also suggest a simple MVP implementation that can be integrated into a productivity app.
