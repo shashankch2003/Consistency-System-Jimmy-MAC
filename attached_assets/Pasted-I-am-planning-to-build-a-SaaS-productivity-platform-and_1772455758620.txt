@@ -1,0 +1,186 @@
+I am planning to build a SaaS productivity platform and I want you to analyze and estimate the system before generating any code.
+
+Do NOT immediately generate the full application.
+First answer the following questions in detail.
+
+Part 1 — Credit Usage Estimation
+
+Estimate approximately how many Replit AI credits will be required to build the following product features.
+
+Break the estimate by feature module.
+
+Modules:
+
+Team messaging system similar to Slack
+
+channels
+
+direct messages
+
+file sharing
+
+notifications
+
+Video meeting system similar to Zoom
+
+real-time video calls
+
+screen sharing
+
+meeting rooms
+
+recording
+
+Video recording and sharing system similar to Loom
+
+screen recording
+
+camera recording
+
+instant video sharing link
+
+video storage
+
+Project management system similar to Asana
+
+projects
+
+boards
+
+task lists
+
+assignees
+
+due dates
+
+comments
+
+activity tracking
+
+Task management system
+
+personal tasks
+
+team tasks
+
+task priority
+
+deadlines
+
+reminders
+
+Work analytics dashboard
+
+employee productivity data
+
+project progress tracking
+
+task completion reports
+
+AI productivity assistant features similar to Motion AI
+
+automatic task scheduling
+
+meeting summarization
+
+task prioritization suggestions
+
+For each module estimate:
+
+• Development complexity
+• Approximate AI credits required
+• Recommended development order
+
+Part 2 — Monthly Infrastructure Cost Estimation
+
+Estimate the monthly running cost of this SaaS platform based on number of users.
+
+Assume the following tech stack if possible:
+
+Backend:
+Node.js
+
+Database:
+PostgreSQL
+
+Real-time communication:
+WebSockets
+
+Video:
+WebRTC
+
+Cloud hosting:
+AWS / Google Cloud / similar
+
+Video storage:
+Cloud object storage (S3-like)
+
+Provide monthly cost estimates for the following team sizes:
+
+10 users
+100 users
+500 users
+1,000 users
+2,500 users
+5,000 users
+7,500 users
+10,000 users
+
+Include cost breakdown for:
+
+• servers
+• database
+• video bandwidth
+• storage
+• messaging infrastructure
+• AI API usage
+
+Also suggest ways to minimize infrastructure cost in the early stage.
+
+Part 3 — Credit Optimization Strategy
+
+Explain how to reduce Replit AI credit usage while building this app.
+
+Provide specific strategies such as:
+
+• building feature-by-feature instead of full system generation
+• writing architecture first
+• using reusable components
+• avoiding large prompt generations
+• limiting AI code rewriting
+
+Also suggest the most efficient workflow to build this product with minimal AI credits.
+
+Part 4 — Suggested Technical Architecture
+
+Before writing any code, design a scalable architecture for this product.
+
+Include:
+
+• frontend framework
+• backend framework
+• database structure
+• real-time messaging architecture
+• video meeting infrastructure
+• video recording infrastructure
+• AI integration approach
+
+Make sure the architecture can scale from:
+
+10 users → 10,000 users.
+
+Important Instructions
+
+Do NOT generate the full app yet.
+
+Only provide:
+
+Credit usage estimation
+
+Infrastructure cost estimation
+
+Architecture design
+
+Credit optimization strategy
+
+After this analysis, we will build the product step-by-step.
