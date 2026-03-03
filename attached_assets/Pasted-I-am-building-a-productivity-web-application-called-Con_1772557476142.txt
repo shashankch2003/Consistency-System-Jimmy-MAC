@@ -1,0 +1,130 @@
+I am building a productivity web application called **Consistency System**. I want to add a new feature called **AI Template Marketplace**.
+
+The goal of this feature is to allow creators to generate productivity templates using AI and sell them to other users.
+
+Please build the following system:
+
+1. **AI Template Builder**
+   Create a chat interface where creators can describe the template they want using natural language.
+
+Example prompts:
+
+* "Create a 90-day fitness consistency tracker."
+* "Create a startup goal tracking system with weekly metrics."
+* "Create a student study planner with daily tasks and progress tracking."
+
+The AI should generate a structured template based on the request.
+
+Templates may include:
+
+* goal trackers
+* daily task systems
+* habit trackers
+* progress dashboards
+* productivity workflows
+
+The generated template should automatically create the required structure (tasks, sections, progress indicators, etc.) inside the app.
+
+Creators must be able to:
+
+* edit the generated template
+* add new sections
+* rename elements
+* adjust goals or tasks
+
+2. **Template Saving System**
+
+After editing, creators should be able to click **Save as Template**.
+
+When saving, they must provide:
+
+* template name
+* description
+* category
+* tags
+* price (or free)
+* preview image
+
+The template should be stored in a **Template Database**.
+
+3. **Template Marketplace**
+
+Create a marketplace page where users can discover templates.
+
+Features required:
+
+* search bar
+* category filters
+* popularity sorting
+* newest templates
+* featured templates
+
+Each template card should show:
+
+* template name
+* creator name
+* rating
+* number of downloads
+* price
+* preview image
+
+4. **Template Installation**
+
+When a user clicks **Use Template**, the template should duplicate into their workspace.
+
+Users should be able to customize the template after installing.
+
+5. **Creator Earnings System**
+
+Creators should be able to sell templates.
+
+Requirements:
+
+* creators set their own price
+* users purchase templates
+* creators receive earnings
+* include creator dashboard showing:
+
+  * total sales
+  * downloads
+  * revenue
+
+6. **Creator Dashboard**
+
+Creators should have a dashboard to:
+
+* create templates
+* edit templates
+* track downloads
+* track earnings
+* manage published templates
+
+7. **Community Growth Features**
+
+Add social features to encourage sharing:
+
+* creator profile pages
+* template ratings
+* template reviews
+* share template link
+
+8. **Search with AI**
+
+Users should also be able to type what they want in a search bar.
+
+Example:
+"I want a system to track my business growth and daily habits."
+
+The AI should recommend relevant templates.
+
+Technical requirements:
+
+* clean modern UI
+* responsive design
+* scalable template database
+* modular template system
+* support thousands of templates
+
+The template system should be designed so it can support many template types in the future.
+
+Please build this feature in a structured and scalable way.
