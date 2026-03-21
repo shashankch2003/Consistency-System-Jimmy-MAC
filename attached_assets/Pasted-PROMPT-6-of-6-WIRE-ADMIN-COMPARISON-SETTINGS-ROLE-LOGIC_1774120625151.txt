@@ -1,0 +1,92 @@
+PROMPT 6 of 6 — WIRE ADMIN + COMPARISON + SETTINGS + ROLE LOGIC
+CONTEXT
+My app has Teams Intelligence with all backend + Employee/Manager dashboards wired to real data. This final prompt wires Admin Dashboard, creates comparison drawer, settings pages, role-based tab visibility, and seed demo data button.
+Reminder of codebase facts:
+
+Valid roles: owner, admin, member (no "manager" role)
+Use admin wherever the original said "manager"
+workspaceId is always "default"
+Route pattern is /dashboard/...
+
+TASK
+Update AdminDashboard, create ComparisonDrawer, create settings page, add role-based access, add seed button.
+ADMIN DASHBOARD UPDATE
+(client/src/components/team-intelligence/AdminDashboard.tsx)
+Accept prop: { workspaceId?: string } (default to "default")
+API calls:
+
+GET /api/team-intelligence/admin-dashboard?workspaceId=default
+GET /api/team-intelligence/alerts?workspaceId=default
+
+Replace all hardcoded data:
+
+Org Overview: MetricCards from query (orgScore+orgTrend, totalEmployees, totalTasksCompleted, deadlineAdherenceRate, avgFocusMinutes converted to hours)
+Teams Table: Map data.teams. Columns: Team/Manager/Members/Score/Velocity/Overdue%/Health(Badge). Clickable rows (highlight on click). Client-side sorting by column headers via React state.
+Workforce Trend: Recharts LineChart if per-date data available, else simplified score+arrow view. Dark theme.
+Risk Distribution: data.riskDistribution counts in 3 colored-border cards.
+AI Executive Brief: Most recent insight with roleContext='admin'. Fallback: 'Executive insights will appear as organization data accumulates.'
+
+Loading: Skeleton. Empty: 'No organization data available. Seed demo data from settings to preview.'
+COMPARISON DRAWER (NEW FILE)
+Create: client/src/components/team-intelligence/shared/ComparisonDrawer.tsx
+Props: { workspaceId?: string; userId?: string; isOpen: boolean; onClose: ()=>void }
+Shadcn Sheet (right, large width):
+
+Two date range inputs (Period A, Period B). Each has quick select dropdown: Today/Yesterday/This Week/Last Week/This Month/Last Month + custom date range with date pickers. Default: A=Last Week, B=This Week.
+Metric checkboxes: Productivity Score (checked), Focus Score (checked), Tasks Completed (checked), Overdue Tasks, Deep Work Time, Consistency Score
+'Compare' button → calls GET /api/team-intelligence/compare with selected periods+metrics
+Results table: Metric/Period A/Period B/Change. Change=delta % with colored arrow (green=improvement, red=decline). Overdue: invert color (fewer=green).
+Loading state. Error if no data: 'No data available for the selected period'
+
+Wire into EmployeeDashboard: add isComparisonOpen state. Section F 'Compare' button opens drawer. Pass workspaceId + current userId. (Do NOT change EmployeeDashboard layout — only add this state + drawer hook.)
+SETTINGS PAGE (NEW FILE)
+Create a settings page/route component following existing routing patterns. Route path: /dashboard/team-intelligence/settings (matching the existing /dashboard/... URL convention).
+Title: 'Team Intelligence Settings'. Back button/breadcrumb to main dashboard. Shadcn Tabs: 'AI Preferences' + 'Organization Settings' (org tab admin/owner only).
+AI Preferences Tab:
+
+Populate from GET /api/team-intelligence/ai-settings?workspaceId=default
+Fields (Shadcn Switch/Select/Input): Enable AI Insights (switch), Morning Brief (switch), Morning Brief Time (HH:MM input), Insight Categories (checkbox group: Achievement/Warning/Suggestion/Pattern/Coaching), Frequency (select: Realtime/Daily/Weekly), Intensity (select: Minimal/Moderate/Comprehensive), Notification Channel (select: In-app/Email/Both/None), Weekend Insights (switch), Tone (select: Encouraging/Neutral/Direct)
+Admin-only extras (check user role): Team Weekly Brief (switch), Brief Day (select Mon-Fri), Risk Alerts (select: Realtime/Daily Digest/Off), Coaching Suggestions (switch)
+Save → PUT /api/team-intelligence/ai-settings → toast 'Settings saved'
+
+Organization Settings Tab (admin/owner only):
+
+Populate from GET /api/team-intelligence/org-settings?workspaceId=default
+Fields: Manager sees individual focus (switch), Manager sees idle time (switch), Manager sees app usage (select: None/Category Level/Detailed), Manager sees screen time (switch), Min days for scoring (number), New employee ramp days (number), Standard work start (time), Standard work end (time), Work days (checkbox Mon-Sun)
+Save → PUT /api/team-intelligence/org-settings → toast 'Settings saved'
+Seed Demo Data section at bottom: Description card: 'Generate 30 days of sample productivity data for all users.' Button (destructive variant) → POST /api/team-intelligence/seed-demo-data with body {workspaceId: "default"} → loading spinner → toast 'Demo data seeded for X users'
+
+ROLE-BASED TAB VISIBILITY
+Update the main team-intelligence page component (at /dashboard/team-intelligence):
+
+Get current user using existing auth hooks/context (inspect how other pages do this)
+Query the user's role from the users table via an API call or existing auth context (the role is NOT in the session token — check how other pages access role)
+member role: show only 'My Dashboard' tab
+admin role: show 'My Dashboard' + 'Team Dashboard'
+owner role: show all 3 tabs
+Pass workspaceId ("default") to each dashboard component
+Add Settings icon button (Cog from lucide-react) top-right → navigates to settings page
+
+BOUNDARIES
+
+Do NOT modify REST API routes or Drizzle schema
+Do NOT modify EmployeeDashboard/ManagerDashboard layout (only add comparison drawer hook to Employee)
+Do NOT add features beyond what is specified
+This is the FINAL prompt — MVP is complete after this
+
+
+POST-BUILD CHECKLIST
+
+Database: All 6 tables exist (check with Drizzle Studio or psql)
+Sidebar: 'Team Intelligence' appears + navigates correctly to /dashboard/team-intelligence
+Main Page: Loads, shows tabs, no errors
+Seed Data: Admin clicks 'Seed Demo Data' → completes
+Employee Dashboard: Scores, metrics, charts, insights with seeded data
+Manager Dashboard: Team grid, alerts, workload bars with seeded data
+Admin Dashboard: Org overview, team table, risk distribution with seeded data
+Comparison: Drawer opens, date selection works, compare returns results
+AI Insights: Display, mark read works, dismiss works
+Settings: AI prefs save, org settings save
+Role Access: member=1 tab, admin=2 tabs, owner=3 tabs
+Charts: Recharts render with dark theme
+**No console errors

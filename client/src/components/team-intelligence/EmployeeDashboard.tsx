@@ -11,6 +11,8 @@ import { PieChart, Pie, Cell, Tooltip as ReTooltip, ResponsiveContainer, BarChar
 import ScoreCircle from "./shared/ScoreCircle";
 import MetricCard from "./shared/MetricCard";
 import InsightCard from "./shared/InsightCard";
+import ComparisonDrawer from "./shared/ComparisonDrawer";
+import { useAuth } from "@/hooks/use-auth";
 import type { EmployeeDashboardData, DailySnapshotData } from "@shared/lib/team-intelligence/types";
 
 function formatDate(dateStr: string) {
@@ -26,6 +28,8 @@ function formatDay(dateStr: string) {
 export default function EmployeeDashboard({ workspaceId = "default" }: { workspaceId?: string }) {
   const [briefOpen, setBriefOpen] = useState(true);
   const [briefDismissed, setBriefDismissed] = useState(false);
+  const [isComparisonOpen, setIsComparisonOpen] = useState(false);
+  const { user } = useAuth();
 
   const now = new Date();
   const from = new Date(now);
@@ -359,6 +363,7 @@ export default function EmployeeDashboard({ workspaceId = "default" }: { workspa
             <Button
               size="sm"
               className="bg-blue-600 hover:bg-blue-500 text-white whitespace-nowrap"
+              onClick={() => setIsComparisonOpen(true)}
               data-testid="button-compare-periods"
             >
               Compare
@@ -397,6 +402,13 @@ export default function EmployeeDashboard({ workspaceId = "default" }: { workspa
           </Card>
         )}
       </div>
+
+      <ComparisonDrawer
+        workspaceId={workspaceId}
+        userId={user?.id}
+        isOpen={isComparisonOpen}
+        onClose={() => setIsComparisonOpen(false)}
+      />
     </div>
   );
 }
