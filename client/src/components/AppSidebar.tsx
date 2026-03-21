@@ -33,7 +33,8 @@ import {
   Settings,
   Wallet,
   PlayCircle,
-  HeartHandshake
+  HeartHandshake,
+  BarChart3
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -51,6 +52,7 @@ const menuItems = [
   { title: "Money", icon: Wallet, url: "/dashboard/money" },
   { title: "Know More", icon: PlayCircle, url: "/dashboard/know-more" },
   { title: "Grow Together", icon: HeartHandshake, url: "/dashboard/grow-together" },
+  { title: "Team Intelligence", icon: BarChart3, url: "/dashboard/team-intelligence" },
   { title: "Community", icon: Users, url: "/dashboard/community" },
   { title: "Settings", icon: Settings, url: "/dashboard/settings" },
 ];

@@ -1,0 +1,51 @@
+PROMPT 4 of 6 — MANAGER + ADMIN DASHBOARDS + PAGE + SIDEBAR
+CONTEXT
+My app uses React with TypeScript, Tailwind CSS, Shadcn/UI, dark theme/sidebar. I have shared components at client/src/components/team-intelligence/shared/ and EmployeeDashboard shell. Inspect existing sidebar component and page routing patterns (likely using wouter or react-router — check existing code).
+TASK
+Create Manager Dashboard shell, Admin Dashboard shell, main page with tabs, and sidebar nav item. All hardcoded data, no API calls.
+MANAGER DASHBOARD
+Create file: client/src/components/team-intelligence/ManagerDashboard.tsx — default export.
+Section A — Team Overview Row: 5 MetricCards: 'Team Score' value='68' trend='up' delta='+3' | 'Members' value='8' | 'Tasks Completed' value='47' subtitle='this week' | 'Overdue' value='6' trend='down' (red) | 'Team Health' Badge 'Needs Attention' (yellow)
+Section B — Team Member Grid: 2-col desktop, 1-col mobile. 6 hardcoded member cards (Shadcn Card + hover), each: avatar initials (colored bg), name, role, ScoreCircle(size='sm'), tasks completed, overdue (red if>0), status Badge.
+
+Alex Chen: 82, 12 tasks, 0 overdue, On Track
+Maria Garcia: 71, 9 tasks, 1 overdue, On Track
+James Wilson: 58, 6 tasks, 3 overdue, Needs Attention
+Sarah Kim: 45, 4 tasks, 4 overdue, At Risk
+David Park: 76, 10 tasks, 0 overdue, On Track
+Lisa Johnson: 63, 7 tasks, 2 overdue, Needs Attention
+
+Section C — Active Alerts: 3 hardcoded alerts: Critical (red, AlertTriangle): 'Sarah Kim has 4 overdue tasks...' + Acknowledge/Snooze; Warning (yellow, TrendingDown): 'James Wilson productivity declining...' + Acknowledge/Snooze; Info (blue, Award): 'Alex Chen achieved personal best...' + Acknowledge
+Section D — Workload Balance: 6 horizontal bars per member. Alex:85%(green), Maria:70%(green), James:110%(red), Sarah:120%(red), David:60%(green), Lisa:95%(yellow). Name left, percentage right.
+Section E — Team Trend Placeholder: Dashed border div, 250px, 'Chart loading...'
+Section F — AI Team Brief: Card with hardcoded team summary text, including strong performers, risk items, and redistribution suggestions with checkmark/warning/lightbulb indicators.
+ADMIN DASHBOARD
+Create file: client/src/components/team-intelligence/AdminDashboard.tsx — default export.
+Section A — Org Overview Row: 5 MetricCards: 'Org Score' value='67' trend='up' delta='+2' | 'Total Employees' value='45' | 'Tasks Completed' value='312' subtitle='this week' | 'Deadline Adherence' value='82%' | 'Avg Focus Time' value='3.2h' subtitle='per day'
+Section B — Teams Overview Table: Shadcn Table, columns: Team/Manager/Members/Score/Velocity/Overdue%/Health. 4 rows: Engineering(72, On Track), Design(65, Needs Attention), Marketing(58, At Risk), Sales(70, On Track). Hover effect on rows.
+Section C — Workforce Trends Placeholder: Dashed border div, 250px, 'Chart loading...'
+Section D — Risk Distribution: 3 cards: 'On Track' 32 (green left border) | 'Needs Attention' 9 (yellow) | 'At Risk' 4 (red)
+Section E — AI Executive Brief: Card with hardcoded org-level summary including team strength assessment and meeting load recommendation.
+MAIN PAGE
+Create the page/route component following existing routing patterns (inspect whether app uses wouter, react-router, or Tanstack Router). Route path: /dashboard/team-intelligence (matching the existing /dashboard/... URL pattern used by this app).
+
+Import all 3 dashboards
+Shadcn Tabs: 'My Dashboard', 'Team Dashboard', 'Organization' — all 3 visible for now (role logic added in Prompt 6)
+Default tab: 'My Dashboard'
+Page title: 'Team Intelligence' (text-2xl font-bold)
+Wrap in existing page layout pattern
+
+SIDEBAR NAV
+
+Inspect existing sidebar component
+Add item: Label 'Team Intelligence', Icon BarChart3 from lucide-react, Route to /dashboard/team-intelligence
+Place near analytics items. Match exact existing styling/hover/active states.
+Only ADD — do NOT change existing sidebar items
+
+BOUNDARIES
+
+Do NOT make any API calls
+Do NOT add role-based logic yet
+Do NOT install new packages
+Do NOT modify any existing page files
+VISUAL SHELLS only

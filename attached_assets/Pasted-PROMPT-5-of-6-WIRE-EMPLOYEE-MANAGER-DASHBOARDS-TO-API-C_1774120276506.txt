@@ -1,0 +1,61 @@
+PROMPT 5 of 6 — WIRE EMPLOYEE + MANAGER DASHBOARDS TO API + CHARTS
+CONTEXT
+My app has Teams Intelligence with complete REST API routes, shared UI components, and shell dashboards. This prompt wires Employee and Manager dashboards to real data and adds Recharts charts. Check if recharts is installed in package.json. If not installed: use the Replit package manager tool to install recharts (do NOT run npm install directly).
+TASK
+Update EmployeeDashboard.tsx and ManagerDashboard.tsx to use real API data. Create EmployeeDetailPanel. Replace placeholder charts with Recharts.
+Note: Since this app has no workspace system, use "default" as the workspaceId value in all API calls.
+EMPLOYEE DASHBOARD UPDATE
+(client/src/components/team-intelligence/EmployeeDashboard.tsx)
+Accept prop: { workspaceId?: string } (default to "default")
+API calls using the app's existing data fetching pattern (inspect codebase — likely useQuery with fetch, or a custom hook wrapping fetch). Call these endpoints:
+
+GET /api/team-intelligence/my-dashboard?workspaceId=default&from=...&to=... (last 14 days)
+GET /api/team-intelligence/insights?workspaceId=default&limit=10&unreadOnly=false
+GET /api/team-intelligence/alerts?workspaceId=default
+
+Replace all hardcoded data:
+
+Morning Brief: Use most recent insight with category 'suggestion'/'pattern'. If none: 'Complete some tasks and focus sessions to start receiving personalized insights.' Dismiss button calls PATCH /api/team-intelligence/insights/:id/dismiss.
+Score Overview: ScoreCircle from currentScores.total + trend. MetricCards from todaySnapshot. Streak from streak field.
+Time Distribution: Replace with Recharts PieChart (donut): [{name:'Deep Work', value:deepWorkMinutes, fill:'#3B82F6'}, {name:'Shallow Work', value:shallowWorkMinutes, fill:'#6B7280'}, {name:'Meetings', value:meetingTimeMinutes, fill:'#8B5CF6'}, {name:'Other', value:remainder, fill:'#22C55E'}]. innerRadius=60, outerRadius=90. Tooltip + custom legend.
+Task Performance: Real data from recentSnapshots (last 7 days). Table + Recharts BarChart (X:dates, bars: Completed green + Assigned gray, ResponsiveContainer).
+Trend Chart: Recharts LineChart from recentSnapshots (14 days). X:formatted dates, Y:0-100, blue line, Tooltip, ResponsiveContainer height=250px.
+AI Insights Feed: Real insights from GET insights. Wire InsightCard: onMarkRead → PATCH .../read, onDismiss → PATCH .../dismiss. Invalidate/refetch queries after mutations.
+
+Loading state: Shadcn Skeleton placeholders per section. Empty state: 'No productivity data yet. Complete tasks, run focus sessions, and check back. You can also ask an admin to seed demo data.'
+All Recharts: dark theme (transparent bg, gray-400 labels, gray-700 grid). Wrap in ResponsiveContainer.
+MANAGER DASHBOARD UPDATE
+(client/src/components/team-intelligence/ManagerDashboard.tsx)
+Accept prop: { workspaceId?: string } (default to "default")
+API calls:
+
+GET /api/team-intelligence/team-dashboard?workspaceId=default
+GET /api/team-intelligence/alerts?workspaceId=default
+
+State: selectedEmployeeId (string|null)
+Replace all hardcoded data:
+
+Team Overview: MetricCards from query (teamScore, memberCount, totalTasksCompleted, totalOverdue, teamHealth)
+Team Member Grid: Map data.members → cards with name, avatar initials, ScoreCircle(sm), tasks, overdue, risk badge. onClick → set selectedEmployeeId.
+Alerts: Map alerts. Wire Acknowledge → PATCH .../acknowledge, Snooze → PATCH .../snooze (body: {snoozeUntil: 24h from now}). Invalidate/refetch after mutation.
+Workload Balance: Calc per member: (tasksAssigned/avg across team)*100. Bars colored: <80% green, 80-100% yellow, >100% red.
+Team Trend: Recharts LineChart showing team avg score over 14 days. Dark theme styling.
+AI Manager Brief: Most recent insight with roleContext='admin' (note: we use 'admin' instead of 'manager' since that role doesn't exist). Fallback: 'Team insights will appear here as productivity data accumulates.'
+
+When selectedEmployeeId is set → open EmployeeDetailPanel.
+Loading: Skeleton placeholders. Empty: 'No team data available. Assign team members and seed demo data from settings.'
+EMPLOYEE DETAIL PANEL (NEW FILE)
+Create: client/src/components/team-intelligence/shared/EmployeeDetailPanel.tsx
+Props: { workspaceId?: string; employeeUserId: string; isOpen: boolean; onClose: ()=>void }
+
+Shadcn Sheet (slide-out from right)
+Call GET /api/team-intelligence/employee/:employeeUserId?workspaceId=default
+Display: name, ScoreCircle, key metrics (focus time, tasks completed, overdue, streak), mini trend line (last 7 days via Recharts), recent insights
+Close button + overlay click to close
+
+BOUNDARIES
+
+Do NOT modify REST API routes
+Do NOT modify shared components (ScoreCircle, MetricCard, InsightCard)
+Do NOT modify main page or sidebar
+Only modify EmployeeDashboard.tsx, ManagerDashboard.tsx, and create EmployeeDetailPanel.tsx

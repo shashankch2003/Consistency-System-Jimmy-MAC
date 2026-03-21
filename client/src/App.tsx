@@ -22,6 +22,7 @@ import SettingsPage from "@/pages/dashboard/settings";
 import MoneyTrackingPage from "@/pages/dashboard/money-tracking";
 import KnowMorePage from "@/pages/dashboard/know-more";
 import GrowTogetherPage from "@/pages/dashboard/grow-together";
+import TeamIntelligencePage from "@/pages/dashboard/team-intelligence";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -113,6 +114,11 @@ function Router() {
       <Route path="/dashboard/admin">
         <DashboardLayout>
           <AdminPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/team-intelligence">
+        <DashboardLayout>
+          <TeamIntelligencePage />
         </DashboardLayout>
       </Route>
 
