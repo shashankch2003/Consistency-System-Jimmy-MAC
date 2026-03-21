@@ -2078,5 +2078,555 @@ export async function registerRoutes(
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  // ==================== TEAM INTELLIGENCE ROUTES ====================
+
+  const tiDefaultFrom = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 14);
+    return d.toISOString().split('T')[0];
+  };
+  const tiDefaultTo = () => new Date().toISOString().split('T')[0];
+  const tiIsAdminOrOwner = (req: any): boolean => isAdmin(req);
+
+  // 1. GET /api/team-intelligence/my-dashboard
+  app.get("/api/team-intelligence/my-dashboard", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const workspaceId = (req.query.workspaceId as string) || "default";
+      const from = (req.query.from as string) || tiDefaultFrom();
+      const to = (req.query.to as string) || tiDefaultTo();
+
+      const snapshots = await storage.getTeamSnapshots(userId, workspaceId, from, to);
+      const todayStr = new Date().toISOString().split('T')[0];
+      const todaySnapshot = snapshots.find(s => s.date === todayStr) || null;
+
+      const snapshotData = snapshots.map(s => ({
+        date: s.date,
+        activeTimeMinutes: s.activeTimeMinutes,
+        deepWorkMinutes: s.deepWorkMinutes,
+        shallowWorkMinutes: s.shallowWorkMinutes,
+        meetingTimeMinutes: s.meetingTimeMinutes,
+        focusSessionMinutes: s.focusSessionMinutes,
+        tasksAssigned: s.tasksAssigned,
+        tasksCompleted: s.tasksCompleted,
+        tasksOverdue: s.tasksOverdue,
+        tasksInProgress: s.tasksInProgress,
+        contextSwitches: s.contextSwitches,
+        avgFocusSession: s.avgFocusSession,
+        longestFocusSession: s.longestFocusSession,
+        productivityScore: Number(s.productivityScore),
+        focusScore: Number(s.focusScore),
+        consistencyScore: Number(s.consistencyScore),
+        executionScore: Number(s.executionScore),
+        collaborationScore: Number(s.collaborationScore),
+      }));
+
+      const { calculateStreak } = await import("./lib/team-intelligence/rules-engine");
+      const { detectPatterns } = await import("./lib/team-intelligence/rules-engine");
+      const streak = calculateStreak(snapshotData);
+      const patterns = detectPatterns(snapshotData);
+
+      const { items: insights } = await storage.getTeamInsights(userId, workspaceId, { limit: 10, offset: 0, unreadOnly: false });
+      const alerts = await storage.getTeamAlerts(workspaceId, { userId, visibleToRoles: ['employee'] });
+
+      const latest = snapshotData[0];
+      const currentScores = latest ? {
+        taskCompletion: latest.productivityScore,
+        focus: latest.focusScore,
+        deadlineAdherence: latest.tasksAssigned > 0 ? Math.round(((latest.tasksAssigned - latest.tasksOverdue) / latest.tasksAssigned) * 100) : 100,
+        consistency: latest.consistencyScore,
+        execution: latest.executionScore,
+        collaboration: latest.collaborationScore,
+        total: latest.productivityScore,
+      } : { taskCompletion: 0, focus: 0, deadlineAdherence: 0, consistency: 0, execution: 0, collaboration: 0, total: 0 };
+
+      res.json({
+        currentScores,
+        todaySnapshot: todaySnapshot ? snapshotData.find(s => s.date === todayStr) : null,
+        recentSnapshots: snapshotData,
+        streak,
+        insights: insights.map(i => ({ category: i.category, title: i.title, message: i.message, confidence: i.confidence })),
+        alerts,
+      });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // 2. GET /api/team-intelligence/team-dashboard
+  app.get("/api/team-intelligence/team-dashboard", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!tiIsAdminOrOwner(req)) return res.status(403).json({ message: "Admin access required" });
+      const userId = req.user.claims.sub;
+      const workspaceId = (req.query.workspaceId as string) || "default";
+      const from = (req.query.from as string) || tiDefaultFrom();
+      const to = (req.query.to as string) || tiDefaultTo();
+
+      const assignments = await storage.getManagerAssignments(workspaceId, userId);
+      const allUsers = await storage.getAllUsers();
+      const userMap = new Map(allUsers.map((u: any) => [u.id, u]));
+
+      const { getTrendDirection, getRiskLevel, calculateRiskScore } = await import("../shared/lib/team-intelligence/scoring");
+
+      const prevFrom = new Date(from);
+      prevFrom.setDate(prevFrom.getDate() - 14);
+      const prevTo = new Date(from);
+      prevTo.setDate(prevTo.getDate() - 1);
+
+      const members = [];
+      let totalTasksCompleted = 0;
+      let totalOverdue = 0;
+      let scoreSum = 0;
+
+      const employeeIds = assignments.length > 0
+        ? assignments.map(a => a.employeeUserId)
+        : allUsers.filter((u: any) => u.id !== userId).map((u: any) => u.id);
+
+      for (const empId of employeeIds) {
+        const snapshots = await storage.getTeamSnapshots(empId, workspaceId, from, to);
+        const prevSnapshots = await storage.getTeamSnapshots(empId, workspaceId, prevFrom.toISOString().split('T')[0], prevTo.toISOString().split('T')[0]);
+
+        const currentAvg = snapshots.length > 0
+          ? snapshots.reduce((s, d) => s + Number(d.productivityScore), 0) / snapshots.length : 0;
+        const prevAvg = prevSnapshots.length > 0
+          ? prevSnapshots.reduce((s, d) => s + Number(d.productivityScore), 0) / prevSnapshots.length : 0;
+
+        const user = userMap.get(empId);
+        const name = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : empId;
+        const avatar = user?.profileImageUrl || null;
+
+        const latestSnap = snapshots[0];
+        const completed = snapshots.reduce((s, d) => s + d.tasksCompleted, 0);
+        const overdue = latestSnap?.tasksOverdue || 0;
+
+        totalTasksCompleted += completed;
+        totalOverdue += overdue;
+        scoreSum += currentAvg;
+
+        const trendDir = getTrendDirection(currentAvg, prevAvg);
+        const riskScore = calculateRiskScore(overdue, currentAvg - prevAvg, 1, currentAvg);
+        const riskLevel = getRiskLevel(riskScore);
+
+        members.push({
+          userId: empId,
+          name,
+          avatar,
+          role: 'member',
+          productivityScore: Math.round(currentAvg),
+          trend: trendDir,
+          trendDelta: Math.round(currentAvg - prevAvg),
+          tasksCompleted: completed,
+          overdueCount: overdue,
+          focusTimeMinutes: snapshots.reduce((s, d) => s + d.deepWorkMinutes, 0),
+          riskLevel,
+          statusBadge: riskLevel === 'at_risk' ? 'At Risk' : riskLevel === 'needs_attention' ? 'Needs Attention' : 'On Track',
+        });
+      }
+
+      const teamScore = members.length > 0 ? Math.round(scoreSum / members.length) : 0;
+      const teamHealth = members.filter(m => m.riskLevel === 'at_risk').length > members.length * 0.3 ? 'at_risk' as const
+        : members.filter(m => m.riskLevel !== 'on_track').length > members.length * 0.5 ? 'needs_attention' as const : 'on_track' as const;
+
+      const alerts = await storage.getTeamAlerts(workspaceId, { visibleToRoles: ['admin'] });
+
+      res.json({
+        teamName: 'My Team',
+        memberCount: members.length,
+        teamScore,
+        teamTrend: getTrendDirection(teamScore, teamScore),
+        totalTasksCompleted,
+        totalOverdue,
+        teamHealth,
+        members,
+        alerts,
+      });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // 3. GET /api/team-intelligence/admin-dashboard
+  app.get("/api/team-intelligence/admin-dashboard", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!tiIsAdminOrOwner(req)) return res.status(403).json({ message: "Admin access required" });
+      const workspaceId = (req.query.workspaceId as string) || "default";
+      const from = (req.query.from as string) || tiDefaultFrom();
+      const to = (req.query.to as string) || tiDefaultTo();
+
+      const allUsers = await storage.getAllUsers();
+      const allSnapshots = await storage.getTeamSnapshotsByWorkspace(workspaceId, from, to);
+
+      const { getTrendDirection, getRiskLevel, calculateRiskScore } = await import("../shared/lib/team-intelligence/scoring");
+
+      const userSnapshotMap = new Map<string, typeof allSnapshots>();
+      for (const snap of allSnapshots) {
+        if (!userSnapshotMap.has(snap.userId)) userSnapshotMap.set(snap.userId, []);
+        userSnapshotMap.get(snap.userId)!.push(snap);
+      }
+
+      let totalScore = 0;
+      let totalCompleted = 0;
+      let totalDeadlineOk = 0;
+      let totalAssigned = 0;
+      let totalFocusMin = 0;
+      let onTrack = 0, needsAttention = 0, atRisk = 0;
+
+      for (const [uid, snaps] of userSnapshotMap) {
+        const avg = snaps.reduce((s, d) => s + Number(d.productivityScore), 0) / snaps.length;
+        totalScore += avg;
+        totalCompleted += snaps.reduce((s, d) => s + d.tasksCompleted, 0);
+        totalAssigned += snaps.reduce((s, d) => s + d.tasksAssigned, 0);
+        totalFocusMin += snaps.reduce((s, d) => s + d.deepWorkMinutes, 0);
+        const overdue = snaps[0]?.tasksOverdue || 0;
+        const riskScore = calculateRiskScore(overdue, 0, 1, avg);
+        const rl = getRiskLevel(riskScore);
+        if (rl === 'on_track') onTrack++;
+        else if (rl === 'needs_attention') needsAttention++;
+        else atRisk++;
+      }
+
+      const userCount = userSnapshotMap.size || 1;
+      const orgScore = Math.round(totalScore / userCount);
+      const deadlineAdherenceRate = totalAssigned > 0 ? Math.round(((totalAssigned - allSnapshots.reduce((s, d) => s + d.tasksOverdue, 0)) / totalAssigned) * 100) : 100;
+
+      const assignments = await storage.getManagerAssignments(workspaceId);
+      const managerTeams = new Map<string, string[]>();
+      for (const a of assignments) {
+        if (!managerTeams.has(a.managerUserId)) managerTeams.set(a.managerUserId, []);
+        managerTeams.get(a.managerUserId)!.push(a.employeeUserId);
+      }
+
+      const teams = [];
+      for (const [managerId, empIds] of managerTeams) {
+        const managerUser = allUsers.find((u: any) => u.id === managerId);
+        const managerName = managerUser ? `${managerUser.firstName || ''} ${managerUser.lastName || ''}`.trim() : managerId;
+        let teamScore = 0;
+        let teamCompleted = 0;
+        let teamOverdue = 0;
+        let teamAssigned = 0;
+        for (const eid of empIds) {
+          const snaps = userSnapshotMap.get(eid) || [];
+          teamScore += snaps.length > 0 ? snaps.reduce((s, d) => s + Number(d.productivityScore), 0) / snaps.length : 0;
+          teamCompleted += snaps.reduce((s, d) => s + d.tasksCompleted, 0);
+          teamOverdue += snaps.reduce((s, d) => s + d.tasksOverdue, 0);
+          teamAssigned += snaps.reduce((s, d) => s + d.tasksAssigned, 0);
+        }
+        const avgScore = empIds.length > 0 ? Math.round(teamScore / empIds.length) : 0;
+        const overduePercent = teamAssigned > 0 ? Math.round((teamOverdue / teamAssigned) * 100) : 0;
+        const riskScore = calculateRiskScore(teamOverdue, 0, 1, avgScore);
+        teams.push({
+          teamId: managerId,
+          teamName: `${managerName}'s Team`,
+          managerName,
+          memberCount: empIds.length,
+          score: avgScore,
+          velocity: teamCompleted,
+          overduePercent,
+          health: getRiskLevel(riskScore),
+        });
+      }
+
+      res.json({
+        orgScore,
+        orgTrend: getTrendDirection(orgScore, orgScore),
+        totalEmployees: allUsers.length,
+        totalTasksCompleted: totalCompleted,
+        deadlineAdherenceRate,
+        avgFocusMinutes: Math.round(totalFocusMin / userCount),
+        teams,
+        riskDistribution: { onTrack, needsAttention, atRisk },
+      });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // 4. GET /api/team-intelligence/employee/:employeeUserId
+  app.get("/api/team-intelligence/employee/:employeeUserId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const empId = req.params.employeeUserId;
+      const workspaceId = (req.query.workspaceId as string) || "default";
+      const from = (req.query.from as string) || tiDefaultFrom();
+      const to = (req.query.to as string) || tiDefaultTo();
+
+      if (userId !== empId) {
+        const assignments = await storage.getManagerAssignments(workspaceId, userId);
+        const isManager = assignments.some(a => a.employeeUserId === empId);
+        if (!isManager && !tiIsAdminOrOwner(req)) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      const snapshots = await storage.getTeamSnapshots(empId, workspaceId, from, to);
+      const { calculateStreak, detectPatterns } = await import("./lib/team-intelligence/rules-engine");
+
+      const snapshotData = snapshots.map(s => ({
+        date: s.date,
+        activeTimeMinutes: s.activeTimeMinutes,
+        deepWorkMinutes: s.deepWorkMinutes,
+        shallowWorkMinutes: s.shallowWorkMinutes,
+        meetingTimeMinutes: s.meetingTimeMinutes,
+        focusSessionMinutes: s.focusSessionMinutes,
+        tasksAssigned: s.tasksAssigned,
+        tasksCompleted: s.tasksCompleted,
+        tasksOverdue: s.tasksOverdue,
+        tasksInProgress: s.tasksInProgress,
+        contextSwitches: s.contextSwitches,
+        avgFocusSession: s.avgFocusSession,
+        longestFocusSession: s.longestFocusSession,
+        productivityScore: Number(s.productivityScore),
+        focusScore: Number(s.focusScore),
+        consistencyScore: Number(s.consistencyScore),
+        executionScore: Number(s.executionScore),
+        collaborationScore: Number(s.collaborationScore),
+      }));
+
+      const streak = calculateStreak(snapshotData);
+      const todayStr = new Date().toISOString().split('T')[0];
+      const latest = snapshotData[0];
+      const currentScores = latest ? {
+        taskCompletion: latest.productivityScore,
+        focus: latest.focusScore,
+        deadlineAdherence: latest.tasksAssigned > 0 ? Math.round(((latest.tasksAssigned - latest.tasksOverdue) / latest.tasksAssigned) * 100) : 100,
+        consistency: latest.consistencyScore,
+        execution: latest.executionScore,
+        collaboration: latest.collaborationScore,
+        total: latest.productivityScore,
+      } : { taskCompletion: 0, focus: 0, deadlineAdherence: 0, consistency: 0, execution: 0, collaboration: 0, total: 0 };
+
+      const { items: insights } = await storage.getTeamInsights(empId, workspaceId, { limit: 10, offset: 0, unreadOnly: false });
+      const alerts = await storage.getTeamAlerts(workspaceId, { userId: empId, visibleToRoles: ['employee'] });
+
+      res.json({
+        currentScores,
+        todaySnapshot: snapshotData.find(s => s.date === todayStr) || null,
+        recentSnapshots: snapshotData,
+        streak,
+        insights: insights.map(i => ({ category: i.category, title: i.title, message: i.message, confidence: i.confidence })),
+        alerts,
+      });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // 5. GET /api/team-intelligence/compare
+  app.get("/api/team-intelligence/compare", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const workspaceId = (req.query.workspaceId as string) || "default";
+      const targetUserId = (req.query.userId as string) || userId;
+      const periodAFrom = req.query.periodAFrom as string;
+      const periodATo = req.query.periodATo as string;
+      const periodBFrom = req.query.periodBFrom as string;
+      const periodBTo = req.query.periodBTo as string;
+
+      if (!periodAFrom || !periodATo || !periodBFrom || !periodBTo) {
+        return res.status(400).json({ message: "All period parameters required (periodAFrom, periodATo, periodBFrom, periodBTo)" });
+      }
+
+      if (targetUserId !== userId && !tiIsAdminOrOwner(req)) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const periodA = await storage.getTeamSnapshots(targetUserId, workspaceId, periodAFrom, periodATo);
+      const periodB = await storage.getTeamSnapshots(targetUserId, workspaceId, periodBFrom, periodBTo);
+
+      const metrics = ['productivityScore', 'focusScore', 'deepWorkMinutes', 'tasksCompleted', 'tasksOverdue', 'consistencyScore', 'executionScore'] as const;
+      const results = metrics.map(metric => {
+        const aAvg = periodA.length > 0
+          ? periodA.reduce((s, d) => s + Number((d as any)[metric]), 0) / periodA.length : 0;
+        const bAvg = periodB.length > 0
+          ? periodB.reduce((s, d) => s + Number((d as any)[metric]), 0) / periodB.length : 0;
+        const deltaPercent = aAvg !== 0 ? Math.round(((bAvg - aAvg) / aAvg) * 100) : 0;
+        const direction = deltaPercent > 2 ? 'up' : deltaPercent < -2 ? 'down' : 'stable';
+        return { metric, periodAValue: Math.round(aAvg * 100) / 100, periodBValue: Math.round(bAvg * 100) / 100, deltaPercent, direction };
+      });
+
+      res.json(results);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // 6. GET /api/team-intelligence/insights
+  app.get("/api/team-intelligence/insights", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const workspaceId = (req.query.workspaceId as string) || "default";
+      const limit = parseInt(req.query.limit as string) || 20;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const unreadOnly = req.query.unreadOnly === 'true';
+
+      const { items, total } = await storage.getTeamInsights(userId, workspaceId, { limit, offset, unreadOnly });
+      res.json({ insights: items, total });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // 7. GET /api/team-intelligence/ai-settings
+  app.get("/api/team-intelligence/ai-settings", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const workspaceId = (req.query.workspaceId as string) || "default";
+      const settings = await storage.getTeamAiSettings(userId, workspaceId);
+      res.json(settings);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // 8. GET /api/team-intelligence/org-settings
+  app.get("/api/team-intelligence/org-settings", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!tiIsAdminOrOwner(req)) return res.status(403).json({ message: "Admin access required" });
+      const workspaceId = (req.query.workspaceId as string) || "default";
+      const settings = await storage.getTeamOrgSettings(workspaceId);
+      res.json(settings);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // 9. GET /api/team-intelligence/alerts
+  app.get("/api/team-intelligence/alerts", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const workspaceId = (req.query.workspaceId as string) || "default";
+
+      if (tiIsAdminOrOwner(req)) {
+        const alerts = await storage.getTeamAlerts(workspaceId, { visibleToRoles: ['employee', 'admin'] });
+        return res.json(alerts);
+      }
+
+      const alerts = await storage.getTeamAlerts(workspaceId, { userId, visibleToRoles: ['employee'] });
+      res.json(alerts);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // 10. GET /api/team-intelligence/manager-assignments
+  app.get("/api/team-intelligence/manager-assignments", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const workspaceId = (req.query.workspaceId as string) || "default";
+
+      if (tiIsAdminOrOwner(req)) {
+        if (req.query.all === 'true') {
+          const assignments = await storage.getManagerAssignments(workspaceId);
+          return res.json(assignments);
+        }
+        const assignments = await storage.getManagerAssignments(workspaceId, userId);
+        return res.json(assignments);
+      }
+      return res.status(403).json({ message: "Admin access required" });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // 11. PATCH /api/team-intelligence/insights/:insightId/read
+  app.patch("/api/team-intelligence/insights/:insightId/read", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const updated = await storage.updateTeamInsight(req.params.insightId, userId, { isRead: true });
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // 12. PATCH /api/team-intelligence/insights/:insightId/dismiss
+  app.patch("/api/team-intelligence/insights/:insightId/dismiss", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const updated = await storage.updateTeamInsight(req.params.insightId, userId, { isDismissed: true });
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // 13. PATCH /api/team-intelligence/insights/:insightId/save
+  app.patch("/api/team-intelligence/insights/:insightId/save", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { items } = await storage.getTeamInsights(userId, "default", { limit: 1000, offset: 0, unreadOnly: false });
+      const insight = items.find(i => i.id === req.params.insightId);
+      if (!insight) return res.status(404).json({ message: "Insight not found" });
+      const updated = await storage.updateTeamInsight(req.params.insightId, userId, { isSaved: !insight.isSaved });
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // 14. PUT /api/team-intelligence/ai-settings
+  app.put("/api/team-intelligence/ai-settings", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const workspaceId = req.body.workspaceId || "default";
+      const { workspaceId: _, ...data } = req.body;
+      const updated = await storage.upsertTeamAiSettings(userId, workspaceId, data);
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // 15. PUT /api/team-intelligence/org-settings
+  app.put("/api/team-intelligence/org-settings", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!tiIsAdminOrOwner(req)) return res.status(403).json({ message: "Admin access required" });
+      const workspaceId = req.body.workspaceId || "default";
+      const { workspaceId: _, ...data } = req.body;
+      const updated = await storage.upsertTeamOrgSettings(workspaceId, data);
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // 16. PATCH /api/team-intelligence/alerts/:alertId/acknowledge
+  app.patch("/api/team-intelligence/alerts/:alertId/acknowledge", isAuthenticated, async (req: any, res) => {
+    try {
+      const updated = await storage.updateTeamAlert(req.params.alertId, {
+        isAcknowledged: true,
+        acknowledgedBy: req.user.claims.sub,
+        acknowledgedAt: new Date(),
+      });
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // 17. PATCH /api/team-intelligence/alerts/:alertId/snooze
+  app.patch("/api/team-intelligence/alerts/:alertId/snooze", isAuthenticated, async (req: any, res) => {
+    try {
+      const { snoozeUntil } = req.body;
+      if (!snoozeUntil) return res.status(400).json({ message: "snoozeUntil required" });
+      const updated = await storage.updateTeamAlert(req.params.alertId, {
+        isSnoozed: true,
+        snoozedUntil: new Date(snoozeUntil),
+      });
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // 18. POST /api/team-intelligence/manager-assignments
+  app.post("/api/team-intelligence/manager-assignments", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!tiIsAdminOrOwner(req)) return res.status(403).json({ message: "Admin access required" });
+      const { workspaceId = "default", managerUserId, employeeUserId, teamId } = req.body;
+      if (!managerUserId || !employeeUserId) return res.status(400).json({ message: "managerUserId and employeeUserId required" });
+      const created = await storage.createManagerAssignment({ managerUserId, employeeUserId, workspaceId, teamId });
+      res.json(created);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // 19. DELETE /api/team-intelligence/manager-assignments/:assignmentId
+  app.delete("/api/team-intelligence/manager-assignments/:assignmentId", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!tiIsAdminOrOwner(req)) return res.status(403).json({ message: "Admin access required" });
+      const updated = await storage.softDeleteManagerAssignment(req.params.assignmentId);
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // 20. POST /api/team-intelligence/seed-demo-data
+  app.post("/api/team-intelligence/seed-demo-data", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!tiIsAdminOrOwner(req)) return res.status(403).json({ message: "Admin access required" });
+      const workspaceId = req.body.workspaceId || "default";
+      const allUsers = await storage.getAllUsers();
+      const userIds = allUsers.map((u: any) => u.id);
+
+      const { seedTeamIntelligenceData } = await import("./lib/team-intelligence/seed-demo-data");
+      await seedTeamIntelligenceData(workspaceId, userIds);
+
+      const adminId = req.user.claims.sub;
+      for (const uid of userIds) {
+        if (uid === adminId) continue;
+        try {
+          await storage.createManagerAssignment({ managerUserId: adminId, employeeUserId: uid, workspaceId });
+        } catch { }
+      }
+
+      res.json({ success: true, usersSeeded: userIds.length });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   return httpServer;
 }

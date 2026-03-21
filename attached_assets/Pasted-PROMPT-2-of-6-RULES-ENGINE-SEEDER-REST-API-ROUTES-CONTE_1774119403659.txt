@@ -1,0 +1,86 @@
+PROMPT 2 of 6 — RULES ENGINE + SEEDER + REST API ROUTES
+CONTEXT
+My app has Teams Productivity Intelligence with: 6 Drizzle tables in shared/schema.ts (teamDailySnapshots, teamAiInsights, teamAiSettings, teamManagerAssignments, teamAlerts, teamOrgSettings), types at shared/lib/team-intelligence/types.ts, scoring at shared/lib/team-intelligence/scoring.ts. Inspect the existing codebase to find: Express route file location/patterns, auth/middleware patterns, Drizzle db import path.
+CRITICAL CODEBASE FACTS (do not assume otherwise):
+
+The app uses a single server/routes.ts file for all routes. There is NO server/routes/ subdirectory.
+The app uses a storage abstraction in server/storage.ts with an IStorage interface. All existing routes call storage.someMethod() — they never write Drizzle queries directly in route handlers.
+The users table has firstName, lastName (combine these as display name), and profileImageUrl (use as avatar). There are NO fields named name or avatar.
+Valid user roles are: owner, admin, member. There is NO "manager" role. Use admin as the manager-equivalent role throughout.
+This app has no workspace system. Use the hardcoded string "default" as the workspaceId value everywhere.
+The auth session (via req.user.claims.sub) only provides the user's ID — the role is NOT in the auth token. To check a user's role, you must query the users table: const user = await db.select().from(users).where(eq(users.id, req.user.claims.sub)).limit(1); then check user[0]?.role.
+
+TASK
+Create (A) rules engine, (B) mock data seeder, (C) Express REST API routes with all endpoints. Register routes in the main Express app.
+PART A — RULES ENGINE
+Create file: server/lib/team-intelligence/rules-engine.ts
+Import DetectedPattern, DailySnapshotData from ../../shared/lib/team-intelligence/types (adjust import path to match project convention — the types are in the shared/ directory). Export detectPatterns(snapshots: DailySnapshotData[]): DetectedPattern[] — takes snapshots (most recent first), returns detected patterns. Check these rules:
+
+Improvement: Avg productivityScore of last 3 days >= 5% higher than previous 3 days → {type:'improvement', severity:'info', data:{recentAvg,previousAvg,changePercent}, message:'Productivity trending upward'}
+Decline: Avg productivityScore of last 3 days >= 5% lower than previous 3 → {type:'decline', severity:'warning', data:{recentAvg,previousAvg,changePercent}, message:'Productivity trending downward'}
+Strong Focus: Most recent day deepWorkMinutes >= 20% above 7-day avg → {type:'strong_focus', severity:'info', data:{todayFocus,avgFocus,percentAbove}, message:'Focus time significantly above average'}
+Deadline Risk: Most recent day tasksOverdue > previous day → {type:'deadline_risk', severity:'warning', data:{todayOverdue,yesterdayOverdue}, message:'Overdue tasks increasing'}
+Streak: Count consecutive days (from recent) where productivityScore>=60. If >=5 → {type:'streak', severity:'info', data:{streakDays}, message:'Strong consistency streak'}
+Meeting Overload: 3+ of last 5 days have meetingTimeMinutes >50% of activeTimeMinutes → {type:'meeting_overload', severity:'warning', data:{daysOverloaded,avgMeetingPercent}, message:'High meeting load detected'}
+Low Output: Most recent day tasksCompleted===0 AND activeTimeMinutes>60 → {type:'low_output', severity:'warning', data:{activeTime}, message:'Active time with zero task completions'}
+
+Also export calculateStreak(snapshots: DailySnapshotData[], threshold=60): number — count consecutive days from most recent where productivityScore>=threshold.
+PART B — MOCK DATA SEEDER
+Create file: server/lib/team-intelligence/seed-demo-data.ts
+Import the Drizzle db instance from existing location (inspect codebase for correct import path, likely server/db.ts or similar). Import the table schemas from shared/schema.ts. Import scoring functions from shared/lib/team-intelligence/scoring (the scoring utilities are in the shared directory, NOT in client/src/).
+Export seedTeamIntelligenceData(workspaceId: string, userIds: string[]): Promise<void>
+For each userId, generate 30 days of snapshots (skip weekends):
+
+Give each user a personality: first 25% 'high performer' (high scores, low overdue, high focus), next 25% 'steady' (consistent middle), next 25% 'improving' (scores trend upward), last 25% 'struggling' (lower scores, higher overdue)
+Random realistic values: activeTimeMinutes 300-510, deepWorkMinutes 60-240, meetingTimeMinutes 30-150, tasksAssigned 3-12, tasksCompleted 2-to-assigned, tasksOverdue 0-3, contextSwitches 3-25, avgFocusSession 15-55
+Calculate shallowWorkMinutes = Math.max(0, activeTime - deepWork - meetings) (prevents negative values)
+focusSessionMinutes = deepWork * random(0.6-0.9)
+longestFocusSession = avgFocusSession + random(10-30)
+tasksInProgress = Math.max(0, assigned - completed) (prevents negative values)
+Calculate all scores using scoring functions
+Use Drizzle's db.insert().values().onConflictDoUpdate() for upsert behavior (safe to run multiple times). IMPORTANT: You must specify the conflict target explicitly: .onConflictDoUpdate({ target: [teamDailySnapshots.userId, teamDailySnapshots.workspaceId, teamDailySnapshots.date], set: { ...all updatable fields } })
+
+Also generate per user: 5-8 sample teamAiInsights (mix of categories, realistic messages, expiresAt=7 days, roleContext='employee') and 3-5 sample teamAlerts (at least 1 critical for struggling user, 1 warning for declining, 1 info for achievement, expiresAt=14 days).
+Use db.transaction() for bulk operations where supported.
+PART C — EXPRESS REST API ROUTES
+CRITICAL: Inspect the codebase first. The app uses a single server/routes.ts file. Add a new Express router for team-intelligence routes at the bottom of server/routes.ts, following the exact same patterns as the routes already in that file.
+For database operations: Add methods to the IStorage interface in server/storage.ts and implement them using Drizzle queries there. Then call storage.someMethod() from the route handlers — this is the existing pattern in this codebase.
+For role checks: The auth session only gives req.user.claims.sub (user ID). To check role, query the users table first:
+typescriptconst user = await db.select().from(users).where(eq(users.id, req.user.claims.sub)).limit(1);
+const userRole = user[0]?.role;
+Role mapping: Where the endpoints say "manager/admin/owner", use admin or owner. Where they say "manager", use admin. The valid roles are: owner, admin, member.
+workspaceId: This app has no workspace system. Use "default" as the workspaceId everywhere. Accept it as a query/body parameter for API compatibility but default to "default".
+User display names: The users table has firstName and lastName (combine as display name) and profileImageUrl (use as avatar).
+20 endpoints total. Use the existing auth middleware for all routes. Use Zod for input validation on request body/params/query.
+GET Endpoints:
+
+GET /api/team-intelligence/my-dashboard — Query: {workspaceId (default "default"), from?, to?}. Default last 14 days. Query teamDailySnapshots for current user, order by date desc. Get today's snapshot, calculate streak, get unread insights (limit 10), get active alerts. Return EmployeeDashboardData shape.
+GET /api/team-intelligence/team-dashboard — Query: {workspaceId (default "default"), from?, to?}. Query the users table to get the current user's role. Verify role is admin or owner (return 403 if not). Get employees from teamManagerAssignments (unassignedAt null). For each: get recent snapshot, calc trend (7d vs prev 7d), get risk level, get firstName + ' ' + lastName as display name and profileImageUrl as avatar from users table. Aggregate team totals. Get manager alerts. Return ManagerDashboardData shape.
+GET /api/team-intelligence/admin-dashboard — Query: {workspaceId (default "default"), from?, to?}. Query users table for role, verify admin or owner. Get all users from the users table (there is no workspace membership concept). Get their snapshots. Group by team. Calc org-wide stats + per-team summaries + risk distribution. Return AdminDashboardData shape.
+GET /api/team-intelligence/employee/:employeeUserId — Query: {workspaceId (default "default"), from?, to?}. Verify: user is the employee OR their manager (check teamManagerAssignments) OR admin/owner (query users table for role). Return same shape as my-dashboard for specified employee.
+GET /api/team-intelligence/compare — Query: {workspaceId (default "default"), periodAFrom, periodATo, periodBFrom, periodBTo, userId?, metrics?}. If userId differs from current user, verify admin role via DB lookup. Query snapshots for both periods. Calc averages for: productivityScore, focusScore, deepWorkMinutes, tasksCompleted, tasksOverdue, consistencyScore, executionScore. Calc deltaPercent = ((B_avg-A_avg)/A_avg)*100. Direction: delta>2='up', <-2='down', else 'stable'. Return ComparisonResult[].
+GET /api/team-intelligence/insights — Query: {workspaceId (default "default"), limit=20, offset=0, unreadOnly=false}. Query teamAiInsights for current user, isDismissed=false, ordered by generatedAt desc. Return insights + total count.
+GET /api/team-intelligence/ai-settings — Query: {workspaceId (default "default")}. Upsert with defaults teamAiSettings for current user.
+GET /api/team-intelligence/org-settings — Query: {workspaceId (default "default")}. Verify admin/owner via DB lookup. Upsert teamOrgSettings.
+GET /api/team-intelligence/alerts — Query: {workspaceId (default "default")}. Role-based (query users table for role): member sees own alerts with visibleToRole='employee'; admin sees alerts for direct reports with visibleToRole in ['employee','admin']; owner sees all workspace alerts. Filter isAcknowledged=false, expiresAt>now. Order by severity (critical first) then triggeredAt desc.
+GET /api/team-intelligence/manager-assignments — Query: {workspaceId (default "default")}. Admin gets their assignments, owner gets all.
+
+POST/PATCH Endpoints:
+
+PATCH /api/team-intelligence/insights/:insightId/read — Set isRead=true where id+userId match.
+PATCH /api/team-intelligence/insights/:insightId/dismiss — Set isDismissed=true where id+userId match.
+PATCH /api/team-intelligence/insights/:insightId/save — Toggle isSaved where id+userId match.
+PUT /api/team-intelligence/ai-settings — Body: {workspaceId (default "default"), ...all setting fields optional}. Update teamAiSettings.
+PUT /api/team-intelligence/org-settings — Body: {workspaceId (default "default"), ...all org fields optional}. Verify admin/owner via DB lookup. Update teamOrgSettings.
+PATCH /api/team-intelligence/alerts/:alertId/acknowledge — Set isAcknowledged=true, acknowledgedBy=currentUser, acknowledgedAt=now.
+PATCH /api/team-intelligence/alerts/:alertId/snooze — Body: {snoozeUntil}. Set isSnoozed=true, snoozedUntil=parsed date.
+POST /api/team-intelligence/manager-assignments — Body: {workspaceId (default "default"), managerUserId, employeeUserId, teamId?}. Verify admin/owner via DB lookup. Create teamManagerAssignment.
+DELETE /api/team-intelligence/manager-assignments/:assignmentId — Verify admin/owner via DB lookup. Set unassignedAt=now.
+POST /api/team-intelligence/seed-demo-data — Body: {workspaceId (default "default")}. Verify admin/owner via DB lookup. Get all user IDs from the users table. Call seedTeamIntelligenceData. Also create teamManagerAssignment records (assign first admin as manager of all others). Return {success:true, usersSeeded:count}.
+
+BOUNDARIES
+
+Follow EXACT same route/auth/middleware/storage patterns as existing route files
+Do NOT create any frontend files
+Do NOT modify the Drizzle schema in shared/schema.ts
+Do NOT modify any existing route files except to register the new routes

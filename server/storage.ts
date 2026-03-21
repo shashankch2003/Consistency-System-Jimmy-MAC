@@ -10,6 +10,7 @@ import {
   videos, videoFeedback,
   friends, friendInvites, comparisonPrivacy, dailyStatsCache,
   growGroups, growGroupMembers, growGroupMessages,
+  teamDailySnapshots, teamAiInsights, teamAiSettings, teamManagerAssignments, teamAlerts, teamOrgSettings,
 } from "@shared/schema";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
 import { or, sql, inArray } from "drizzle-orm";
@@ -50,6 +51,12 @@ type InsertDailyStatsCache = typeof dailyStatsCache.$inferInsert;
 type InsertGrowGroup = typeof growGroups.$inferInsert;
 type InsertGrowGroupMember = typeof growGroupMembers.$inferInsert;
 type InsertGrowGroupMessage = typeof growGroupMessages.$inferInsert;
+type InsertTeamDailySnapshot = typeof teamDailySnapshots.$inferInsert;
+type InsertTeamAiInsight = typeof teamAiInsights.$inferInsert;
+type InsertTeamAiSettings = typeof teamAiSettings.$inferInsert;
+type InsertTeamManagerAssignment = typeof teamManagerAssignments.$inferInsert;
+type InsertTeamAlert = typeof teamAlerts.$inferInsert;
+type InsertTeamOrgSettings = typeof teamOrgSettings.$inferInsert;
 
 export interface IStorage extends IAuthStorage {
   getYearlyGoals(userId: string, year?: number): Promise<(typeof yearlyGoals.$inferSelect)[]>;
@@ -248,6 +255,26 @@ export interface IStorage extends IAuthStorage {
   createGroupMessage2(msg: InsertGrowGroupMessage): Promise<typeof growGroupMessages.$inferSelect>;
   deleteGroupMessage2(id: number): Promise<void>;
   getGroupMemberCount(groupId: number): Promise<number>;
+
+  getTeamSnapshots(userId: string, workspaceId: string, from: string, to: string): Promise<(typeof teamDailySnapshots.$inferSelect)[]>;
+  getTeamSnapshotsByWorkspace(workspaceId: string, from: string, to: string): Promise<(typeof teamDailySnapshots.$inferSelect)[]>;
+  getAllUsers(): Promise<any[]>;
+
+  getTeamInsights(userId: string, workspaceId: string, opts: { limit: number; offset: number; unreadOnly: boolean }): Promise<{ items: (typeof teamAiInsights.$inferSelect)[]; total: number }>;
+  updateTeamInsight(id: string, userId: string, updates: Partial<InsertTeamAiInsight>): Promise<typeof teamAiInsights.$inferSelect>;
+
+  getTeamAiSettings(userId: string, workspaceId: string): Promise<typeof teamAiSettings.$inferSelect>;
+  upsertTeamAiSettings(userId: string, workspaceId: string, data: Partial<InsertTeamAiSettings>): Promise<typeof teamAiSettings.$inferSelect>;
+
+  getTeamOrgSettings(workspaceId: string): Promise<typeof teamOrgSettings.$inferSelect>;
+  upsertTeamOrgSettings(workspaceId: string, data: Partial<InsertTeamOrgSettings>): Promise<typeof teamOrgSettings.$inferSelect>;
+
+  getTeamAlerts(workspaceId: string, filters: { userId?: string; visibleToRoles?: string[]; acknowledgedOnly?: boolean }): Promise<(typeof teamAlerts.$inferSelect)[]>;
+  updateTeamAlert(id: string, updates: Partial<InsertTeamAlert>): Promise<typeof teamAlerts.$inferSelect>;
+
+  getManagerAssignments(workspaceId: string, managerUserId?: string): Promise<(typeof teamManagerAssignments.$inferSelect)[]>;
+  createManagerAssignment(data: InsertTeamManagerAssignment): Promise<typeof teamManagerAssignments.$inferSelect>;
+  softDeleteManagerAssignment(id: string): Promise<typeof teamManagerAssignments.$inferSelect>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1063,6 +1090,138 @@ export class DatabaseStorage implements IStorage {
   async getGroupMemberCount(groupId: number) {
     const members = await db.select().from(growGroupMembers).where(eq(growGroupMembers.groupId, groupId));
     return members.length;
+  }
+
+  async getTeamSnapshots(userId: string, workspaceId: string, from: string, to: string) {
+    return await db.select().from(teamDailySnapshots)
+      .where(and(
+        eq(teamDailySnapshots.userId, userId),
+        eq(teamDailySnapshots.workspaceId, workspaceId),
+        gte(teamDailySnapshots.date, from),
+        lte(teamDailySnapshots.date, to),
+      ))
+      .orderBy(desc(teamDailySnapshots.date));
+  }
+
+  async getTeamSnapshotsByWorkspace(workspaceId: string, from: string, to: string) {
+    return await db.select().from(teamDailySnapshots)
+      .where(and(
+        eq(teamDailySnapshots.workspaceId, workspaceId),
+        gte(teamDailySnapshots.date, from),
+        lte(teamDailySnapshots.date, to),
+      ))
+      .orderBy(desc(teamDailySnapshots.date));
+  }
+
+  async getAllUsers() {
+    const { users } = await import("@shared/schema");
+    return await db.select().from(users);
+  }
+
+  async getTeamInsights(userId: string, workspaceId: string, opts: { limit: number; offset: number; unreadOnly: boolean }) {
+    const conditions: any[] = [
+      eq(teamAiInsights.userId, userId),
+      eq(teamAiInsights.workspaceId, workspaceId),
+      eq(teamAiInsights.isDismissed, false),
+    ];
+    if (opts.unreadOnly) conditions.push(eq(teamAiInsights.isRead, false));
+
+    const items = await db.select().from(teamAiInsights)
+      .where(and(...conditions))
+      .orderBy(desc(teamAiInsights.generatedAt))
+      .limit(opts.limit)
+      .offset(opts.offset);
+
+    const allMatching = await db.select().from(teamAiInsights)
+      .where(and(...conditions));
+
+    return { items, total: allMatching.length };
+  }
+
+  async updateTeamInsight(id: string, userId: string, updates: Partial<typeof teamAiInsights.$inferInsert>) {
+    const [updated] = await db.update(teamAiInsights).set(updates)
+      .where(and(eq(teamAiInsights.id, id), eq(teamAiInsights.userId, userId)))
+      .returning();
+    return updated;
+  }
+
+  async getTeamAiSettings(userId: string, workspaceId: string) {
+    const existing = await db.select().from(teamAiSettings)
+      .where(and(eq(teamAiSettings.userId, userId), eq(teamAiSettings.workspaceId, workspaceId)))
+      .limit(1);
+    if (existing.length > 0) return existing[0];
+    const [created] = await db.insert(teamAiSettings).values({ userId, workspaceId }).returning();
+    return created;
+  }
+
+  async upsertTeamAiSettings(userId: string, workspaceId: string, data: Partial<typeof teamAiSettings.$inferInsert>) {
+    const existing = await this.getTeamAiSettings(userId, workspaceId);
+    const [updated] = await db.update(teamAiSettings).set({ ...data, updatedAt: new Date() })
+      .where(eq(teamAiSettings.id, existing.id))
+      .returning();
+    return updated;
+  }
+
+  async getTeamOrgSettings(workspaceId: string) {
+    const existing = await db.select().from(teamOrgSettings)
+      .where(eq(teamOrgSettings.workspaceId, workspaceId))
+      .limit(1);
+    if (existing.length > 0) return existing[0];
+    const [created] = await db.insert(teamOrgSettings).values({ workspaceId }).returning();
+    return created;
+  }
+
+  async upsertTeamOrgSettings(workspaceId: string, data: Partial<typeof teamOrgSettings.$inferInsert>) {
+    const existing = await this.getTeamOrgSettings(workspaceId);
+    const [updated] = await db.update(teamOrgSettings).set({ ...data, updatedAt: new Date() })
+      .where(eq(teamOrgSettings.id, existing.id))
+      .returning();
+    return updated;
+  }
+
+  async getTeamAlerts(workspaceId: string, filters: { userId?: string; visibleToRoles?: string[]; acknowledgedOnly?: boolean }) {
+    const conditions: any[] = [
+      eq(teamAlerts.workspaceId, workspaceId),
+      gte(teamAlerts.expiresAt, new Date()),
+    ];
+    if (filters.userId) conditions.push(eq(teamAlerts.targetUserId, filters.userId));
+    if (filters.visibleToRoles && filters.visibleToRoles.length > 0) {
+      conditions.push(inArray(teamAlerts.visibleToRole, filters.visibleToRoles));
+    }
+    if (!filters.acknowledgedOnly) conditions.push(eq(teamAlerts.isAcknowledged, false));
+
+    return await db.select().from(teamAlerts)
+      .where(and(...conditions))
+      .orderBy(desc(teamAlerts.triggeredAt));
+  }
+
+  async updateTeamAlert(id: string, updates: Partial<typeof teamAlerts.$inferInsert>) {
+    const [updated] = await db.update(teamAlerts).set(updates)
+      .where(eq(teamAlerts.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getManagerAssignments(workspaceId: string, managerUserId?: string) {
+    const conditions: any[] = [
+      eq(teamManagerAssignments.workspaceId, workspaceId),
+      sql`${teamManagerAssignments.unassignedAt} IS NULL`,
+    ];
+    if (managerUserId) conditions.push(eq(teamManagerAssignments.managerUserId, managerUserId));
+    return await db.select().from(teamManagerAssignments).where(and(...conditions));
+  }
+
+  async createManagerAssignment(data: typeof teamManagerAssignments.$inferInsert) {
+    const [created] = await db.insert(teamManagerAssignments).values(data).returning();
+    return created;
+  }
+
+  async softDeleteManagerAssignment(id: string) {
+    const [updated] = await db.update(teamManagerAssignments)
+      .set({ unassignedAt: new Date() })
+      .where(eq(teamManagerAssignments.id, id))
+      .returning();
+    return updated;
   }
 }
 

@@ -79,6 +79,21 @@ The frontend lives in `client/src/` with pages under `client/src/pages/`, reusab
   - `grow_groups` — Paid-only groups with name, description, public/private toggle
   - `grow_group_members` — Group membership with roles (owner/admin/member)
   - `grow_group_messages` — Group chat messages with soft-delete and reply support
+  - `team_daily_snapshots` — Daily productivity snapshots per user (time, tasks, scores) with UUID PKs
+  - `team_ai_insights` — AI-generated insights per user (category, confidence, read/dismiss/save)
+  - `team_ai_settings` — Per-user AI insight preferences (frequency, tone, categories)
+  - `team_manager_assignments` — Manager-to-employee assignments per workspace
+  - `team_alerts` — Role-based alerts with severity, acknowledge, snooze support
+  - `team_org_settings` — Org-level privacy and scoring configuration
+
+### Team Productivity Intelligence
+- **Route**: `/dashboard/team-intelligence` (frontend not yet built — Prompts 3-6)
+- **Shared Types**: `shared/lib/team-intelligence/types.ts` — RiskLevel, TrendDirection, ScoreBreakdown, DailySnapshotData, TeamMemberSummary, dashboard data interfaces
+- **Shared Scoring**: `shared/lib/team-intelligence/scoring.ts` — Pure scoring functions (task completion, focus, consistency, execution, collaboration, productivity, risk, team health)
+- **Rules Engine**: `server/lib/team-intelligence/rules-engine.ts` — Pattern detection (improvement, decline, focus, deadline risk, streak, meeting overload, low output)
+- **Seeder**: `server/lib/team-intelligence/seed-demo-data.ts` — Generates 30 days of demo data with 4 personality types
+- **API**: 20 endpoints under `/api/team-intelligence/` prefix (dashboards, insights, alerts, settings, assignments, compare, seed)
+- **Auth**: Admin check uses ADMIN_USER_ID env var (no role column in users table); workspaceId hardcoded to "default"
 
 ### Grow Together Section
 - **Route**: `/dashboard/grow-together` — Two tabs: Compare With Friends + Groups
