@@ -1,0 +1,292 @@
+PROMPT 1 of 6 — DATABASE + TYPES + SCORING
+CONTEXT: My app is an AI-driven productivity platform built with Next.js 14 (App Router), TypeScript strict, Tailwind CSS, Shadcn/UI, tRPC v11, Prisma ORM, PostgreSQL, Zustand, React Query. Prisma schema is at prisma/schema.prisma. I am adding a Teams Productivity Intelligence feature. This prompt adds database models, TypeScript types, and pure scoring utility functions.
+TASK: Do three things in order: (A) Add 6 new Prisma models, (B) Create TypeScript types file, (C) Create scoring utilities file. Inspect prisma/schema.prisma and existing file structure first.
+
+PART A — DATABASE MODELS
+Add 6 models AFTER all existing models in prisma/schema.prisma. Do NOT modify/rename/delete any existing model.
+model TeamDailySnapshot:
+id: String @id @default(uuid())
+userId: String
+workspaceId: String
+date: DateTime @db.Date
+activeTimeMinutes: Int @default(0)
+deepWorkMinutes: Int @default(0)
+shallowWorkMinutes: Int @default(0)
+meetingTimeMinutes: Int @default(0)
+focusSessionMinutes: Int @default(0)
+tasksAssigned: Int @default(0)
+tasksCompleted: Int @default(0)
+tasksOverdue: Int @default(0)
+tasksInProgress: Int @default(0)
+contextSwitches: Int @default(0)
+avgFocusSession: Int @default(0)
+longestFocusSession: Int @default(0)
+productivityScore: Decimal @default(0) @db.Decimal(5, 2)
+focusScore: Decimal @default(0) @db.Decimal(5, 2)
+consistencyScore: Decimal @default(0) @db.Decimal(5, 2)
+executionScore: Decimal @default(0) @db.Decimal(5, 2)
+collaborationScore: Decimal @default(0) @db.Decimal(5, 2)
+createdAt: DateTime @default(now())
+updatedAt: DateTime @updatedAt
+@@unique([userId, workspaceId, date])
+@@index([userId, date])
+@@index([workspaceId, date])
+model TeamAiInsight:
+id: String @id @default(uuid())
+userId: String
+workspaceId: String
+targetUserId: String?
+roleContext: String
+category: String
+title: String
+message: String @db.Text
+confidence: String @default("medium")
+dataContext: Json?
+isRead: Boolean @default(false)
+isDismissed: Boolean @default(false)
+isSaved: Boolean @default(false)
+generatedAt: DateTime @default(now())
+expiresAt: DateTime
+createdAt: DateTime @default(now())
+@@index([userId, workspaceId, isRead])
+@@index([userId, roleContext])
+model TeamAiSettings:
+id: String @id @default(uuid())
+userId: String
+workspaceId: String
+insightsEnabled: Boolean @default(true)
+morningBriefEnabled: Boolean @default(true)
+morningBriefTime: String @default("07:30")
+categoriesEnabled: Json @default("["achievement","warning","suggestion","pattern","coaching"]")
+frequency: String @default("daily")
+intensity: String @default("moderate")
+mutedCategories: Json @default("[]")
+notificationChannel: String @default("in_app")
+weekendInsights: Boolean @default(false)
+tonePreference: String @default("encouraging")
+teamBriefEnabled: Boolean @default(true)
+teamBriefDay: Int @default(1)
+riskAlerts: String @default("daily_digest")
+coachingSuggestions: Boolean @default(true)
+createdAt: DateTime @default(now())
+updatedAt: DateTime @updatedAt
+@@unique([userId, workspaceId])
+model TeamManagerAssignment:
+id: String @id @default(uuid())
+managerUserId: String
+employeeUserId: String
+workspaceId: String
+teamId: String?
+assignedAt: DateTime @default(now())
+unassignedAt: DateTime?
+createdAt: DateTime @default(now())
+@@unique([managerUserId, employeeUserId, workspaceId])
+@@index([managerUserId, workspaceId])
+@@index([employeeUserId, workspaceId])
+model TeamAlert:
+id: String @id @default(uuid())
+workspaceId: String
+targetUserId: String
+visibleToRole: String
+alertType: String
+severity: String
+title: String
+message: String @db.Text
+dataContext: Json?
+isAcknowledged: Boolean @default(false)
+acknowledgedBy: String?
+acknowledgedAt: DateTime?
+isSnoozed: Boolean @default(false)
+snoozedUntil: DateTime?
+triggeredAt: DateTime @default(now())
+expiresAt: DateTime
+createdAt: DateTime @default(now())
+@@index([workspaceId, visibleToRole, isAcknowledged])
+@@index([targetUserId])
+model TeamOrgSettings:
+id: String @id @default(uuid())
+workspaceId: String @unique
+managerSeesIndividualFocus: Boolean @default(true)
+managerSeesIndividualIdle: Boolean @default(false)
+managerSeesAppUsage: String @default("none")
+managerSeesScreenTime: Boolean @default(false)
+scoringWeights: Json?
+minDataDaysForScoring: Int @default(7)
+newEmployeeRampDays: Int @default(30)
+standardWorkStart: String @default("09:00")
+standardWorkEnd: String @default("17:00")
+workDays: Json @default("[1,2,3,4,5]")
+createdAt: DateTime @default(now())
+updatedAt: DateTime @updatedAt
+After adding all 6 models, run: npx prisma db push
+
+PART B — TYPES FILE
+Create file: src/lib/team-intelligence/types.ts
+Export these exact types:
+export type RiskLevel = 'on_track' | 'needs_attention' | 'at_risk';
+export type TrendDirection = 'up' | 'down' | 'stable';
+export type InsightCategory = 'achievement' | 'warning' | 'suggestion' | 'pattern' | 'coaching' | 'risk';
+export type InsightConfidence = 'high' | 'medium' | 'low';
+export type RoleContext = 'employee' | 'manager' | 'admin';
+
+export interface ScoreBreakdown {
+  taskCompletion: number; focus: number; deadlineAdherence: number;
+  consistency: number; execution: number; collaboration: number; total: number;
+}
+
+export interface DateRange { from: Date; to: Date; }
+
+export interface DailySnapshotData {
+  date: string; activeTimeMinutes: number; deepWorkMinutes: number;
+  shallowWorkMinutes: number; meetingTimeMinutes: number; focusSessionMinutes: number;
+  tasksAssigned: number; tasksCompleted: number; tasksOverdue: number;
+  tasksInProgress: number; contextSwitches: number; avgFocusSession: number;
+  longestFocusSession: number; productivityScore: number; focusScore: number;
+  consistencyScore: number; executionScore: number; collaborationScore: number;
+}
+
+export interface TeamMemberSummary {
+  userId: string; name: string; avatar: string | null; role: string;
+  productivityScore: number; trend: TrendDirection; trendDelta: number;
+  tasksCompleted: number; overdueCount: number; focusTimeMinutes: number;
+  riskLevel: RiskLevel; statusBadge: string;
+}
+
+export interface ComparisonResult {
+  metric: string; periodAValue: number; periodBValue: number;
+  deltaPercent: number; direction: TrendDirection;
+}
+
+export interface DetectedPattern {
+  type: string; severity: 'info' | 'warning' | 'critical';
+  data: Record<string, number>; message: string;
+}
+
+export interface GeneratedInsight {
+  category: InsightCategory; title: string; message: string; confidence: InsightConfidence;
+}
+
+export interface EmployeeDashboardData {
+  currentScores: ScoreBreakdown; todaySnapshot: DailySnapshotData | null;
+  recentSnapshots: DailySnapshotData[]; streak: number;
+  insights: GeneratedInsight[]; alerts: any[];
+}
+
+export interface ManagerDashboardData {
+  teamName: string; memberCount: number; teamScore: number;
+  teamTrend: TrendDirection; totalTasksCompleted: number; totalOverdue: number;
+  teamHealth: RiskLevel; members: TeamMemberSummary[]; alerts: any[];
+}
+
+export interface AdminDashboardData {
+  orgScore: number; orgTrend: TrendDirection; totalEmployees: number;
+  totalTasksCompleted: number; deadlineAdherenceRate: number; avgFocusMinutes: number;
+  teams: { teamId: string; teamName: string; managerName: string; memberCount: number;
+    score: number; velocity: number; overduePercent: number; health: RiskLevel }[];
+  riskDistribution: { onTrack: number; needsAttention: number; atRisk: number };
+}
+
+
+PART C — SCORING UTILITIES
+Create file: src/lib/team-intelligence/scoring.ts
+Import ScoreBreakdown from ./types. Export these pure functions (zero DB calls, zero side effects):
+calculateTaskCompletionRate(completed: number, assigned: number): number — if assigned===0 return 0, else Math.min(100, Math.round((completed/assigned)*100))
+
+
+calculateFocusScore(deepWorkMin: number, avgSessionMin: number, contextSwitches: number, targetDeepWorkMin=240): number — Math.min(100, Math.round((deepWorkMin/targetDeepWorkMin)*60 + (avgSessionMin/45)*20 + Math.max(0,(1-contextSwitches/20)*20))). Clamp 0-100.
+
+
+calculateConsistencyScore(dailyScores: number[]): number — If <3 values return 50. Calc mean+stdDev. Formula: Math.max(0, Math.min(100, Math.round(100-(stdDev/mean*100)))). If mean===0 return 0. Include helper stdDev function.
+
+
+calculateExecutionScore(deadlineAdherence: number, estimateAccuracy: number, firstPassQuality: number): number — Math.round(deadlineAdherence0.4 + estimateAccuracy0.3 + firstPassQuality*0.3). Clamp 0-100.
+
+
+calculateCollaborationScore(responseTimeScore: number, reviewActivity: number, handoffScore: number): number — Math.min(100, Math.round(responseTimeScore0.4 + reviewActivity0.3 + handoffScore*0.3)). Clamp 0-100.
+
+
+calculateProductivityScore(components: Omit<ScoreBreakdown, 'total'>): ScoreBreakdown — total = Math.round(taskCompletion0.25 + focus0.20 + deadlineAdherence0.15 + consistency0.15 + execution0.15 + collaboration0.10). Clamp 0-100. Return {...components, total}.
+
+
+calculateRiskScore(overdueCount: number, trendSlope: number, workloadRatio: number, engagementLevel: number): number — Normalize: overdueNorm=Math.min(100,overdueCount20), declineNorm=trendSlope<0?Math.min(100,Math.abs(trendSlope)10):0, overloadNorm=workloadRatio>1?Math.min(100,(workloadRatio-1)200):0, disengageNorm=Math.max(0,100-engagementLevel). Formula: Math.round(overdueNorm0.30+declineNorm0.25+overloadNorm0.20+disengageNorm0.15+(overdueNorm0.5)*0.10). Clamp 0-100.
+
+
+calculateTeamHealthScore(avgMemberScore: number, workloadVariance: number, velocityTrend: number, deadlineRate: number): number — workloadBalanceScore=Math.max(0,100-workloadVariance5), velocityScore=Math.min(100,Math.max(0,50+velocityTrend10)). Formula: Math.round(avgMemberScore0.25+workloadBalanceScore0.20+velocityScore0.20+deadlineRate0.15+avgMemberScore0.10+workloadBalanceScore0.10). Clamp 0-100.
+
+
+getRiskLevel(score: number): RiskLevel — >70='at_risk', >40='needs_attention', else 'on_track'
+
+
+getTrendDirection(current: number, previous: number, threshold=2): TrendDirection — current>previous+threshold='up', current<previous-threshold='down', else 'stable'
+
+
+BOUNDARIES:
+Use exact field names — do NOT rename anything
+Do NOT add relations to existing models
+Do NOT create seed files, migration files, React components, or tRPC routers
+Do NOT modify any existing files
+
+PROMPT 2 of 6 — RULES ENGINE + SEEDER + tRPC ROUTER
+CONTEXT: My app has Teams Productivity Intelligence with: 6 Prisma models (TeamDailySnapshot, TeamAiInsight, TeamAiSettings, TeamManagerAssignment, TeamAlert, TeamOrgSettings), types at src/lib/team-intelligence/types.ts, scoring at src/lib/team-intelligence/scoring.ts. Inspect the existing codebase to find: tRPC router location/patterns, auth/context patterns, Prisma client import path.
+TASK: Create (A) rules engine, (B) mock data seeder, (C) tRPC router with all procedures. Register router in main app router.
+
+PART A — RULES ENGINE
+Create file: src/lib/team-intelligence/rules-engine.ts
+Import DetectedPattern, DailySnapshotData from ./types.
+Export detectPatterns(snapshots: DailySnapshotData[]): DetectedPattern[] — takes snapshots (most recent first), returns detected patterns. Check these rules:
+Improvement: Avg productivityScore of last 3 days ≥5% higher than previous 3 days → {type:'improvement', severity:'info', data:{recentAvg,previousAvg,changePercent}, message:'Productivity trending upward'}
+Decline: Avg productivityScore of last 3 days ≥5% lower than previous 3 → {type:'decline', severity:'warning', data:{recentAvg,previousAvg,changePercent}, message:'Productivity trending downward'}
+Strong Focus: Most recent day deepWorkMinutes ≥20% above 7-day avg → {type:'strong_focus', severity:'info', data:{todayFocus,avgFocus,percentAbove}, message:'Focus time significantly above average'}
+Deadline Risk: Most recent day tasksOverdue > previous day → {type:'deadline_risk', severity:'warning', data:{todayOverdue,yesterdayOverdue}, message:'Overdue tasks increasing'}
+Streak: Count consecutive days (from recent) where productivityScore≥60. If ≥5 → {type:'streak', severity:'info', data:{streakDays}, message:'Strong consistency streak'}
+Meeting Overload: 3+ of last 5 days have meetingTimeMinutes >50% of activeTimeMinutes → {type:'meeting_overload', severity:'warning', data:{daysOverloaded,avgMeetingPercent}, message:'High meeting load detected'}
+Low Output: Most recent day tasksCompleted===0 AND activeTimeMinutes>60 → {type:'low_output', severity:'warning', data:{activeTime}, message:'Active time with zero task completions'}
+Also export calculateStreak(snapshots: DailySnapshotData[], threshold=60): number — count consecutive days from most recent where productivityScore>=threshold.
+
+PART B — MOCK DATA SEEDER
+Create file: src/lib/team-intelligence/seed-demo-data.ts
+Import Prisma client from existing location (inspect codebase for correct path). Import scoring functions from ./scoring.
+Export seedTeamIntelligenceData(workspaceId: string, userIds: string[]): Promise<void>
+For each userId, generate 30 days of snapshots (skip weekends):
+Give each user a personality: first 25% "high performer" (high scores, low overdue, high focus), next 25% "steady" (consistent middle), next 25% "improving" (scores trend upward), last 25% "struggling" (lower scores, higher overdue)
+Random realistic values: activeTimeMinutes 300-510, deepWorkMinutes 60-240, meetingTimeMinutes 30-150, tasksAssigned 3-12, tasksCompleted 2-to-assigned, tasksOverdue 0-3, contextSwitches 3-25, avgFocusSession 15-55
+Calculate shallowWorkMinutes = activeTime - deepWork - meetings
+focusSessionMinutes = deepWork × random(0.6-0.9)
+longestFocusSession = avgFocusSession + random(10-30)
+tasksInProgress = assigned - completed
+Calculate all scores using scoring.ts functions
+Use prisma.teamDailySnapshot.upsert (safe to run multiple times)
+Also generate per user: 5-8 sample TeamAiInsight (mix of categories, realistic messages, expiresAt=7 days, roleContext='employee') and 3-5 sample TeamAlert (at least 1 critical for struggling user, 1 warning for declining, 1 info for achievement, expiresAt=14 days).
+Use prisma.$transaction for bulk operations.
+
+PART C — tRPC ROUTER
+Create teamIntelligence tRPC router following the EXACT same patterns as existing routers. Register it in the main app router.
+20 procedures total:
+Queries (protected):
+A. getMyDashboard — Input: {workspaceId, dateRange?:{from,to}} → Default last 14 days. Query TeamDailySnapshot for current user, order by date desc. Get today's snapshot, calculate streak, get unread insights (limit 10), get active alerts. Return EmployeeDashboardData shape.
+B. getTeamDashboard — Input: {workspaceId, dateRange?} → Verify role is manager/admin/owner (throw FORBIDDEN if not). Get employees from TeamManagerAssignment (unassignedAt null). For each: get recent snapshot, calc trend (7d vs prev 7d), get risk level, get name+avatar from users table. Aggregate team totals. Get manager alerts. Return ManagerDashboardData shape.
+C. getAdminDashboard — Input: {workspaceId, dateRange?} → Verify admin/owner. Get ALL workspace members + snapshots. Group by team. Calc org-wide stats + per-team summaries + risk distribution. Return AdminDashboardData shape.
+D. getEmployeeDetail — Input: {workspaceId, employeeUserId, dateRange?} → Verify: user is the employee OR their manager (check TeamManagerAssignment) OR admin/owner. Return same shape as getMyDashboard for specified employee.
+E. compare — Input: {workspaceId, periodA:{from,to}, periodB:{from,to}, userId?, metrics?} → If userId differs from current user, verify manager/admin. Query snapshots for both periods. Calc averages for: productivityScore, focusScore, deepWorkMinutes, tasksCompleted, tasksOverdue, consistencyScore, executionScore. Calc deltaPercent = ((B_avg-A_avg)/A_avg)*100. Direction: delta>2='up', <-2='down', else 'stable'. Return ComparisonResult[].
+F. getInsights — Input: {workspaceId, limit=20, offset=0, unreadOnly=false} → Query TeamAiInsight for current user, isDismissed=false, ordered by generatedAt desc. Return insights + total count.
+G. getAiSettings — Input: {workspaceId} → Upsert with defaults TeamAiSettings for current user.
+H. getOrgSettings — Input: {workspaceId} → Verify admin/owner. Upsert TeamOrgSettings.
+I. getAlerts — Input: {workspaceId} → Role-based: employee sees own alerts with visibleToRole='employee'; manager sees alerts for direct reports with visibleToRole in ['employee','manager']; admin sees all workspace alerts. Filter isAcknowledged=false, expiresAt>now. Order by severity (critical first) then triggeredAt desc.
+J. getManagerAssignments — Input: {workspaceId} → Manager gets their assignments, admin gets all.
+Mutations (protected):
+K. markInsightRead — Input: {insightId} → Set isRead=true where id+userId match.
+L. dismissInsight — Input: {insightId} → Set isDismissed=true where id+userId match.
+M. saveInsight — Input: {insightId} → Toggle isSaved where id+userId match.
+N. updateAiSettings — Input: {workspaceId, ...all setting fields optional} → Update TeamAiSettings.
+O. updateOrgSettings — Input: {workspaceId, ...all org fields optional} → Verify admin/owner. Update TeamOrgSettings.
+P. acknowledgeAlert — Input: {alertId} → Set isAcknowledged=true, acknowledgedBy=currentUser, acknowledgedAt=now.
+Q. snoozeAlert — Input: {alertId, snoozeUntil} → Set isSnoozed=true, snoozedUntil=parsed date.
+R. assignManager — Input: {workspaceId, managerUserId, employeeUserId, teamId?} → Verify admin/owner. Create TeamManagerAssignment.
+S. removeManagerAssignment — Input: {assignmentId} → Verify admin/owner. Set unassignedAt=now.
+T. seedDemoData — Input: {workspaceId} → Verify admin/owner. Get all workspace member userIds. Call seedTeamIntelligenceData. Also create TeamManagerAssignment records (assign first admin as manager of all others). Return {success:true, usersSeeded:count}.
+Use Zod for ALL input validation.
+BOUNDARIES:
+Follow EXACT same router/auth patterns as existing routers
+Do NOT create any frontend files
+Do NOT modify Prisma schema
+Do NOT modify any existing router

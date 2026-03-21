@@ -1,0 +1,72 @@
+GLOBAL RULES — READ BEFORE DOING ANYTHING
+
+TECH STACK (do not deviate):
+
+- Frontend: React 18 + TypeScript, Vite, Wouter (routing), TanStack React Query v5, shadcn/ui, Tailwind CSS, Framer Motion, Recharts 2.15.2
+- Backend: Express.js + TypeScript (tsx), REST API only
+- Database: PostgreSQL via Drizzle ORM (drizzle-kit push — never prisma, never raw SQL migrations)
+- Auth: Replit Auth — user ID is req.user.claims.sub (a string like "user:12345678")
+- No Next.js, no Prisma, no tRPC, no Redis, no [Socket.io](http://socket.io/), no BullMQ
+
+FILE STRUCTURE RULES:
+
+- Schema: shared/schema.ts (append only — never delete or rename existing tables/exports)
+- Shared code (used by both client AND server): shared/ directory
+- API routes: add to server/routes.ts (there is NO server/routes/ subdirectory)
+- New pages: client/src/pages/ — register in client/src/App.tsx using wouter <Route>
+- Page URL pattern: /dashboard/feature-name (never /workspace/:id/...)
+- Storage: all DB operations go through IStorage interface in server/storage.ts — add methods there, call storage.* from routes
+- Components: client/src/components/
+
+SCHEMA RULES:
+
+- Primary keys: serial().primaryKey() for new tables (match existing pattern)
+- User ID columns: text('user_id').notNull() — these are Replit Auth string IDs
+- Before adding any new column type (uuid, jsonb, numeric, date, etc.), add it to the import at line 1 of shared/schema.ts
+- jsonb defaults: use .$defaultFn(() => [...]) not .default('[]') string literals
+- After schema changes: run npx drizzle-kit push
+
+ROLES:
+
+- Valid user roles in this app: 'owner', 'admin', 'member' only
+- To check a user's role in a route: query the users table using req.user.claims.sub to get the role field — the role is NOT in the auth token
+- There is no 'manager', 'guest', or 'viewer' role
+
+AUTH MIDDLEWARE:
+
+- Import: import { isAuthenticated } from "./replit_integrations/auth"
+- Protect all /api/ routes with isAuthenticated middleware
+- Get current user ID: req.user.claims.sub
+
+USERS TABLE FIELD NAMES:
+
+- firstName (not "name")
+- lastName (not "surname")
+- profileImageUrl (not "avatar")
+- id (the Replit Auth string ID)
+
+RECHARTS:
+
+- Already installed at version 2.15.2 — do NOT install it again
+- Dark theme: transparent background, gray-400 axis labels, gray-700 grid lines
+- Always wrap in ResponsiveContainer
+
+PACKAGE INSTALLATION:
+
+- Never use "npm install" directly — use the Replit package manager tool
+
+COST-SAVING RULES (follow strictly):
+
+1. Reuse existing shadcn/ui components — never create a new component if an existing one works
+2. Do not create seed data files unless this prompt explicitly asks for one
+3. Do not create README or documentation files
+4. Do not add console.log debugging statements
+5. Do not create example/demo/test files unless explicitly asked
+
+FEATURE COMPLETENESS RULE (most important):
+
+- Every single feature, field, button, section, and behaviour described in this prompt must be implemented
+- Do not skip, simplify, stub, or placeholder any described feature
+- If a section says "visual only" build the full visual — do not reduce it
+- If a section says "wire to API" implement the full API connection with loading + empty states
+- Only mark a feature as done when it fully matches the descriptio

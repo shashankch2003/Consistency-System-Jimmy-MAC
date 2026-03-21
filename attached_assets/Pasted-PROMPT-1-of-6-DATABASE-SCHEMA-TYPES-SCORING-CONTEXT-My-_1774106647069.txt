@@ -1,0 +1,194 @@
+PROMPT 1 of 6 — DATABASE SCHEMA + TYPES + SCORING
+CONTEXT
+My app is an AI-driven productivity platform built with React, TypeScript, Express.js backend, Drizzle ORM, PostgreSQL,
+and REST API routes. The Drizzle schema is at shared/schema.ts. I am adding a Teams Productivity Intelligence feature.
+This prompt adds database tables, TypeScript types, and pure scoring utility functions.
+TASK
+Do three things in order: (A) Add 6 new Drizzle tables to the schema, (B) Create TypeScript types file, (C) Create scoring
+utilities file. Inspect shared/schema.ts and existing file structure first.
+PART A — DATABASE TABLES
+Add 6 new tables AFTER all existing tables in shared/schema.ts using Drizzle's pgTable. Do NOT modify/rename/delete
+any existing table or export.
+1. teamDailySnapshots
+• id: uuid().defaultRandom().primaryKey()
+• userId: text('user_id').notNull()
+• workspaceId: text('workspace_id').notNull()
+• date: date('date').notNull()
+• activeTimeMinutes: integer('active_time_minutes').default(0).notNull()
+• deepWorkMinutes: integer('deep_work_minutes').default(0).notNull()
+• shallowWorkMinutes: integer('shallow_work_minutes').default(0).notNull()
+• meetingTimeMinutes: integer('meeting_time_minutes').default(0).notNull()
+• focusSessionMinutes: integer('focus_session_minutes').default(0).notNull()
+• tasksAssigned: integer('tasks_assigned').default(0).notNull()
+• tasksCompleted: integer('tasks_completed').default(0).notNull()
+• tasksOverdue: integer('tasks_overdue').default(0).notNull()
+• tasksInProgress: integer('tasks_in_progress').default(0).notNull()
+• contextSwitches: integer('context_switches').default(0).notNull()
+• avgFocusSession: integer('avg_focus_session').default(0).notNull()
+• longestFocusSession: integer('longest_focus_session').default(0).notNull()
+• productivityScore: numeric('productivity_score', { precision: 5, scale: 2 }).default('0').notNull()
+• focusScore: numeric('focus_score', { precision: 5, scale: 2 }).default('0').notNull()
+• consistencyScore: numeric('consistency_score', { precision: 5, scale: 2 }).default('0').notNull()
+• executionScore: numeric('execution_score', { precision: 5, scale: 2 }).default('0').notNull()
+• collaborationScore: numeric('collaboration_score', { precision: 5, scale: 2 }).default('0').notNull()
+• createdAt: timestamp('created_at').defaultNow().notNull()
+• updatedAt: timestamp('updated_at').defaultNow().notNull()
+• Add unique index on [userId, workspaceId, date]
+• Add index on [userId, date]
+• Add index on [workspaceId, date]
+2. teamAiInsights
+• id: uuid().defaultRandom().primaryKey()
+• userId: text('user_id').notNull()
+• workspaceId: text('workspace_id').notNull()
+• targetUserId: text('target_user_id')
+• roleContext: text('role_context').notNull()
+• category: text('category').notNull()
+• title: text('title').notNull()
+• message: text('message').notNull()
+• confidence: text('confidence').default('medium').notNull()
+• dataContext: jsonb('data_context')
+• isRead: boolean('is_read').default(false).notNull()
+• isDismissed: boolean('is_dismissed').default(false).notNull()
+• isSaved: boolean('is_saved').default(false).notNull()
+• generatedAt: timestamp('generated_at').defaultNow().notNull()
+• expiresAt: timestamp('expires_at').notNull()
+• createdAt: timestamp('created_at').defaultNow().notNull()
+• Add index on [userId, workspaceId, isRead]
+• Add index on [userId, roleContext]
+3. teamAiSettings
+• id: uuid().defaultRandom().primaryKey()
+• userId: text('user_id').notNull()
+• workspaceId: text('workspace_id').notNull()
+• insightsEnabled: boolean('insights_enabled').default(true).notNull()
+• morningBriefEnabled: boolean('morning_brief_enabled').default(true).notNull()
+• morningBriefTime: text('morning_brief_time').default('07:30').notNull()
+• categoriesEnabled:
+jsonb('categories_enabled').default('["achievement","warning","suggestion","pattern","coaching"]').notNull()
+• frequency: text('frequency').default('daily').notNull()
+• intensity: text('intensity').default('moderate').notNull()
+• mutedCategories: jsonb('muted_categories').default('[]').notNull()
+• notificationChannel: text('notification_channel').default('in_app').notNull()
+• weekendInsights: boolean('weekend_insights').default(false).notNull()
+• tonePreference: text('tone_preference').default('encouraging').notNull()
+• teamBriefEnabled: boolean('team_brief_enabled').default(true).notNull()
+• teamBriefDay: integer('team_brief_day').default(1).notNull()
+• riskAlerts: text('risk_alerts').default('daily_digest').notNull()
+• coachingSuggestions: boolean('coaching_suggestions').default(true).notNull()
+• createdAt: timestamp('created_at').defaultNow().notNull()
+• updatedAt: timestamp('updated_at').defaultNow().notNull()
+• Add unique index on [userId, workspaceId]
+4. teamManagerAssignments
+• id: uuid().defaultRandom().primaryKey()
+• managerUserId: text('manager_user_id').notNull()
+• employeeUserId: text('employee_user_id').notNull()
+• workspaceId: text('workspace_id').notNull()
+• teamId: text('team_id')
+• assignedAt: timestamp('assigned_at').defaultNow().notNull()
+• unassignedAt: timestamp('unassigned_at')
+• createdAt: timestamp('created_at').defaultNow().notNull()
+• Add unique index on [managerUserId, employeeUserId, workspaceId]
+• Add index on [managerUserId, workspaceId]
+• Add index on [employeeUserId, workspaceId]
+5. teamAlerts
+• id: uuid().defaultRandom().primaryKey()
+• workspaceId: text('workspace_id').notNull()
+• targetUserId: text('target_user_id').notNull()
+• visibleToRole: text('visible_to_role').notNull()
+• alertType: text('alert_type').notNull()
+• severity: text('severity').notNull()
+• title: text('title').notNull()
+• message: text('message').notNull()
+• dataContext: jsonb('data_context')
+• isAcknowledged: boolean('is_acknowledged').default(false).notNull()
+• acknowledgedBy: text('acknowledged_by')
+• acknowledgedAt: timestamp('acknowledged_at')
+• isSnoozed: boolean('is_snoozed').default(false).notNull()
+• snoozedUntil: timestamp('snoozed_until')
+• triggeredAt: timestamp('triggered_at').defaultNow().notNull()
+• expiresAt: timestamp('expires_at').notNull()
+• createdAt: timestamp('created_at').defaultNow().notNull()
+• Add index on [workspaceId, visibleToRole, isAcknowledged]
+• Add index on [targetUserId]
+6. teamOrgSettings
+• id: uuid().defaultRandom().primaryKey()
+• workspaceId: text('workspace_id').unique().notNull()
+• managerSeesIndividualFocus: boolean('manager_sees_individual_focus').default(true).notNull()
+• managerSeesIndividualIdle: boolean('manager_sees_individual_idle').default(false).notNull()
+• managerSeesAppUsage: text('manager_sees_app_usage').default('none').notNull()
+• managerSeesScreenTime: boolean('manager_sees_screen_time').default(false).notNull()
+• scoringWeights: jsonb('scoring_weights')
+• minDataDaysForScoring: integer('min_data_days_for_scoring').default(7).notNull()
+• newEmployeeRampDays: integer('new_employee_ramp_days').default(30).notNull()
+• standardWorkStart: text('standard_work_start').default('09:00').notNull()
+• standardWorkEnd: text('standard_work_end').default('17:00').notNull()
+• workDays: jsonb('work_days').default('[1,2,3,4,5]').notNull()
+• createdAt: timestamp('created_at').defaultNow().notNull()
+• updatedAt: timestamp('updated_at').defaultNow().notNull()
+After adding all 6 tables, run: npx drizzle-kit push
+PART B — TYPES FILE
+Create file: client/src/lib/team-intelligence/types.ts
+Export these exact types:
+export type RiskLevel = 'on_track' | 'needs_attention' | 'at_risk';
+export type TrendDirection = 'up' | 'down' | 'stable';
+export type InsightCategory = 'achievement' | 'warning' | 'suggestion' | 'pattern' | 'coaching' |
+'risk';
+export type InsightConfidence = 'high' | 'medium' | 'low';
+export type RoleContext = 'employee' | 'manager' | 'admin';
+Also export these interfaces (identical field names to original):
+• ScoreBreakdown { taskCompletion, focus, deadlineAdherence, consistency, execution, collaboration, total } — all
+number
+• DateRange { from: Date; to: Date }
+• DailySnapshotData { date: string; activeTimeMinutes, deepWorkMinutes, shallowWorkMinutes, meetingTimeMinutes,
+focusSessionMinutes, tasksAssigned, tasksCompleted, tasksOverdue, tasksInProgress, contextSwitches,
+avgFocusSession, longestFocusSession, productivityScore, focusScore, consistencyScore, executionScore,
+collaborationScore } — all number
+• TeamMemberSummary { userId, name, avatar: string|null, role, productivityScore, trend: TrendDirection, trendDelta,
+tasksCompleted, overdueCount, focusTimeMinutes, riskLevel: RiskLevel, statusBadge } — mixed
+• ComparisonResult { metric, periodAValue, periodBValue, deltaPercent, direction: TrendDirection }
+• DetectedPattern { type, severity: 'info'|'warning'|'critical', data: Record<string,number>, message }
+• GeneratedInsight { category: InsightCategory, title, message, confidence: InsightConfidence }
+• EmployeeDashboardData { currentScores: ScoreBreakdown, todaySnapshot: DailySnapshotData|null,
+recentSnapshots: DailySnapshotData[], streak: number, insights: GeneratedInsight[], alerts: any[] }
+• ManagerDashboardData { teamName, memberCount, teamScore, teamTrend: TrendDirection, totalTasksCompleted,
+totalOverdue, teamHealth: RiskLevel, members: TeamMemberSummary[], alerts: any[] }
+• AdminDashboardData { orgScore, orgTrend: TrendDirection, totalEmployees, totalTasksCompleted,
+deadlineAdherenceRate, avgFocusMinutes, teams: [array of team objects with teamId, teamName, managerName,
+memberCount, score, velocity, overduePercent, health: RiskLevel], riskDistribution: { onTrack, needsAttention, atRisk }
+}
+PART C — SCORING UTILITIES
+Create file: client/src/lib/team-intelligence/scoring.ts
+Import ScoreBreakdown from ./types. Export these pure functions (zero DB calls, zero side effects):
+• calculateTaskCompletionRate(completed, assigned): number — if assigned===0 return 0, else Math.min(100,
+Math.round((completed/assigned)*100))
+• calculateFocusScore(deepWorkMin, avgSessionMin, contextSwitches, targetDeepWorkMin=240): number —
+Math.min(100, Math.round((deepWorkMin/targetDeepWorkMin)*60 + (avgSessionMin/45)*20 +
+Math.max(0,(1-contextSwitches/20)*20))). Clamp 0-100.
+• calculateConsistencyScore(dailyScores: number[]): number — If <3 values return 50. Calc mean+stdDev.
+Formula: Math.max(0, Math.min(100, Math.round(100-(stdDev/mean*100)))). If mean===0 return 0. Include helper
+stdDev function.
+• calculateExecutionScore(deadlineAdherence, estimateAccuracy, firstPassQuality): number —
+Math.round(deadlineAdherence*0.4 + estimateAccuracy*0.3 + firstPassQuality*0.3). Clamp 0-100.
+• calculateCollaborationScore(responseTimeScore, reviewActivity, handoffScore): number — Math.min(100,
+Math.round(responseTimeScore*0.4 + reviewActivity*0.3 + handoffScore*0.3)). Clamp 0-100.
+• calculateProductivityScore(components: Omit<ScoreBreakdown,'total'>): ScoreBreakdown — total =
+Math.round(taskCompletion*0.25 + focus*0.20 + deadlineAdherence*0.15 + consistency*0.15 + execution*0.15 +
+collaboration*0.10). Clamp 0-100. Return {...components, total}.
+• calculateRiskScore(overdueCount, trendSlope, workloadRatio, engagementLevel): number — Normalize:
+overdueNorm=Math.min(100,overdueCount*20),
+declineNorm=trendSlope<0?Math.min(100,Math.abs(trendSlope)*10):0,
+overloadNorm=workloadRatio>1?Math.min(100,(workloadRatio-1)*200):0,
+disengageNorm=Math.max(0,100-engagementLevel). Formula: Math.round(overdueNorm*0.30+declineNorm*0.25+ov
+erloadNorm*0.20+disengageNorm*0.15+(overdueNorm*0.5)*0.10). Clamp 0-100.
+• calculateTeamHealthScore(avgMemberScore, workloadVariance, velocityTrend, deadlineRate): number —
+workloadBalanceScore=Math.max(0,100-workloadVariance*5),
+velocityScore=Math.min(100,Math.max(0,50+velocityTrend*10)). Formula: Math.round(avgMemberScore*0.25+worklo
+adBalanceScore*0.20+velocityScore*0.20+deadlineRate*0.15+avgMemberScore*0.10+workloadBalanceScore*0.10).
+Clamp 0-100.
+• getRiskLevel(score): RiskLevel — >70='at_risk', >40='needs_attention', else 'on_track'
+• getTrendDirection(current, previous, threshold=2): TrendDirection — current>previous+threshold='up',
+current<previous-threshold='down', else 'stable'
+BOUNDARIES
+✖ Use exact field names — do NOT rename anything
+✖ Do NOT add relations to existing tables
+✖ Do NOT create seed files, migration files, React components, or API routes
+✖ Do NOT modify any existing files except shared/schema.ts (append only)

@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, varchar, uuid, jsonb, numeric, date, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -746,3 +746,134 @@ export const insertHourlyEntrySchema = createInsertSchema(hourlyEntries).omit({ 
 export const insertDailyReasonSchema = createInsertSchema(dailyReasons).omit({ id: true });
 export const insertTaskBankItemSchema = createInsertSchema(taskBankItems).omit({ id: true, createdAt: true });
 export const insertNoteSchema = createInsertSchema(notes).omit({ id: true, createdAt: true, updatedAt: true });
+
+export const teamDailySnapshots = pgTable("team_daily_snapshots", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").notNull(),
+  workspaceId: text("workspace_id").notNull(),
+  date: date("date").notNull(),
+  activeTimeMinutes: integer("active_time_minutes").default(0).notNull(),
+  deepWorkMinutes: integer("deep_work_minutes").default(0).notNull(),
+  shallowWorkMinutes: integer("shallow_work_minutes").default(0).notNull(),
+  meetingTimeMinutes: integer("meeting_time_minutes").default(0).notNull(),
+  focusSessionMinutes: integer("focus_session_minutes").default(0).notNull(),
+  tasksAssigned: integer("tasks_assigned").default(0).notNull(),
+  tasksCompleted: integer("tasks_completed").default(0).notNull(),
+  tasksOverdue: integer("tasks_overdue").default(0).notNull(),
+  tasksInProgress: integer("tasks_in_progress").default(0).notNull(),
+  contextSwitches: integer("context_switches").default(0).notNull(),
+  avgFocusSession: integer("avg_focus_session").default(0).notNull(),
+  longestFocusSession: integer("longest_focus_session").default(0).notNull(),
+  productivityScore: numeric("productivity_score", { precision: 5, scale: 2 }).default("0").notNull(),
+  focusScore: numeric("focus_score", { precision: 5, scale: 2 }).default("0").notNull(),
+  consistencyScore: numeric("consistency_score", { precision: 5, scale: 2 }).default("0").notNull(),
+  executionScore: numeric("execution_score", { precision: 5, scale: 2 }).default("0").notNull(),
+  collaborationScore: numeric("collaboration_score", { precision: 5, scale: 2 }).default("0").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex("team_daily_snapshots_user_workspace_date_idx").on(t.userId, t.workspaceId, t.date),
+  index("team_daily_snapshots_user_date_idx").on(t.userId, t.date),
+  index("team_daily_snapshots_workspace_date_idx").on(t.workspaceId, t.date),
+]);
+
+export const teamAiInsights = pgTable("team_ai_insights", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").notNull(),
+  workspaceId: text("workspace_id").notNull(),
+  targetUserId: text("target_user_id"),
+  roleContext: text("role_context").notNull(),
+  category: text("category").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  confidence: text("confidence").default("medium").notNull(),
+  dataContext: jsonb("data_context"),
+  isRead: boolean("is_read").default(false).notNull(),
+  isDismissed: boolean("is_dismissed").default(false).notNull(),
+  isSaved: boolean("is_saved").default(false).notNull(),
+  generatedAt: timestamp("generated_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("team_ai_insights_user_workspace_read_idx").on(t.userId, t.workspaceId, t.isRead),
+  index("team_ai_insights_user_role_idx").on(t.userId, t.roleContext),
+]);
+
+export const teamAiSettings = pgTable("team_ai_settings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").notNull(),
+  workspaceId: text("workspace_id").notNull(),
+  insightsEnabled: boolean("insights_enabled").default(true).notNull(),
+  morningBriefEnabled: boolean("morning_brief_enabled").default(true).notNull(),
+  morningBriefTime: text("morning_brief_time").default("07:30").notNull(),
+  categoriesEnabled: jsonb("categories_enabled").$defaultFn(() => ["achievement", "warning", "suggestion", "pattern", "coaching"]).notNull(),
+  frequency: text("frequency").default("daily").notNull(),
+  intensity: text("intensity").default("moderate").notNull(),
+  mutedCategories: jsonb("muted_categories").$defaultFn(() => []).notNull(),
+  notificationChannel: text("notification_channel").default("in_app").notNull(),
+  weekendInsights: boolean("weekend_insights").default(false).notNull(),
+  tonePreference: text("tone_preference").default("encouraging").notNull(),
+  teamBriefEnabled: boolean("team_brief_enabled").default(true).notNull(),
+  teamBriefDay: integer("team_brief_day").default(1).notNull(),
+  riskAlerts: text("risk_alerts").default("daily_digest").notNull(),
+  coachingSuggestions: boolean("coaching_suggestions").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex("team_ai_settings_user_workspace_idx").on(t.userId, t.workspaceId),
+]);
+
+export const teamManagerAssignments = pgTable("team_manager_assignments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  managerUserId: text("manager_user_id").notNull(),
+  employeeUserId: text("employee_user_id").notNull(),
+  workspaceId: text("workspace_id").notNull(),
+  teamId: text("team_id"),
+  assignedAt: timestamp("assigned_at").defaultNow().notNull(),
+  unassignedAt: timestamp("unassigned_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex("team_manager_assignments_unique_idx").on(t.managerUserId, t.employeeUserId, t.workspaceId),
+  index("team_manager_assignments_manager_idx").on(t.managerUserId, t.workspaceId),
+  index("team_manager_assignments_employee_idx").on(t.employeeUserId, t.workspaceId),
+]);
+
+export const teamAlerts = pgTable("team_alerts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  workspaceId: text("workspace_id").notNull(),
+  targetUserId: text("target_user_id").notNull(),
+  visibleToRole: text("visible_to_role").notNull(),
+  alertType: text("alert_type").notNull(),
+  severity: text("severity").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  dataContext: jsonb("data_context"),
+  isAcknowledged: boolean("is_acknowledged").default(false).notNull(),
+  acknowledgedBy: text("acknowledged_by"),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  isSnoozed: boolean("is_snoozed").default(false).notNull(),
+  snoozedUntil: timestamp("snoozed_until"),
+  triggeredAt: timestamp("triggered_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("team_alerts_workspace_role_ack_idx").on(t.workspaceId, t.visibleToRole, t.isAcknowledged),
+  index("team_alerts_target_user_idx").on(t.targetUserId),
+]);
+
+export const teamOrgSettings = pgTable("team_org_settings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  workspaceId: text("workspace_id").unique().notNull(),
+  managerSeesIndividualFocus: boolean("manager_sees_individual_focus").default(true).notNull(),
+  managerSeesIndividualIdle: boolean("manager_sees_individual_idle").default(false).notNull(),
+  managerSeesAppUsage: text("manager_sees_app_usage").default("none").notNull(),
+  managerSeesScreenTime: boolean("manager_sees_screen_time").default(false).notNull(),
+  scoringWeights: jsonb("scoring_weights"),
+  minDataDaysForScoring: integer("min_data_days_for_scoring").default(7).notNull(),
+  newEmployeeRampDays: integer("new_employee_ramp_days").default(30).notNull(),
+  standardWorkStart: text("standard_work_start").default("09:00").notNull(),
+  standardWorkEnd: text("standard_work_end").default("17:00").notNull(),
+  workDays: jsonb("work_days").$defaultFn(() => [1, 2, 3, 4, 5]).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

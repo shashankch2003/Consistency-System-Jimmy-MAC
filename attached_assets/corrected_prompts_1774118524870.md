@@ -1,0 +1,717 @@
+# TEAMS PRODUCTIVITY INTELLIGENCE — CORRECTED PROMPTS
+
+## 6 Optimized Replit Prompts — All 19 Mistakes Fixed
+
+**Stack:** React with TypeScript, Express.js backend, Drizzle ORM, PostgreSQL, REST API routes. Schema file at `shared/schema.ts`.
+
+### CHANGELOG — All 19 Fixes Applied
+
+| # | Mistake | Fix Applied |
+|---|---------|-------------|
+| 1 | Missing `uuid/jsonb/numeric/date` imports in schema.ts | Added explicit import instruction in Prompt 1 Part A |
+| 2 | `jsonb` defaults using string literals instead of JS values | Changed all `.default('...')` on jsonb columns to `.$defaultFn(() => [...])` |
+| 3 | No `server/routes/` directory — single `server/routes.ts` file | Changed Prompt 2 to add routes to existing `server/routes.ts` |
+| 4 | `workspaceId` concept doesn't exist in the app | Replaced with hardcoded `"default"` value everywhere |
+| 5 | `"manager"` role doesn't exist — only `owner/admin/member` | Changed all role checks to use `admin` as manager-equivalent |
+| 6 | URL pattern `/workspace/:workspaceId/` instead of `/dashboard/` | Changed to `/dashboard/team-intelligence` |
+| 7 | `users` table has `firstName/lastName/profileImageUrl`, not `name/avatar` | Added explicit field name instructions |
+| 8 | "Get all workspace members" concept doesn't exist | Changed to query `users` table directly |
+| 9 | `scoring.ts` placed in `client/src/` but needed by server | Moved to `shared/lib/team-intelligence/scoring.ts` |
+| 10 | `IStorage` pattern never mentioned in Prompt 2 | Added storage abstraction instructions |
+| 11 | `getRiskLevel` ambiguity — risk score or productivity score | Added explicit clarification |
+| 12 | `calculateTeamHealthScore` duplicates two factors in weights | Noted as intentional but flagged |
+| 13 | `npm install recharts` — wrong install method for Replit | Changed to use Replit package manager |
+| 14 | `tasksInProgress = assigned - completed` can go negative | Added `Math.max(0, ...)` |
+| 15 | `types.ts` also in wrong location — server can't import from `client/src/` | Moved to `shared/lib/team-intelligence/types.ts` |
+| 16 | `shallowWorkMinutes` can go negative in seeder | Added `Math.max(0, ...)` |
+| 17 | `onConflictDoUpdate()` missing required `target` parameter | Added explicit target specification |
+| 18 | Role checks need DB lookup — role not in auth token | Added DB query instructions for role checks |
+| 19 | `calculateRiskScore` weights sum to 0.95 not 1.00 | Fixed formula to sum to 1.00 |
+
+### INSTRUCTIONS
+
+1. Copy ONE prompt at a time into Replit
+2. Wait for full completion
+3. Verify no console errors
+4. If error → STOP → come back with the exact error for a patch
+5. If success → next prompt
+6. Do NOT skip or reorder
+
+---
+
+## PROMPT 1 of 6 — DATABASE SCHEMA + TYPES + SCORING
+
+### CONTEXT
+
+My app is an AI-driven productivity platform built with React, TypeScript, Express.js backend, Drizzle ORM, PostgreSQL, and REST API routes. The Drizzle schema is at `shared/schema.ts`. I am adding a Teams Productivity Intelligence feature. This prompt adds database tables, TypeScript types, and pure scoring utility functions.
+
+### TASK
+
+Do three things in order: (A) Add 6 new Drizzle tables to the schema, (B) Create TypeScript types file, (C) Create scoring utilities file. Inspect `shared/schema.ts` and existing file structure first.
+
+### PART A — DATABASE TABLES
+
+**IMPORTANT FIRST STEP:** Before adding any tables, update the import statement at line 1 of `shared/schema.ts` to add these missing types from `drizzle-orm/pg-core`: `uuid`, `jsonb`, `numeric`, `date`. Add them to the existing import — do NOT create a separate import line.
+
+Add 6 new tables AFTER all existing tables in `shared/schema.ts` using Drizzle's `pgTable`. Do NOT modify/rename/delete any existing table or export.
+
+**1. teamDailySnapshots**
+
+- id: `uuid().defaultRandom().primaryKey()`
+- userId: `text('user_id').notNull()`
+- workspaceId: `text('workspace_id').notNull()`
+- date: `date('date').notNull()`
+- activeTimeMinutes: `integer('active_time_minutes').default(0).notNull()`
+- deepWorkMinutes: `integer('deep_work_minutes').default(0).notNull()`
+- shallowWorkMinutes: `integer('shallow_work_minutes').default(0).notNull()`
+- meetingTimeMinutes: `integer('meeting_time_minutes').default(0).notNull()`
+- focusSessionMinutes: `integer('focus_session_minutes').default(0).notNull()`
+- tasksAssigned: `integer('tasks_assigned').default(0).notNull()`
+- tasksCompleted: `integer('tasks_completed').default(0).notNull()`
+- tasksOverdue: `integer('tasks_overdue').default(0).notNull()`
+- tasksInProgress: `integer('tasks_in_progress').default(0).notNull()`
+- contextSwitches: `integer('context_switches').default(0).notNull()`
+- avgFocusSession: `integer('avg_focus_session').default(0).notNull()`
+- longestFocusSession: `integer('longest_focus_session').default(0).notNull()`
+- productivityScore: `numeric('productivity_score', { precision: 5, scale: 2 }).default('0').notNull()`
+- focusScore: `numeric('focus_score', { precision: 5, scale: 2 }).default('0').notNull()`
+- consistencyScore: `numeric('consistency_score', { precision: 5, scale: 2 }).default('0').notNull()`
+- executionScore: `numeric('execution_score', { precision: 5, scale: 2 }).default('0').notNull()`
+- collaborationScore: `numeric('collaboration_score', { precision: 5, scale: 2 }).default('0').notNull()`
+- createdAt: `timestamp('created_at').defaultNow().notNull()`
+- updatedAt: `timestamp('updated_at').defaultNow().notNull()`
+- Add unique index on [userId, workspaceId, date]
+- Add index on [userId, date]
+- Add index on [workspaceId, date]
+
+**2. teamAiInsights**
+
+- id: `uuid().defaultRandom().primaryKey()`
+- userId: `text('user_id').notNull()`
+- workspaceId: `text('workspace_id').notNull()`
+- targetUserId: `text('target_user_id')`
+- roleContext: `text('role_context').notNull()`
+- category: `text('category').notNull()`
+- title: `text('title').notNull()`
+- message: `text('message').notNull()`
+- confidence: `text('confidence').default('medium').notNull()`
+- dataContext: `jsonb('data_context')`
+- isRead: `boolean('is_read').default(false).notNull()`
+- isDismissed: `boolean('is_dismissed').default(false).notNull()`
+- isSaved: `boolean('is_saved').default(false).notNull()`
+- generatedAt: `timestamp('generated_at').defaultNow().notNull()`
+- expiresAt: `timestamp('expires_at').notNull()`
+- createdAt: `timestamp('created_at').defaultNow().notNull()`
+- Add index on [userId, workspaceId, isRead]
+- Add index on [userId, roleContext]
+
+**3. teamAiSettings**
+
+- id: `uuid().defaultRandom().primaryKey()`
+- userId: `text('user_id').notNull()`
+- workspaceId: `text('workspace_id').notNull()`
+- insightsEnabled: `boolean('insights_enabled').default(true).notNull()`
+- morningBriefEnabled: `boolean('morning_brief_enabled').default(true).notNull()`
+- morningBriefTime: `text('morning_brief_time').default('07:30').notNull()`
+- categoriesEnabled: `jsonb('categories_enabled').$defaultFn(() => ["achievement","warning","suggestion","pattern","coaching"]).notNull()`
+- frequency: `text('frequency').default('daily').notNull()`
+- intensity: `text('intensity').default('moderate').notNull()`
+- mutedCategories: `jsonb('muted_categories').$defaultFn(() => []).notNull()`
+- notificationChannel: `text('notification_channel').default('in_app').notNull()`
+- weekendInsights: `boolean('weekend_insights').default(false).notNull()`
+- tonePreference: `text('tone_preference').default('encouraging').notNull()`
+- teamBriefEnabled: `boolean('team_brief_enabled').default(true).notNull()`
+- teamBriefDay: `integer('team_brief_day').default(1).notNull()`
+- riskAlerts: `text('risk_alerts').default('daily_digest').notNull()`
+- coachingSuggestions: `boolean('coaching_suggestions').default(true).notNull()`
+- createdAt: `timestamp('created_at').defaultNow().notNull()`
+- updatedAt: `timestamp('updated_at').defaultNow().notNull()`
+- Add unique index on [userId, workspaceId]
+
+**4. teamManagerAssignments**
+
+- id: `uuid().defaultRandom().primaryKey()`
+- managerUserId: `text('manager_user_id').notNull()`
+- employeeUserId: `text('employee_user_id').notNull()`
+- workspaceId: `text('workspace_id').notNull()`
+- teamId: `text('team_id')`
+- assignedAt: `timestamp('assigned_at').defaultNow().notNull()`
+- unassignedAt: `timestamp('unassigned_at')`
+- createdAt: `timestamp('created_at').defaultNow().notNull()`
+- Add unique index on [managerUserId, employeeUserId, workspaceId]
+- Add index on [managerUserId, workspaceId]
+- Add index on [employeeUserId, workspaceId]
+
+**5. teamAlerts**
+
+- id: `uuid().defaultRandom().primaryKey()`
+- workspaceId: `text('workspace_id').notNull()`
+- targetUserId: `text('target_user_id').notNull()`
+- visibleToRole: `text('visible_to_role').notNull()`
+- alertType: `text('alert_type').notNull()`
+- severity: `text('severity').notNull()`
+- title: `text('title').notNull()`
+- message: `text('message').notNull()`
+- dataContext: `jsonb('data_context')`
+- isAcknowledged: `boolean('is_acknowledged').default(false).notNull()`
+- acknowledgedBy: `text('acknowledged_by')`
+- acknowledgedAt: `timestamp('acknowledged_at')`
+- isSnoozed: `boolean('is_snoozed').default(false).notNull()`
+- snoozedUntil: `timestamp('snoozed_until')`
+- triggeredAt: `timestamp('triggered_at').defaultNow().notNull()`
+- expiresAt: `timestamp('expires_at').notNull()`
+- createdAt: `timestamp('created_at').defaultNow().notNull()`
+- Add index on [workspaceId, visibleToRole, isAcknowledged]
+- Add index on [targetUserId]
+
+**6. teamOrgSettings**
+
+- id: `uuid().defaultRandom().primaryKey()`
+- workspaceId: `text('workspace_id').unique().notNull()`
+- managerSeesIndividualFocus: `boolean('manager_sees_individual_focus').default(true).notNull()`
+- managerSeesIndividualIdle: `boolean('manager_sees_individual_idle').default(false).notNull()`
+- managerSeesAppUsage: `text('manager_sees_app_usage').default('none').notNull()`
+- managerSeesScreenTime: `boolean('manager_sees_screen_time').default(false).notNull()`
+- scoringWeights: `jsonb('scoring_weights')`
+- minDataDaysForScoring: `integer('min_data_days_for_scoring').default(7).notNull()`
+- newEmployeeRampDays: `integer('new_employee_ramp_days').default(30).notNull()`
+- standardWorkStart: `text('standard_work_start').default('09:00').notNull()`
+- standardWorkEnd: `text('standard_work_end').default('17:00').notNull()`
+- workDays: `jsonb('work_days').$defaultFn(() => [1,2,3,4,5]).notNull()`
+- createdAt: `timestamp('created_at').defaultNow().notNull()`
+- updatedAt: `timestamp('updated_at').defaultNow().notNull()`
+
+After adding all 6 tables, run: `npx drizzle-kit push`
+
+### PART B — TYPES FILE
+
+**Create file: `shared/lib/team-intelligence/types.ts`**
+
+*(NOT in client/src/ — this file is shared between frontend and backend)*
+
+Export these exact types:
+
+```typescript
+export type RiskLevel = 'on_track' | 'needs_attention' | 'at_risk';
+export type TrendDirection = 'up' | 'down' | 'stable';
+export type InsightCategory = 'achievement' | 'warning' | 'suggestion' | 'pattern' | 'coaching' | 'risk';
+export type InsightConfidence = 'high' | 'medium' | 'low';
+export type RoleContext = 'employee' | 'manager' | 'admin';
+```
+
+Also export these interfaces (identical field names to original):
+
+- **ScoreBreakdown** { taskCompletion, focus, deadlineAdherence, consistency, execution, collaboration, total } — all number
+- **DateRange** { from: Date; to: Date }
+- **DailySnapshotData** { date: string; activeTimeMinutes, deepWorkMinutes, shallowWorkMinutes, meetingTimeMinutes, focusSessionMinutes, tasksAssigned, tasksCompleted, tasksOverdue, tasksInProgress, contextSwitches, avgFocusSession, longestFocusSession, productivityScore, focusScore, consistencyScore, executionScore, collaborationScore } — all number
+- **TeamMemberSummary** { userId, name, avatar: string|null, role, productivityScore, trend: TrendDirection, trendDelta, tasksCompleted, overdueCount, focusTimeMinutes, riskLevel: RiskLevel, statusBadge } — mixed
+- **ComparisonResult** { metric, periodAValue, periodBValue, deltaPercent, direction: TrendDirection }
+- **DetectedPattern** { type, severity: 'info'|'warning'|'critical', data: Record<string,number>, message }
+- **GeneratedInsight** { category: InsightCategory, title, message, confidence: InsightConfidence }
+- **EmployeeDashboardData** { currentScores: ScoreBreakdown, todaySnapshot: DailySnapshotData|null, recentSnapshots: DailySnapshotData[], streak: number, insights: GeneratedInsight[], alerts: any[] }
+- **ManagerDashboardData** { teamName, memberCount, teamScore, teamTrend: TrendDirection, totalTasksCompleted, totalOverdue, teamHealth: RiskLevel, members: TeamMemberSummary[], alerts: any[] }
+- **AdminDashboardData** { orgScore, orgTrend: TrendDirection, totalEmployees, totalTasksCompleted, deadlineAdherenceRate, avgFocusMinutes, teams: [array of team objects with teamId, teamName, managerName, memberCount, score, velocity, overduePercent, health: RiskLevel], riskDistribution: { onTrack, needsAttention, atRisk } }
+
+### PART C — SCORING UTILITIES
+
+**Create file: `shared/lib/team-intelligence/scoring.ts`**
+
+*(NOT in client/src/ — this file is shared between frontend and backend)*
+
+Import `ScoreBreakdown` from `./types`. Export these pure functions (zero DB calls, zero side effects):
+
+- **calculateTaskCompletionRate(completed, assigned): number** — if assigned===0 return 0, else `Math.min(100, Math.round((completed/assigned)*100))`
+
+- **calculateFocusScore(deepWorkMin, avgSessionMin, contextSwitches, targetDeepWorkMin=240): number** — `Math.min(100, Math.round((deepWorkMin/targetDeepWorkMin)*60 + (avgSessionMin/45)*20 + Math.max(0,(1-contextSwitches/20)*20)))`. Clamp 0-100.
+
+- **calculateConsistencyScore(dailyScores: number[]): number** — If <3 values return 50. Calc mean+stdDev. Formula: `Math.max(0, Math.min(100, Math.round(100-(stdDev/mean*100))))`. If mean===0 return 0. Include helper stdDev function.
+
+- **calculateExecutionScore(deadlineAdherence, estimateAccuracy, firstPassQuality): number** — `Math.round(deadlineAdherence*0.4 + estimateAccuracy*0.3 + firstPassQuality*0.3)`. Clamp 0-100.
+
+- **calculateCollaborationScore(responseTimeScore, reviewActivity, handoffScore): number** — `Math.min(100, Math.round(responseTimeScore*0.4 + reviewActivity*0.3 + handoffScore*0.3))`. Clamp 0-100.
+
+- **calculateProductivityScore(components: Omit<ScoreBreakdown,'total'>): ScoreBreakdown** — total = `Math.round(taskCompletion*0.25 + focus*0.20 + deadlineAdherence*0.15 + consistency*0.15 + execution*0.15 + collaboration*0.10)`. Clamp 0-100. Return `{...components, total}`.
+
+- **calculateRiskScore(overdueCount, trendSlope, workloadRatio, engagementLevel): number** — Normalize: `overdueNorm=Math.min(100,overdueCount*20)`, `declineNorm=trendSlope<0?Math.min(100,Math.abs(trendSlope)*10):0`, `overloadNorm=workloadRatio>1?Math.min(100,(workloadRatio-1)*200):0`, `disengageNorm=Math.max(0,100-engagementLevel)`. **FIXED Formula (weights sum to 1.00):** `Math.round(overdueNorm*0.30 + declineNorm*0.25 + overloadNorm*0.20 + disengageNorm*0.20 + (overdueNorm*0.5)*0.10)`. Clamp 0-100.
+
+- **calculateTeamHealthScore(avgMemberScore, workloadVariance, velocityTrend, deadlineRate): number** — `workloadBalanceScore=Math.max(0,100-workloadVariance*5)`, `velocityScore=Math.min(100,Math.max(0,50+velocityTrend*10))`. Formula: `Math.round(avgMemberScore*0.25 + workloadBalanceScore*0.20 + velocityScore*0.20 + deadlineRate*0.15 + avgMemberScore*0.10 + workloadBalanceScore*0.10)`. Clamp 0-100.
+
+- **getRiskLevel(score): RiskLevel** — >70='at_risk', >40='needs_attention', else 'on_track'. **IMPORTANT: This function takes the output of calculateRiskScore (where higher = more at risk), NOT a productivity score. Do not pass productivity scores to this function.**
+
+- **getTrendDirection(current, previous, threshold=2): TrendDirection** — current>previous+threshold='up', current<previous-threshold='down', else 'stable'
+
+### BOUNDARIES
+
+- Use exact field names — do NOT rename anything
+- Do NOT add relations to existing tables
+- Do NOT create seed files, migration files, React components, or API routes
+- Do NOT modify any existing files except `shared/schema.ts` (append only)
+
+---
+
+## PROMPT 2 of 6 — RULES ENGINE + SEEDER + REST API ROUTES
+
+### CONTEXT
+
+My app has Teams Productivity Intelligence with: 6 Drizzle tables in `shared/schema.ts` (teamDailySnapshots, teamAiInsights, teamAiSettings, teamManagerAssignments, teamAlerts, teamOrgSettings), types at `shared/lib/team-intelligence/types.ts`, scoring at `shared/lib/team-intelligence/scoring.ts`. Inspect the existing codebase to find: Express route file location/patterns, auth/middleware patterns, Drizzle db import path.
+
+**CRITICAL CODEBASE FACTS (do not assume otherwise):**
+- The app uses a **single `server/routes.ts` file** for all routes. There is NO `server/routes/` subdirectory.
+- The app uses a **storage abstraction** in `server/storage.ts` with an `IStorage` interface. All existing routes call `storage.someMethod()` — they never write Drizzle queries directly in route handlers.
+- The `users` table has `firstName`, `lastName` (combine these as display name), and `profileImageUrl` (use as avatar). There are NO fields named `name` or `avatar`.
+- Valid user roles are: `owner`, `admin`, `member`. There is NO `"manager"` role. Use `admin` as the manager-equivalent role throughout.
+- This app has no workspace system. Use the hardcoded string `"default"` as the workspaceId value everywhere.
+- The auth session (via `req.user.claims.sub`) only provides the user's ID — the **role is NOT in the auth token**. To check a user's role, you must query the users table: `const user = await db.select().from(users).where(eq(users.id, req.user.claims.sub)).limit(1); then check user[0]?.role`.
+
+### TASK
+
+Create (A) rules engine, (B) mock data seeder, (C) Express REST API routes with all endpoints. Register routes in the main Express app.
+
+### PART A — RULES ENGINE
+
+Create file: `server/lib/team-intelligence/rules-engine.ts`
+
+Import `DetectedPattern`, `DailySnapshotData` from `../../shared/lib/team-intelligence/types` (adjust import path to match project convention — the types are in the `shared/` directory). Export `detectPatterns(snapshots: DailySnapshotData[]): DetectedPattern[]` — takes snapshots (most recent first), returns detected patterns. Check these rules:
+
+- **Improvement:** Avg productivityScore of last 3 days >= 5% higher than previous 3 days → `{type:'improvement', severity:'info', data:{recentAvg,previousAvg,changePercent}, message:'Productivity trending upward'}`
+- **Decline:** Avg productivityScore of last 3 days >= 5% lower than previous 3 → `{type:'decline', severity:'warning', data:{recentAvg,previousAvg,changePercent}, message:'Productivity trending downward'}`
+- **Strong Focus:** Most recent day deepWorkMinutes >= 20% above 7-day avg → `{type:'strong_focus', severity:'info', data:{todayFocus,avgFocus,percentAbove}, message:'Focus time significantly above average'}`
+- **Deadline Risk:** Most recent day tasksOverdue > previous day → `{type:'deadline_risk', severity:'warning', data:{todayOverdue,yesterdayOverdue}, message:'Overdue tasks increasing'}`
+- **Streak:** Count consecutive days (from recent) where productivityScore>=60. If >=5 → `{type:'streak', severity:'info', data:{streakDays}, message:'Strong consistency streak'}`
+- **Meeting Overload:** 3+ of last 5 days have meetingTimeMinutes >50% of activeTimeMinutes → `{type:'meeting_overload', severity:'warning', data:{daysOverloaded,avgMeetingPercent}, message:'High meeting load detected'}`
+- **Low Output:** Most recent day tasksCompleted===0 AND activeTimeMinutes>60 → `{type:'low_output', severity:'warning', data:{activeTime}, message:'Active time with zero task completions'}`
+
+Also export `calculateStreak(snapshots: DailySnapshotData[], threshold=60): number` — count consecutive days from most recent where productivityScore>=threshold.
+
+### PART B — MOCK DATA SEEDER
+
+Create file: `server/lib/team-intelligence/seed-demo-data.ts`
+
+Import the Drizzle db instance from existing location (inspect codebase for correct import path, likely `server/db.ts` or similar). Import the table schemas from `shared/schema.ts`. Import scoring functions from `shared/lib/team-intelligence/scoring` (the scoring utilities are in the shared directory, NOT in client/src/).
+
+Export `seedTeamIntelligenceData(workspaceId: string, userIds: string[]): Promise<void>`
+
+For each userId, generate 30 days of snapshots (skip weekends):
+
+- Give each user a personality: first 25% 'high performer' (high scores, low overdue, high focus), next 25% 'steady' (consistent middle), next 25% 'improving' (scores trend upward), last 25% 'struggling' (lower scores, higher overdue)
+- Random realistic values: activeTimeMinutes 300-510, deepWorkMinutes 60-240, meetingTimeMinutes 30-150, tasksAssigned 3-12, tasksCompleted 2-to-assigned, tasksOverdue 0-3, contextSwitches 3-25, avgFocusSession 15-55
+- **Calculate shallowWorkMinutes = Math.max(0, activeTime - deepWork - meetings)** *(prevents negative values)*
+- focusSessionMinutes = deepWork * random(0.6-0.9)
+- longestFocusSession = avgFocusSession + random(10-30)
+- **tasksInProgress = Math.max(0, assigned - completed)** *(prevents negative values)*
+- Calculate all scores using scoring functions
+- Use Drizzle's `db.insert().values().onConflictDoUpdate()` for upsert behavior (safe to run multiple times). **IMPORTANT: You must specify the conflict target explicitly:** `.onConflictDoUpdate({ target: [teamDailySnapshots.userId, teamDailySnapshots.workspaceId, teamDailySnapshots.date], set: { ...all updatable fields } })`
+
+Also generate per user: 5-8 sample teamAiInsights (mix of categories, realistic messages, expiresAt=7 days, roleContext='employee') and 3-5 sample teamAlerts (at least 1 critical for struggling user, 1 warning for declining, 1 info for achievement, expiresAt=14 days).
+
+Use `db.transaction()` for bulk operations where supported.
+
+### PART C — EXPRESS REST API ROUTES
+
+**CRITICAL: Inspect the codebase first.** The app uses a single `server/routes.ts` file. Add a new Express router for team-intelligence routes at the bottom of `server/routes.ts`, following the exact same patterns as the routes already in that file.
+
+**For database operations:** Add methods to the `IStorage` interface in `server/storage.ts` and implement them using Drizzle queries there. Then call `storage.someMethod()` from the route handlers — this is the existing pattern in this codebase.
+
+**For role checks:** The auth session only gives `req.user.claims.sub` (user ID). To check role, query the users table first:
+```typescript
+const user = await db.select().from(users).where(eq(users.id, req.user.claims.sub)).limit(1);
+const userRole = user[0]?.role;
+```
+
+**Role mapping:** Where the endpoints say "manager/admin/owner", use `admin` or `owner`. Where they say "manager", use `admin`. The valid roles are: `owner`, `admin`, `member`.
+
+**workspaceId:** This app has no workspace system. Use `"default"` as the workspaceId everywhere. Accept it as a query/body parameter for API compatibility but default to `"default"`.
+
+**User display names:** The users table has `firstName` and `lastName` (combine as display name) and `profileImageUrl` (use as avatar).
+
+20 endpoints total. Use the existing auth middleware for all routes. Use Zod for input validation on request body/params/query.
+
+**GET Endpoints:**
+
+- **GET /api/team-intelligence/my-dashboard** — Query: {workspaceId (default "default"), from?, to?}. Default last 14 days. Query teamDailySnapshots for current user, order by date desc. Get today's snapshot, calculate streak, get unread insights (limit 10), get active alerts. Return EmployeeDashboardData shape.
+
+- **GET /api/team-intelligence/team-dashboard** — Query: {workspaceId (default "default"), from?, to?}. **Query the users table to get the current user's role. Verify role is `admin` or `owner`** (return 403 if not). Get employees from teamManagerAssignments (unassignedAt null). For each: get recent snapshot, calc trend (7d vs prev 7d), get risk level, get `firstName + ' ' + lastName` as display name and `profileImageUrl` as avatar from users table. Aggregate team totals. Get manager alerts. Return ManagerDashboardData shape.
+
+- **GET /api/team-intelligence/admin-dashboard** — Query: {workspaceId (default "default"), from?, to?}. **Query users table for role, verify `admin` or `owner`**. Get all users from the users table (there is no workspace membership concept). Get their snapshots. Group by team. Calc org-wide stats + per-team summaries + risk distribution. Return AdminDashboardData shape.
+
+- **GET /api/team-intelligence/employee/:employeeUserId** — Query: {workspaceId (default "default"), from?, to?}. Verify: user is the employee OR their manager (check teamManagerAssignments) OR admin/owner (query users table for role). Return same shape as my-dashboard for specified employee.
+
+- **GET /api/team-intelligence/compare** — Query: {workspaceId (default "default"), periodAFrom, periodATo, periodBFrom, periodBTo, userId?, metrics?}. If userId differs from current user, verify admin role via DB lookup. Query snapshots for both periods. Calc averages for: productivityScore, focusScore, deepWorkMinutes, tasksCompleted, tasksOverdue, consistencyScore, executionScore. Calc deltaPercent = ((B_avg-A_avg)/A_avg)*100. Direction: delta>2='up', <-2='down', else 'stable'. Return ComparisonResult[].
+
+- **GET /api/team-intelligence/insights** — Query: {workspaceId (default "default"), limit=20, offset=0, unreadOnly=false}. Query teamAiInsights for current user, isDismissed=false, ordered by generatedAt desc. Return insights + total count.
+
+- **GET /api/team-intelligence/ai-settings** — Query: {workspaceId (default "default")}. Upsert with defaults teamAiSettings for current user.
+
+- **GET /api/team-intelligence/org-settings** — Query: {workspaceId (default "default")}. **Verify admin/owner via DB lookup**. Upsert teamOrgSettings.
+
+- **GET /api/team-intelligence/alerts** — Query: {workspaceId (default "default")}. Role-based (query users table for role): member sees own alerts with visibleToRole='employee'; admin sees alerts for direct reports with visibleToRole in ['employee','admin']; owner sees all workspace alerts. Filter isAcknowledged=false, expiresAt>now. Order by severity (critical first) then triggeredAt desc.
+
+- **GET /api/team-intelligence/manager-assignments** — Query: {workspaceId (default "default")}. Admin gets their assignments, owner gets all.
+
+**POST/PATCH Endpoints:**
+
+- **PATCH /api/team-intelligence/insights/:insightId/read** — Set isRead=true where id+userId match.
+- **PATCH /api/team-intelligence/insights/:insightId/dismiss** — Set isDismissed=true where id+userId match.
+- **PATCH /api/team-intelligence/insights/:insightId/save** — Toggle isSaved where id+userId match.
+- **PUT /api/team-intelligence/ai-settings** — Body: {workspaceId (default "default"), ...all setting fields optional}. Update teamAiSettings.
+- **PUT /api/team-intelligence/org-settings** — Body: {workspaceId (default "default"), ...all org fields optional}. **Verify admin/owner via DB lookup**. Update teamOrgSettings.
+- **PATCH /api/team-intelligence/alerts/:alertId/acknowledge** — Set isAcknowledged=true, acknowledgedBy=currentUser, acknowledgedAt=now.
+- **PATCH /api/team-intelligence/alerts/:alertId/snooze** — Body: {snoozeUntil}. Set isSnoozed=true, snoozedUntil=parsed date.
+- **POST /api/team-intelligence/manager-assignments** — Body: {workspaceId (default "default"), managerUserId, employeeUserId, teamId?}. **Verify admin/owner via DB lookup**. Create teamManagerAssignment.
+- **DELETE /api/team-intelligence/manager-assignments/:assignmentId** — **Verify admin/owner via DB lookup**. Set unassignedAt=now.
+- **POST /api/team-intelligence/seed-demo-data** — Body: {workspaceId (default "default")}. **Verify admin/owner via DB lookup**. Get all user IDs from the users table. Call seedTeamIntelligenceData. Also create teamManagerAssignment records (assign first admin as manager of all others). Return {success:true, usersSeeded:count}.
+
+### BOUNDARIES
+
+- Follow EXACT same route/auth/middleware/storage patterns as existing route files
+- Do NOT create any frontend files
+- Do NOT modify the Drizzle schema in `shared/schema.ts`
+- Do NOT modify any existing route files except to register the new routes
+
+---
+
+## PROMPT 3 of 6 — SHARED UI + EMPLOYEE DASHBOARD SHELL
+
+### CONTEXT
+
+My app uses React with TypeScript, Tailwind CSS, Shadcn/UI with dark theme. I have Teams Intelligence backend complete. Types are at `shared/lib/team-intelligence/types.ts` and scoring at `shared/lib/team-intelligence/scoring.ts`. This prompt creates 3 shared UI components and the Employee Dashboard — all as visual shells with hardcoded data, NO API calls. Inspect existing component structure and Tailwind classes to match visual style.
+
+### TASK
+
+Create 3 shared components in `client/src/components/team-intelligence/shared/` and the Employee Dashboard. All hardcoded data, no API calls.
+
+**COMPONENT 1: `client/src/components/team-intelligence/shared/ScoreCircle.tsx`**
+
+Props: `{ score: number; label: string; trend?: 'up'|'down'|'stable'; size?: 'sm'|'md'|'lg' }`
+
+- Circular ring using SVG strokeDasharray. Score number centered (large, bold). Label below.
+- Trend arrow: up green, down red, stable gray (lucide-react ChevronUp/ChevronDown)
+- Ring color: Red(#EF4444) 0-39, Yellow(#EAB308) 40-59, Green(#22C55E) 60-79, Blue(#3B82F6) 80-100
+- Sizes: sm=80px, md=120px, lg=160px diameter
+- Score 0 → gray ring with '—' in center. Default export.
+
+**COMPONENT 2: `client/src/components/team-intelligence/shared/MetricCard.tsx`**
+
+Props: `{ title: string; value: string|number; subtitle?: string; trend?: 'up'|'down'|'stable'; delta?: string; icon?: React.ReactNode }`
+
+- Shadcn Card. Title top (small, muted). Value center (large, bold, white). Subtitle below (small, muted). Delta top-right with trend arrow + color. Optional icon top-left. Dark card background.
+- No value → show '—'. Default export.
+
+**COMPONENT 3: `client/src/components/team-intelligence/shared/InsightCard.tsx`**
+
+Props: `{ category: string; title: string; message: string; confidence: string; timestamp: string; isRead: boolean; onMarkRead?: ()=>void; onDismiss?: ()=>void }`
+
+- Shadcn Card. Left: category icon (lucide-react: Trophy=achievement, AlertTriangle=warning, Lightbulb=suggestion, TrendingUp=pattern, GraduationCap=coaching). Category Badge colored (green/yellow/blue/purple/orange). Title bold. Message body. Confidence as small text. Timestamp muted right-aligned. Unread=blue dot left. Buttons: 'Mark Read' + 'Dismiss' (ghost). Default export.
+
+**EMPLOYEE DASHBOARD**
+
+Create file: `client/src/components/team-intelligence/EmployeeDashboard.tsx` — default export, single scrollable page.
+
+**Section A — Morning Brief** (collapsible card):
+- Gradient/accent border. 'Good morning! Here\'s your daily brief'
+- Hardcoded: 'Yesterday you completed 8 tasks with 3.5 hours of focused work. Your productivity score was 74, up 5% from the day before.'
+- Suggestion: 'Try starting today with a 45-minute focus session on your highest priority task.'
+- Buttons: 'Start Focus Session' (primary), 'Dismiss' (ghost) — visual only
+
+**Section B — Score Overview Row:**
+- ScoreCircle (score=72, label='Productivity', trend='up', size='lg') on left
+- 4 MetricCards: 'Tasks Completed' value='8' delta='+2' trend='up' | 'Focus Time' value='3.5h' delta='+0.5h' trend='up' | 'Overdue Tasks' value='2' delta='+1' trend='down' (red=bad) | 'Day Streak' value='5' subtitle='consecutive days'
+
+**Section C — Time Distribution:**
+- 'Time Distribution — Today' heading
+- Horizontal stacked bar (colored divs, no chart library): Deep Work 210min (blue), Shallow Work 90min (gray), Meetings 75min (purple), Breaks 45min (green)
+- Legend below with colored dots + labels + minutes
+
+**Section D — Task Performance:**
+- 'Task Performance — Last 7 Days' heading
+- Shadcn Table: columns Day/Assigned/Completed/Overdue, 7 hardcoded rows (Mon:10/8/1, Tue:8/7/0, Wed:12/10/2, Thu:9/8/1, Fri:7/7/0, Sat:—, Sun:—)
+- Card below: 'Deadline Adherence: 85%' and 'Avg Completion Time: 2.3 hours'
+
+**Section E — Trend Chart Placeholder:**
+- 'Productivity Trend — Last 14 Days' heading
+- Placeholder div, dashed border, 250px height, text 'Chart loading...'
+
+**Section F — Compare Periods:**
+- 'Compare Periods' heading. Card: 'Select two time periods to compare your productivity metrics.' + 'Compare' button (visual only)
+
+**Section G — AI Insights Feed:**
+- 'AI Insights' heading
+- 3 hardcoded InsightCards: (1) category='achievement', title='Strong Week', message='You completed 23 tasks this week...', confidence='high', timestamp='Today', isRead=false; (2) category='suggestion', title='Protect Your Peak Hours', message='Your data shows 9-11 AM is your most productive window...', confidence='high', timestamp='Yesterday', isRead=true; (3) category='warning', title='Overdue Tasks Increasing', message='You have 2 tasks overdue...', confidence='medium', timestamp='Yesterday', isRead=false
+
+Layout: space-y-6 between sections. Responsive: 1 column mobile, multi-column desktop for metrics row.
+
+### BOUNDARIES
+
+- Do NOT make any API calls (no fetch, no useQuery, no useEffect with API)
+- Do NOT import Recharts or any chart library
+- Do NOT create routing or page files
+- Do NOT modify any existing files
+- VISUAL SHELLS only
+
+---
+
+## PROMPT 4 of 6 — MANAGER + ADMIN DASHBOARDS + PAGE + SIDEBAR
+
+### CONTEXT
+
+My app uses React with TypeScript, Tailwind CSS, Shadcn/UI, dark theme/sidebar. I have shared components at `client/src/components/team-intelligence/shared/` and EmployeeDashboard shell. Inspect existing sidebar component and page routing patterns (likely using wouter or react-router — check existing code).
+
+### TASK
+
+Create Manager Dashboard shell, Admin Dashboard shell, main page with tabs, and sidebar nav item. All hardcoded data, no API calls.
+
+**MANAGER DASHBOARD**
+
+Create file: `client/src/components/team-intelligence/ManagerDashboard.tsx` — default export.
+
+**Section A — Team Overview Row:** 5 MetricCards: 'Team Score' value='68' trend='up' delta='+3' | 'Members' value='8' | 'Tasks Completed' value='47' subtitle='this week' | 'Overdue' value='6' trend='down' (red) | 'Team Health' Badge 'Needs Attention' (yellow)
+
+**Section B — Team Member Grid:** 2-col desktop, 1-col mobile. 6 hardcoded member cards (Shadcn Card + hover), each: avatar initials (colored bg), name, role, ScoreCircle(size='sm'), tasks completed, overdue (red if>0), status Badge.
+- Alex Chen: 82, 12 tasks, 0 overdue, On Track
+- Maria Garcia: 71, 9 tasks, 1 overdue, On Track
+- James Wilson: 58, 6 tasks, 3 overdue, Needs Attention
+- Sarah Kim: 45, 4 tasks, 4 overdue, At Risk
+- David Park: 76, 10 tasks, 0 overdue, On Track
+- Lisa Johnson: 63, 7 tasks, 2 overdue, Needs Attention
+
+**Section C — Active Alerts:** 3 hardcoded alerts: Critical (red, AlertTriangle): 'Sarah Kim has 4 overdue tasks...' + Acknowledge/Snooze; Warning (yellow, TrendingDown): 'James Wilson productivity declining...' + Acknowledge/Snooze; Info (blue, Award): 'Alex Chen achieved personal best...' + Acknowledge
+
+**Section D — Workload Balance:** 6 horizontal bars per member. Alex:85%(green), Maria:70%(green), James:110%(red), Sarah:120%(red), David:60%(green), Lisa:95%(yellow). Name left, percentage right.
+
+**Section E — Team Trend Placeholder:** Dashed border div, 250px, 'Chart loading...'
+
+**Section F — AI Team Brief:** Card with hardcoded team summary text, including strong performers, risk items, and redistribution suggestions with checkmark/warning/lightbulb indicators.
+
+**ADMIN DASHBOARD**
+
+Create file: `client/src/components/team-intelligence/AdminDashboard.tsx` — default export.
+
+**Section A — Org Overview Row:** 5 MetricCards: 'Org Score' value='67' trend='up' delta='+2' | 'Total Employees' value='45' | 'Tasks Completed' value='312' subtitle='this week' | 'Deadline Adherence' value='82%' | 'Avg Focus Time' value='3.2h' subtitle='per day'
+
+**Section B — Teams Overview Table:** Shadcn Table, columns: Team/Manager/Members/Score/Velocity/Overdue%/Health. 4 rows: Engineering(72, On Track), Design(65, Needs Attention), Marketing(58, At Risk), Sales(70, On Track). Hover effect on rows.
+
+**Section C — Workforce Trends Placeholder:** Dashed border div, 250px, 'Chart loading...'
+
+**Section D — Risk Distribution:** 3 cards: 'On Track' 32 (green left border) | 'Needs Attention' 9 (yellow) | 'At Risk' 4 (red)
+
+**Section E — AI Executive Brief:** Card with hardcoded org-level summary including team strength assessment and meeting load recommendation.
+
+**MAIN PAGE**
+
+Create the page/route component following existing routing patterns (inspect whether app uses wouter, react-router, or Tanstack Router). **Route path: `/dashboard/team-intelligence`** (matching the existing `/dashboard/...` URL pattern used by this app).
+
+- Import all 3 dashboards
+- Shadcn Tabs: 'My Dashboard', 'Team Dashboard', 'Organization' — all 3 visible for now (role logic added in Prompt 6)
+- Default tab: 'My Dashboard'
+- Page title: 'Team Intelligence' (text-2xl font-bold)
+- Wrap in existing page layout pattern
+
+**SIDEBAR NAV**
+
+- Inspect existing sidebar component
+- Add item: Label 'Team Intelligence', Icon BarChart3 from lucide-react, Route to `/dashboard/team-intelligence`
+- Place near analytics items. Match exact existing styling/hover/active states.
+- Only ADD — do NOT change existing sidebar items
+
+### BOUNDARIES
+
+- Do NOT make any API calls
+- Do NOT add role-based logic yet
+- Do NOT install new packages
+- Do NOT modify any existing page files
+- VISUAL SHELLS only
+
+---
+
+## PROMPT 5 of 6 — WIRE EMPLOYEE + MANAGER DASHBOARDS TO API + CHARTS
+
+### CONTEXT
+
+My app has Teams Intelligence with complete REST API routes, shared UI components, and shell dashboards. This prompt wires Employee and Manager dashboards to real data and adds Recharts charts. Check if recharts is installed in `package.json`. **If not installed: use the Replit package manager tool to install recharts (do NOT run `npm install` directly).**
+
+### TASK
+
+Update EmployeeDashboard.tsx and ManagerDashboard.tsx to use real API data. Create EmployeeDetailPanel. Replace placeholder charts with Recharts.
+
+**Note:** Since this app has no workspace system, use `"default"` as the workspaceId value in all API calls.
+
+**EMPLOYEE DASHBOARD UPDATE**
+
+(`client/src/components/team-intelligence/EmployeeDashboard.tsx`)
+
+Accept prop: `{ workspaceId?: string }` (default to `"default"`)
+
+API calls using the app's existing data fetching pattern (inspect codebase — likely useQuery with fetch, or a custom hook wrapping fetch). Call these endpoints:
+
+- GET `/api/team-intelligence/my-dashboard?workspaceId=default&from=...&to=...` (last 14 days)
+- GET `/api/team-intelligence/insights?workspaceId=default&limit=10&unreadOnly=false`
+- GET `/api/team-intelligence/alerts?workspaceId=default`
+
+Replace all hardcoded data:
+
+- **Morning Brief:** Use most recent insight with category 'suggestion'/'pattern'. If none: 'Complete some tasks and focus sessions to start receiving personalized insights.' Dismiss button calls PATCH `/api/team-intelligence/insights/:id/dismiss`.
+- **Score Overview:** ScoreCircle from currentScores.total + trend. MetricCards from todaySnapshot. Streak from streak field.
+- **Time Distribution:** Replace with Recharts PieChart (donut): `[{name:'Deep Work', value:deepWorkMinutes, fill:'#3B82F6'}, {name:'Shallow Work', value:shallowWorkMinutes, fill:'#6B7280'}, {name:'Meetings', value:meetingTimeMinutes, fill:'#8B5CF6'}, {name:'Other', value:remainder, fill:'#22C55E'}]`. innerRadius=60, outerRadius=90. Tooltip + custom legend.
+- **Task Performance:** Real data from recentSnapshots (last 7 days). Table + Recharts BarChart (X:dates, bars: Completed green + Assigned gray, ResponsiveContainer).
+- **Trend Chart:** Recharts LineChart from recentSnapshots (14 days). X:formatted dates, Y:0-100, blue line, Tooltip, ResponsiveContainer height=250px.
+- **AI Insights Feed:** Real insights from GET insights. Wire InsightCard: onMarkRead → PATCH .../read, onDismiss → PATCH .../dismiss. Invalidate/refetch queries after mutations.
+
+Loading state: Shadcn Skeleton placeholders per section. Empty state: 'No productivity data yet. Complete tasks, run focus sessions, and check back. You can also ask an admin to seed demo data.'
+
+All Recharts: dark theme (transparent bg, gray-400 labels, gray-700 grid). Wrap in ResponsiveContainer.
+
+**MANAGER DASHBOARD UPDATE**
+
+(`client/src/components/team-intelligence/ManagerDashboard.tsx`)
+
+Accept prop: `{ workspaceId?: string }` (default to `"default"`)
+
+API calls:
+
+- GET `/api/team-intelligence/team-dashboard?workspaceId=default`
+- GET `/api/team-intelligence/alerts?workspaceId=default`
+
+State: selectedEmployeeId (string|null)
+
+Replace all hardcoded data:
+
+- **Team Overview:** MetricCards from query (teamScore, memberCount, totalTasksCompleted, totalOverdue, teamHealth)
+- **Team Member Grid:** Map data.members → cards with name, avatar initials, ScoreCircle(sm), tasks, overdue, risk badge. onClick → set selectedEmployeeId.
+- **Alerts:** Map alerts. Wire Acknowledge → PATCH .../acknowledge, Snooze → PATCH .../snooze (body: {snoozeUntil: 24h from now}). Invalidate/refetch after mutation.
+- **Workload Balance:** Calc per member: (tasksAssigned/avg across team)*100. Bars colored: <80% green, 80-100% yellow, >100% red.
+- **Team Trend:** Recharts LineChart showing team avg score over 14 days. Dark theme styling.
+- **AI Manager Brief:** Most recent insight with roleContext='admin' (note: we use 'admin' instead of 'manager' since that role doesn't exist). Fallback: 'Team insights will appear here as productivity data accumulates.'
+
+When selectedEmployeeId is set → open EmployeeDetailPanel.
+
+Loading: Skeleton placeholders. Empty: 'No team data available. Assign team members and seed demo data from settings.'
+
+**EMPLOYEE DETAIL PANEL (NEW FILE)**
+
+Create: `client/src/components/team-intelligence/shared/EmployeeDetailPanel.tsx`
+
+Props: `{ workspaceId?: string; employeeUserId: string; isOpen: boolean; onClose: ()=>void }`
+
+- Shadcn Sheet (slide-out from right)
+- Call GET `/api/team-intelligence/employee/:employeeUserId?workspaceId=default`
+- Display: name, ScoreCircle, key metrics (focus time, tasks completed, overdue, streak), mini trend line (last 7 days via Recharts), recent insights
+- Close button + overlay click to close
+
+### BOUNDARIES
+
+- Do NOT modify REST API routes
+- Do NOT modify shared components (ScoreCircle, MetricCard, InsightCard)
+- Do NOT modify main page or sidebar
+- Only modify EmployeeDashboard.tsx, ManagerDashboard.tsx, and create EmployeeDetailPanel.tsx
+
+---
+
+## PROMPT 6 of 6 — WIRE ADMIN + COMPARISON + SETTINGS + ROLE LOGIC
+
+### CONTEXT
+
+My app has Teams Intelligence with all backend + Employee/Manager dashboards wired to real data. This final prompt wires Admin Dashboard, creates comparison drawer, settings pages, role-based tab visibility, and seed demo data button.
+
+**Reminder of codebase facts:**
+- Valid roles: `owner`, `admin`, `member` (no "manager" role)
+- Use `admin` wherever the original said "manager"
+- workspaceId is always `"default"`
+- Route pattern is `/dashboard/...`
+
+### TASK
+
+Update AdminDashboard, create ComparisonDrawer, create settings page, add role-based access, add seed button.
+
+**ADMIN DASHBOARD UPDATE**
+
+(`client/src/components/team-intelligence/AdminDashboard.tsx`)
+
+Accept prop: `{ workspaceId?: string }` (default to `"default"`)
+
+API calls:
+
+- GET `/api/team-intelligence/admin-dashboard?workspaceId=default`
+- GET `/api/team-intelligence/alerts?workspaceId=default`
+
+Replace all hardcoded data:
+
+- **Org Overview:** MetricCards from query (orgScore+orgTrend, totalEmployees, totalTasksCompleted, deadlineAdherenceRate, avgFocusMinutes converted to hours)
+- **Teams Table:** Map data.teams. Columns: Team/Manager/Members/Score/Velocity/Overdue%/Health(Badge). Clickable rows (highlight on click). Client-side sorting by column headers via React state.
+- **Workforce Trend:** Recharts LineChart if per-date data available, else simplified score+arrow view. Dark theme.
+- **Risk Distribution:** data.riskDistribution counts in 3 colored-border cards.
+- **AI Executive Brief:** Most recent insight with roleContext='admin'. Fallback: 'Executive insights will appear as organization data accumulates.'
+
+Loading: Skeleton. Empty: 'No organization data available. Seed demo data from settings to preview.'
+
+**COMPARISON DRAWER (NEW FILE)**
+
+Create: `client/src/components/team-intelligence/shared/ComparisonDrawer.tsx`
+
+Props: `{ workspaceId?: string; userId?: string; isOpen: boolean; onClose: ()=>void }`
+
+Shadcn Sheet (right, large width):
+
+- Two date range inputs (Period A, Period B). Each has quick select dropdown: Today/Yesterday/This Week/Last Week/This Month/Last Month + custom date range with date pickers. Default: A=Last Week, B=This Week.
+- Metric checkboxes: Productivity Score (checked), Focus Score (checked), Tasks Completed (checked), Overdue Tasks, Deep Work Time, Consistency Score
+- 'Compare' button → calls GET `/api/team-intelligence/compare` with selected periods+metrics
+- Results table: Metric/Period A/Period B/Change. Change=delta % with colored arrow (green=improvement, red=decline). Overdue: invert color (fewer=green).
+- Loading state. Error if no data: 'No data available for the selected period'
+
+Wire into EmployeeDashboard: add isComparisonOpen state. Section F 'Compare' button opens drawer. Pass workspaceId + current userId. (Do NOT change EmployeeDashboard layout — only add this state + drawer hook.)
+
+**SETTINGS PAGE (NEW FILE)**
+
+Create a settings page/route component following existing routing patterns. **Route path: `/dashboard/team-intelligence/settings`** (matching the existing `/dashboard/...` URL convention).
+
+Title: 'Team Intelligence Settings'. Back button/breadcrumb to main dashboard. Shadcn Tabs: 'AI Preferences' + 'Organization Settings' (org tab admin/owner only).
+
+**AI Preferences Tab:**
+- Populate from GET `/api/team-intelligence/ai-settings?workspaceId=default`
+- Fields (Shadcn Switch/Select/Input): Enable AI Insights (switch), Morning Brief (switch), Morning Brief Time (HH:MM input), Insight Categories (checkbox group: Achievement/Warning/Suggestion/Pattern/Coaching), Frequency (select: Realtime/Daily/Weekly), Intensity (select: Minimal/Moderate/Comprehensive), Notification Channel (select: In-app/Email/Both/None), Weekend Insights (switch), Tone (select: Encouraging/Neutral/Direct)
+- Admin-only extras (check user role): Team Weekly Brief (switch), Brief Day (select Mon-Fri), Risk Alerts (select: Realtime/Daily Digest/Off), Coaching Suggestions (switch)
+- Save → PUT `/api/team-intelligence/ai-settings` → toast 'Settings saved'
+
+**Organization Settings Tab (admin/owner only):**
+- Populate from GET `/api/team-intelligence/org-settings?workspaceId=default`
+- Fields: Manager sees individual focus (switch), Manager sees idle time (switch), Manager sees app usage (select: None/Category Level/Detailed), Manager sees screen time (switch), Min days for scoring (number), New employee ramp days (number), Standard work start (time), Standard work end (time), Work days (checkbox Mon-Sun)
+- Save → PUT `/api/team-intelligence/org-settings` → toast 'Settings saved'
+- **Seed Demo Data section at bottom:** Description card: 'Generate 30 days of sample productivity data for all users.' Button (destructive variant) → POST `/api/team-intelligence/seed-demo-data` with body `{workspaceId: "default"}` → loading spinner → toast 'Demo data seeded for X users'
+
+**ROLE-BASED TAB VISIBILITY**
+
+Update the main team-intelligence page component (at `/dashboard/team-intelligence`):
+
+- Get current user using existing auth hooks/context (inspect how other pages do this)
+- **Query the user's role from the users table via an API call or existing auth context** (the role is NOT in the session token — check how other pages access role)
+- `member` role: show only 'My Dashboard' tab
+- `admin` role: show 'My Dashboard' + 'Team Dashboard'
+- `owner` role: show all 3 tabs
+- Pass workspaceId (`"default"`) to each dashboard component
+- Add Settings icon button (Cog from lucide-react) top-right → navigates to settings page
+
+### BOUNDARIES
+
+- Do NOT modify REST API routes or Drizzle schema
+- Do NOT modify EmployeeDashboard/ManagerDashboard layout (only add comparison drawer hook to Employee)
+- Do NOT add features beyond what is specified
+- This is the FINAL prompt — MVP is complete after this
+
+---
+
+## POST-BUILD CHECKLIST
+
+1. **Database:** All 6 tables exist (check with Drizzle Studio or psql)
+2. **Sidebar:** 'Team Intelligence' appears + navigates correctly to `/dashboard/team-intelligence`
+3. **Main Page:** Loads, shows tabs, no errors
+4. **Seed Data:** Admin clicks 'Seed Demo Data' → completes
+5. **Employee Dashboard:** Scores, metrics, charts, insights with seeded data
+6. **Manager Dashboard:** Team grid, alerts, workload bars with seeded data
+7. **Admin Dashboard:** Org overview, team table, risk distribution with seeded data
+8. **Comparison:** Drawer opens, date selection works, compare returns results
+9. **AI Insights:** Display, mark read works, dismiss works
+10. **Settings:** AI prefs save, org settings save
+11. **Role Access:** member=1 tab, admin=2 tabs, owner=3 tabs
+12. **Charts:** Recharts render with dark theme
+13. **No console errors
+
+If anything fails → note exact error + which prompt → come back for a targeted patch prompt.
