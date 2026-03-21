@@ -1,0 +1,73 @@
+PROMPT 3 of 6 — SHARED UI + EMPLOYEE DASHBOARD SHELL
+CONTEXT
+My app uses React with TypeScript, Tailwind CSS, Shadcn/UI with dark theme. I have Teams Intelligence backend complete. Types are at shared/lib/team-intelligence/types.ts and scoring at shared/lib/team-intelligence/scoring.ts. This prompt creates 3 shared UI components and the Employee Dashboard — all as visual shells with hardcoded data, NO API calls. Inspect existing component structure and Tailwind classes to match visual style.
+TASK
+Create 3 shared components in client/src/components/team-intelligence/shared/ and the Employee Dashboard. All hardcoded data, no API calls.
+COMPONENT 1: client/src/components/team-intelligence/shared/ScoreCircle.tsx
+Props: { score: number; label: string; trend?: 'up'|'down'|'stable'; size?: 'sm'|'md'|'lg' }
+
+Circular ring using SVG strokeDasharray. Score number centered (large, bold). Label below.
+Trend arrow: up green, down red, stable gray (lucide-react ChevronUp/ChevronDown)
+Ring color: Red(#EF4444) 0-39, Yellow(#EAB308) 40-59, Green(#22C55E) 60-79, Blue(#3B82F6) 80-100
+Sizes: sm=80px, md=120px, lg=160px diameter
+Score 0 → gray ring with '—' in center. Default export.
+
+COMPONENT 2: client/src/components/team-intelligence/shared/MetricCard.tsx
+Props: { title: string; value: string|number; subtitle?: string; trend?: 'up'|'down'|'stable'; delta?: string; icon?: React.ReactNode }
+
+Shadcn Card. Title top (small, muted). Value center (large, bold, white). Subtitle below (small, muted). Delta top-right with trend arrow + color. Optional icon top-left. Dark card background.
+No value → show '—'. Default export.
+
+COMPONENT 3: client/src/components/team-intelligence/shared/InsightCard.tsx
+Props: { category: string; title: string; message: string; confidence: string; timestamp: string; isRead: boolean; onMarkRead?: ()=>void; onDismiss?: ()=>void }
+
+Shadcn Card. Left: category icon (lucide-react: Trophy=achievement, AlertTriangle=warning, Lightbulb=suggestion, TrendingUp=pattern, GraduationCap=coaching). Category Badge colored (green/yellow/blue/purple/orange). Title bold. Message body. Confidence as small text. Timestamp muted right-aligned. Unread=blue dot left. Buttons: 'Mark Read' + 'Dismiss' (ghost). Default export.
+
+EMPLOYEE DASHBOARD
+Create file: client/src/components/team-intelligence/EmployeeDashboard.tsx — default export, single scrollable page.
+Section A — Morning Brief (collapsible card):
+
+Gradient/accent border. 'Good morning! Here's your daily brief'
+Hardcoded: 'Yesterday you completed 8 tasks with 3.5 hours of focused work. Your productivity score was 74, up 5% from the day before.'
+Suggestion: 'Try starting today with a 45-minute focus session on your highest priority task.'
+Buttons: 'Start Focus Session' (primary), 'Dismiss' (ghost) — visual only
+
+Section B — Score Overview Row:
+
+ScoreCircle (score=72, label='Productivity', trend='up', size='lg') on left
+4 MetricCards: 'Tasks Completed' value='8' delta='+2' trend='up' | 'Focus Time' value='3.5h' delta='+0.5h' trend='up' | 'Overdue Tasks' value='2' delta='+1' trend='down' (red=bad) | 'Day Streak' value='5' subtitle='consecutive days'
+
+Section C — Time Distribution:
+
+'Time Distribution — Today' heading
+Horizontal stacked bar (colored divs, no chart library): Deep Work 210min (blue), Shallow Work 90min (gray), Meetings 75min (purple), Breaks 45min (green)
+Legend below with colored dots + labels + minutes
+
+Section D — Task Performance:
+
+'Task Performance — Last 7 Days' heading
+Shadcn Table: columns Day/Assigned/Completed/Overdue, 7 hardcoded rows (Mon:10/8/1, Tue:8/7/0, Wed:12/10/2, Thu:9/8/1, Fri:7/7/0, Sat:—, Sun:—)
+Card below: 'Deadline Adherence: 85%' and 'Avg Completion Time: 2.3 hours'
+
+Section E — Trend Chart Placeholder:
+
+'Productivity Trend — Last 14 Days' heading
+Placeholder div, dashed border, 250px height, text 'Chart loading...'
+
+Section F — Compare Periods:
+
+'Compare Periods' heading. Card: 'Select two time periods to compare your productivity metrics.' + 'Compare' button (visual only)
+
+Section G — AI Insights Feed:
+
+'AI Insights' heading
+3 hardcoded InsightCards: (1) category='achievement', title='Strong Week', message='You completed 23 tasks this week...', confidence='high', timestamp='Today', isRead=false; (2) category='suggestion', title='Protect Your Peak Hours', message='Your data shows 9-11 AM is your most productive window...', confidence='high', timestamp='Yesterday', isRead=true; (3) category='warning', title='Overdue Tasks Increasing', message='You have 2 tasks overdue...', confidence='medium', timestamp='Yesterday', isRead=false
+
+Layout: space-y-6 between sections. Responsive: 1 column mobile, multi-column desktop for metrics row.
+BOUNDARIES
+
+Do NOT make any API calls (no fetch, no useQuery, no useEffect with API)
+Do NOT import Recharts or any chart library
+Do NOT create routing or page files
+Do NOT modify any existing files
+VISUAL SHELLS only
