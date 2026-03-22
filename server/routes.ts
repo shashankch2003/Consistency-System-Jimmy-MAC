@@ -10,6 +10,9 @@ import path from "path";
 import fs from "fs";
 import { db } from "./db";
 import { eq, and, desc, isNull, lt, ne, sql as drizzleSql } from "drizzle-orm";
+import { aiService } from "./services/ai-service";
+import { logAiUsage } from "./services/ai-usage-logger";
+import { setupAiCronJobs } from "./jobs/cron-config";
 import {
   connectMessages,
   connectChannels,
@@ -4809,6 +4812,74 @@ For answer: just a message.`,
       }
     } catch {}
   });
+
+  // ============================================================
+  // SPRINT 1: UNIVERSAL AI STREAM ENDPOINT
+  // ============================================================
+  app.post("/api/ai/stream", isAuthenticated, async (req: any, res) => {
+    const userId = req.user.claims.sub;
+    const { prompt, context, model, feature = "general" } = req.body;
+    if (!prompt) return res.status(400).json({ message: "prompt is required" });
+
+    const startMs = Date.now();
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Transfer-Encoding", "chunked");
+    res.setHeader("Cache-Control", "no-cache");
+
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let success = true;
+    let errorMsg: string | undefined;
+
+    try {
+      const systemPrompt = context
+        ? `You are a helpful AI assistant. Use this context to inform your response:\n\n${context}\n\nRespond helpfully and concisely.`
+        : "You are a helpful AI assistant. Respond helpfully and concisely.";
+
+      const selectedModel = (model === "gpt-4o" || model === "gpt-4o-mini") ? model : undefined;
+      const resolvedModel = aiService.resolveModel(undefined, selectedModel);
+
+      const stream = aiService.generateStream(prompt, {
+        model: resolvedModel,
+        systemPrompt,
+        maxTokens: 2000,
+      });
+
+      for await (const chunk of stream) {
+        if (chunk.text) {
+          res.write(chunk.text);
+          outputTokens += Math.ceil(chunk.text.length / 4);
+        }
+        if (chunk.done) break;
+      }
+
+      inputTokens = Math.ceil((prompt.length + (context?.length || 0)) / 4);
+      res.end();
+    } catch (err: any) {
+      success = false;
+      errorMsg = err.message;
+      if (!res.headersSent) {
+        res.status(500).json({ message: "AI stream failed" });
+      } else {
+        res.end();
+      }
+    } finally {
+      logAiUsage({
+        userId,
+        feature,
+        action: "stream",
+        model: model || "gpt-4o-mini",
+        inputTokens,
+        outputTokens,
+        durationMs: Date.now() - startMs,
+        success,
+        error: errorMsg,
+      }).catch(() => {});
+    }
+  });
+
+  // Register Sprint 1 AI cron jobs
+  setupAiCronJobs();
 
   return httpServer;
 }

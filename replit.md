@@ -38,6 +38,15 @@ Preferred communication style: Simple, everyday language.
 -   **Grow Together (Social)**: Friend connections, comparison of productivity metrics, group creation and chat (paid feature), and privacy controls.
 -   **Know More (Learning)**: Video learning center with YouTube embeds and in-app feedback system.
 -   **Team Productivity Intelligence**: Advanced module for team-level insights, scoring, pattern detection, and alerts.
+-   **Sprint 1 Foundation (25-Feature AI System — DONE)**:
+    -   36 new DB tables added to `shared/schema.ts` covering all 25 AI features: aiWritingHistory, brandVoice, knowledgeIndex, knowledgeQuery, knowledgeSuggestion, knowledgeItem, schedulingPreferences, aiAgents, agentRuns, agentConversations, projectStatusReports, aiRiskAlerts, aiWorkflowAutomations, meetingIntelligence, aiAutoFillColumns, focusSessions, focusTimeBlocks, aiProductivityScores, emailAccounts, emailThreads, aiHabits, aiHabitCompletions, aiGoals, keyResults, calendarOptimizationRules, aiTemplates, voiceNotes, aiWorkflows, aiWorkflowRuns, notificationPreferences, aiNotificationItems, taskDurationEstimates, teamInsightSnapshots, externalIntegrations, onboardingProgress, aiUsageLogs
+    -   Central AI service: `server/services/ai-service.ts` — AiService class with generateText, generateStream, generateWithTools, generateEmbedding, generateEmbeddingBatch, generateJSON; model registry (gpt-4o, gpt-4o-mini); auto model routing
+    -   Embeddings service: `server/services/embeddings.ts` — getEmbedding, getEmbeddingBatch with in-memory Map cache (24h TTL), cosineSimilarity
+    -   AI usage logger: `server/services/ai-usage-logger.ts` — logAiUsage() writes to ai_usage_logs table, never throws
+    -   Knowledge indexer: `server/services/knowledge-indexer.ts` — indexNote, indexTask, indexMessageBatch, searchKnowledge (cosine similarity search)
+    -   Cron config: `server/jobs/cron-config.ts` — setupAiCronJobs() with 9 node-cron schedules for knowledge reindex, daily plans, risk detection, productivity scores, habit streaks, calendar optimization, notification batching, team insights
+    -   Universal AI stream endpoint: POST /api/ai/stream — SSE streaming with model selection, context support, usage logging
+    -   6 shared AI UI components in `client/src/components/ai/`: AiPromptBar (Ctrl+J), AiStreamingDisplay, AiModelSelector, AiDiffView, AiSuggestionCard, AiLoading
 -   **AI-Driven Platform (Prompts 1-6 DONE)**:
     -   Workspaces, Teams, Members management
     -   Projects, Tasks, Subtasks, Dependencies
