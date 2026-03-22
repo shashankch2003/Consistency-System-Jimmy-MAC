@@ -49,6 +49,11 @@ Preferred communication style: Simple, everyday language.
     -   AI Productivity Engine: 7-factor weighted scoring (productivityCalculator.ts), ProductivityScore ring chart, ComparisonCards, TeamHealthDashboard, PerformanceProfile with heatmap + trend chart, PerformerIdentification (top/at-risk), productivity_snapshots + timesheets DB tables
     -   Workload Management: WorkloadView with drag-drop task reassignment (@hello-pangea/dnd), utilization capacity bars, CapacityPlanner 4-week timeline with PTO/holiday/sick management, member_availability table
     -   Reporting Suite: ExecutiveDashboard (6 KPI cards + dept BarChart + at-risk projects table), ReportBuilder (data sources, chart types, filters, group-by, save config), ReportLibrary (10 templates), saved_reports table
+    -   Goals/OKRs: OKR Goals page (/dashboard/okr-goals), cascading OKRTree (4 levels, expand/collapse framer-motion), GoalCard (confidence badge dropdown, progress bar, inline value editing), CreateGoalModal; okr_goals + goal_task_links tables
+    -   Automations: Automations page (/dashboard/automations), AutomationBuilder (WHEN→IF→THEN visual flow, max 5 actions, test run); automations + automation_logs tables
+    -   AI Features: AICommandBar (Ctrl+K, real OpenAI gpt-4o-mini, action parsing), AICoach (slide-in 320px panel, today's plan, focus recs, insights, chat — all OpenAI), SmartSearch (Ctrl+Shift+F, category tabs, workspace-wide search)
+    -   Notifications: NotificationCenter (bell in SidebarHeader, unread badge, mark-all-read, 30s polling); notifications table
+    -   Keyboard shortcuts in layout.tsx; Command + Search + AI Coach buttons in SidebarFooter
 
 ### Shared Code
 -   `shared/` directory contains common types, API route definitions with validation schemas (`shared/routes.ts`), and database schemas (`shared/schema.ts`).

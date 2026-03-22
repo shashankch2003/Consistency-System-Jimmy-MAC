@@ -16,6 +16,7 @@ import {
   channels, channelMessages, taskComments, documents,
   timeEntries, timesheets, productivitySnapshots,
   memberAvailability, savedReports,
+  okrGoals, goalTaskLinks, automations, automationLogs, notifications,
 } from "@shared/schema";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
 import { or, sql, inArray } from "drizzle-orm";
@@ -356,6 +357,30 @@ export interface IStorage extends IAuthStorage {
   createWorkspaceMember(data: typeof workspaceMembers.$inferInsert): Promise<typeof workspaceMembers.$inferSelect>;
   updateWorkspaceMemberRole(id: number, role: string): Promise<typeof workspaceMembers.$inferSelect>;
   deleteWorkspaceMember(id: number): Promise<void>;
+
+  // OKR Goals
+  getOkrGoals(workspaceId: number, period?: string): Promise<(typeof okrGoals.$inferSelect)[]>;
+  getOkrGoal(id: number): Promise<(typeof okrGoals.$inferSelect) | undefined>;
+  createOkrGoal(data: typeof okrGoals.$inferInsert): Promise<typeof okrGoals.$inferSelect>;
+  updateOkrGoal(id: number, data: Partial<typeof okrGoals.$inferInsert>): Promise<typeof okrGoals.$inferSelect>;
+  deleteOkrGoal(id: number): Promise<void>;
+  createGoalTaskLink(goalId: number, taskId: number): Promise<typeof goalTaskLinks.$inferSelect>;
+  deleteGoalTaskLink(goalId: number, taskId: number): Promise<void>;
+  // Automations
+  getAutomations(workspaceId: number): Promise<(typeof automations.$inferSelect)[]>;
+  getAutomation(id: number): Promise<(typeof automations.$inferSelect) | undefined>;
+  createAutomation(data: typeof automations.$inferInsert): Promise<typeof automations.$inferSelect>;
+  updateAutomation(id: number, data: Partial<typeof automations.$inferInsert>): Promise<typeof automations.$inferSelect>;
+  deleteAutomation(id: number): Promise<void>;
+  logAutomation(data: typeof automationLogs.$inferInsert): Promise<typeof automationLogs.$inferSelect>;
+  getMatchingAutomations(workspaceId: number, triggerType: string): Promise<(typeof automations.$inferSelect)[]>;
+  // Notifications
+  getNotifications(userId: string, workspaceId: number): Promise<(typeof notifications.$inferSelect)[]>;
+  createNotification(data: typeof notifications.$inferInsert): Promise<typeof notifications.$inferSelect>;
+  markNotificationRead(id: number): Promise<void>;
+  markAllNotificationsRead(userId: string, workspaceId: number): Promise<void>;
+  // Search
+  searchWorkspace(workspaceId: number, query: string): Promise<any>;
 
   getWorkloadData(workspaceId: number, teamId?: number): Promise<any[]>;
   reassignTask(taskId: number, assigneeId: string): Promise<typeof teamTasks.$inferSelect>;
@@ -1535,6 +1560,92 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteWorkspaceMember(id: number) {
     await db.delete(workspaceMembers).where(eq(workspaceMembers.id, id));
+  }
+
+  // OKR Goals
+  async getOkrGoals(workspaceId: number, period?: string) {
+    const conditions = [eq(okrGoals.workspaceId, workspaceId)];
+    if (period) conditions.push(eq(okrGoals.period, period));
+    return await db.select().from(okrGoals).where(and(...conditions)).orderBy(asc(okrGoals.createdAt));
+  }
+  async getOkrGoal(id: number) {
+    const [goal] = await db.select().from(okrGoals).where(eq(okrGoals.id, id));
+    return goal;
+  }
+  async createOkrGoal(data: typeof okrGoals.$inferInsert) {
+    const [created] = await db.insert(okrGoals).values(data).returning();
+    return created;
+  }
+  async updateOkrGoal(id: number, data: Partial<typeof okrGoals.$inferInsert>) {
+    const [updated] = await db.update(okrGoals).set({ ...data, updatedAt: new Date() }).where(eq(okrGoals.id, id)).returning();
+    return updated;
+  }
+  async deleteOkrGoal(id: number) {
+    await db.delete(okrGoals).where(eq(okrGoals.id, id));
+  }
+  async createGoalTaskLink(goalId: number, taskId: number) {
+    const [link] = await db.insert(goalTaskLinks).values({ goalId, taskId }).returning();
+    return link;
+  }
+  async deleteGoalTaskLink(goalId: number, taskId: number) {
+    await db.delete(goalTaskLinks).where(and(eq(goalTaskLinks.goalId, goalId), eq(goalTaskLinks.taskId, taskId)));
+  }
+
+  // Automations
+  async getAutomations(workspaceId: number) {
+    return await db.select().from(automations).where(eq(automations.workspaceId, workspaceId)).orderBy(desc(automations.createdAt));
+  }
+  async getAutomation(id: number) {
+    const [auto] = await db.select().from(automations).where(eq(automations.id, id));
+    return auto;
+  }
+  async createAutomation(data: typeof automations.$inferInsert) {
+    const [created] = await db.insert(automations).values(data).returning();
+    return created;
+  }
+  async updateAutomation(id: number, data: Partial<typeof automations.$inferInsert>) {
+    const [updated] = await db.update(automations).set(data).where(eq(automations.id, id)).returning();
+    return updated;
+  }
+  async deleteAutomation(id: number) {
+    await db.delete(automations).where(eq(automations.id, id));
+  }
+  async logAutomation(data: typeof automationLogs.$inferInsert) {
+    const [log] = await db.insert(automationLogs).values(data).returning();
+    return log;
+  }
+  async getMatchingAutomations(workspaceId: number, triggerType: string) {
+    return await db.select().from(automations).where(
+      and(eq(automations.workspaceId, workspaceId), eq(automations.triggerType, triggerType), eq(automations.isActive, true))
+    );
+  }
+
+  // Notifications
+  async getNotifications(userId: string, workspaceId: number) {
+    return await db.select().from(notifications)
+      .where(and(eq(notifications.userId, userId), eq(notifications.workspaceId, workspaceId)))
+      .orderBy(desc(notifications.createdAt))
+      .limit(50);
+  }
+  async createNotification(data: typeof notifications.$inferInsert) {
+    const [created] = await db.insert(notifications).values(data).returning();
+    return created;
+  }
+  async markNotificationRead(id: number) {
+    await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
+  }
+  async markAllNotificationsRead(userId: string, workspaceId: number) {
+    await db.update(notifications).set({ isRead: true })
+      .where(and(eq(notifications.userId, userId), eq(notifications.workspaceId, workspaceId)));
+  }
+  async searchWorkspace(workspaceId: number, query: string) {
+    const q = `%${query}%`;
+    const [foundTasks, foundDocs, foundMembers] = await Promise.all([
+      db.select().from(teamTasks).where(sql`lower(${teamTasks.title}) like lower(${q})`).limit(10),
+      db.select().from(documents).where(and(eq(documents.workspaceId, workspaceId), sql`lower(${documents.title}) like lower(${q})`)).limit(10),
+      db.select().from(workspaceMembers).where(and(eq(workspaceMembers.workspaceId, workspaceId), or(sql`lower(${workspaceMembers.displayName}) like lower(${q})`, sql`lower(${workspaceMembers.email}) like lower(${q})`))).limit(10),
+    ]);
+    return { tasks: foundTasks, documents: foundDocs, members: foundMembers };
   }
 
   async getWorkloadData(workspaceId: number, teamId?: number) {

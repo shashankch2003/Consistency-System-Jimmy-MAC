@@ -1069,6 +1069,83 @@ export const productivitySnapshots = pgTable(
   })
 );
 
+// ── PROMPT 6: OKR GOALS + AUTOMATIONS + AI + NOTIFICATIONS ──────────────────
+
+export const okrGoals = pgTable("okr_goals", {
+  id: serial("id").primaryKey(),
+  workspaceId: integer("workspace_id"),
+  title: text("title").notNull(),
+  description: text("description"),
+  goalType: text("goal_type").default("individual"),
+  parentGoalId: integer("parent_goal_id"),
+  ownerId: text("owner_id"),
+  teamId: integer("team_id"),
+  period: text("period"),
+  targetValue: numeric("target_value", { precision: 10, scale: 2 }),
+  currentValue: numeric("current_value", { precision: 10, scale: 2 }).default("0"),
+  measurementUnit: text("measurement_unit"),
+  confidence: text("confidence").default("on_track"),
+  dueDate: date("due_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertOkrGoalSchema = createInsertSchema(okrGoals).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertOkrGoal = z.infer<typeof insertOkrGoalSchema>;
+export type OkrGoal = typeof okrGoals.$inferSelect;
+
+export const goalTaskLinks = pgTable("goal_task_links", {
+  id: serial("id").primaryKey(),
+  goalId: integer("goal_id").references(() => okrGoals.id),
+  taskId: integer("task_id").references(() => teamTasks.id),
+});
+
+export const automations = pgTable("automations", {
+  id: serial("id").primaryKey(),
+  workspaceId: integer("workspace_id"),
+  name: text("name").notNull(),
+  triggerType: text("trigger_type"),
+  triggerConfig: jsonb("trigger_config").$defaultFn(() => ({})),
+  conditions: jsonb("conditions").$defaultFn(() => []),
+  actions: jsonb("actions").$defaultFn(() => []),
+  isActive: boolean("is_active").default(true),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+  lastTriggeredAt: timestamp("last_triggered_at"),
+  triggerCount: integer("trigger_count").default(0),
+});
+
+export const insertAutomationSchema = createInsertSchema(automations).omit({ id: true, createdAt: true });
+export type InsertAutomation = z.infer<typeof insertAutomationSchema>;
+export type Automation = typeof automations.$inferSelect;
+
+export const automationLogs = pgTable("automation_logs", {
+  id: serial("id").primaryKey(),
+  automationId: integer("automation_id"),
+  triggeredAt: timestamp("triggered_at").defaultNow(),
+  triggerEvent: jsonb("trigger_event").$defaultFn(() => ({})),
+  actionsExecuted: jsonb("actions_executed").$defaultFn(() => []),
+  status: text("status").default("success"),
+  errorMessage: text("error_message"),
+});
+
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  workspaceId: integer("workspace_id"),
+  userId: text("user_id").notNull(),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  relatedEntityType: text("related_entity_type"),
+  relatedEntityId: integer("related_entity_id"),
+  isRead: boolean("is_read").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Notification = typeof notifications.$inferSelect;
+
 export const memberAvailability = pgTable("member_availability", {
   id: serial("id").primaryKey(),
   userId: text("user_id").notNull(),

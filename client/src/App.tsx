@@ -34,6 +34,8 @@ import TimesheetsPage from "@/pages/dashboard/timesheets";
 import ProductivityDashboard from "@/pages/dashboard/productivity";
 import WorkloadPage from "@/pages/dashboard/workload";
 import ReportsPage from "@/pages/dashboard/reports";
+import OKRGoalsPage from "@/pages/dashboard/okr-goals";
+import AutomationsPage from "@/pages/dashboard/automations";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -185,6 +187,17 @@ function Router() {
       <Route path="/dashboard/reports">
         <DashboardLayout>
           <ReportsPage />
+        </DashboardLayout>
+      </Route>
+
+      <Route path="/dashboard/okr-goals">
+        <DashboardLayout>
+          <OKRGoalsPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/automations">
+        <DashboardLayout>
+          <AutomationsPage />
         </DashboardLayout>
       </Route>
 

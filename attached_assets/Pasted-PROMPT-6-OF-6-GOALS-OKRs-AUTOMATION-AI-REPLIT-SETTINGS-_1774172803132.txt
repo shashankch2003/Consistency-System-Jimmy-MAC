@@ -1,0 +1,115 @@
+PROMPT 6 OF 6 — GOALS/OKRs & AUTOMATION/AI
+■ REPLIT SETTINGS: AUTONOMOUS MODE → ECONOMY | App Testing: OFF | Code Optimization: OFF
+(Copy everything below this line into Replit)
+CONTEXT
+Feature being built: Goals/OKR system + workflow automations + AI assistants + notifications. Current state: All features
+from Prompts 1-5 working. Task table = team_tasks. Goal: Build the final modules completing the platform.
+CRITICAL: TABLE NAMING — Your app already has a 'goals' table (line 53 of schema.ts). Do NOT create another
+table called 'goals'. Name the new table okr_goals and use okrGoals for the Drizzle variable. (Fix 3)
+CRITICAL: ROUTE NAMING — Your app already has /dashboard/goals for personal goals. Register the OKR
+Goals page at /dashboard/okr-goals. Do NOT use /dashboard/goals. (Fix 17)
+USE REAL AI: The OpenAI integration is already installed and configured. Use it for AI Command Bar and AI
+Coach instead of keyword matching. Inspect the codebase for the existing OpenAI setup pattern. (Fix 15)
+WORKSPACE ID: Use const { workspaceId } = useWorkspace() from @/context/WorkspaceContext. (Fix 19)
+Follow all critical instructions (serial PKs, text user FKs, jsonb $defaultFn, IStorage pattern, imports, Recharts for charts).
+FILES TO CREATE
+(Fix 17+18: Goals page at okr-goals.tsx, all paths use client/src/pages/dashboard/)
+• client/src/pages/dashboard/okr-goals.tsx (NOT Goals.tsx — Fix 17)
+• client/src/components/goals/OKRTree.tsx
+• client/src/components/goals/GoalCard.tsx
+• client/src/components/goals/CreateGoalModal.tsx
+• client/src/pages/dashboard/automations.tsx
+• client/src/components/automation/AutomationBuilder.tsx
+• client/src/components/ai/AICommandBar.tsx
+• client/src/components/ai/AICoach.tsx
+• client/src/components/ai/SmartSearch.tsx
+• client/src/components/notifications/NotificationCenter.tsx
+PART A: GOALS & OKRs
+1. GOALS PAGE (okr-goals.tsx)
+Title 'Goals & OKRs' with period selector ('Q1 2026', 'Q2 2026', etc.). Tabs: Company Goals, Team Goals, My Goals. 'Add
+Goal' button.
+2. OKR TREE (OKRTree.tsx)
+Cascading tree. Level 1: Company Objective (blue left border). Level 2: Department Key Results (indented 40px). Level 3:
+Team Objectives. Level 4: Individual Goals. Load from okr_goals by workspace + period. Tree built from parent_goal_id.
+Expand/collapse with animation.
+3. GOAL CARD (GoalCard.tsx)
+Card with title, description (1 line truncated), progress bar (6px, colored by confidence), owner avatar, due date.
+Confidence badge: On Track (green), At Risk (orange), Off Track (red) — clickable dropdown. Progress: auto-calculated
+from linked team_tasks via goal_task_links, or manual number input for unlinked goals.
+4. CREATE GOAL MODAL (CreateGoalModal.tsx)
+Fields: Goal Title (required), Description, Type dropdown (Company Objective/Department Key Result/Team
+Goal/Individual Goal), Parent Goal dropdown, Owner, Due Date, Target Value, Current Value, Measurement Unit.
+5. DATABASE — OKR_GOALS TABLE
+(Fix 3: Named okr_goals, NOT goals)
+• id (serial PK), workspaceId (int), title (text, notNull), description (text), goalType (text)
+• parentGoalId (int, self-ref, nullable), ownerId (text — varchar user ID), teamId (int, nullable)
+• period (text), targetValue: decimal (nullable), currentValue: decimal default 0
+• measurementUnit (text), confidence (text, default 'on_track'), dueDate (date, nullable), createdAt, updatedAt
+6. DATABASE — GOAL_TASK_LINKS TABLE
+id (serial PK), goalId (int, references okrGoals), taskId (int, references teamTasks).
+PART B: WORKFLOW AUTOMATION
+7. AUTOMATIONS PAGE (automations.tsx)
+Title 'Automations' with 'Create Automation' button. List of cards: name, trigger desc, action desc, active toggle
+(ON=green, OFF=gray). Toggle updates DB.
+8. AUTOMATION BUILDER (AutomationBuilder.tsx)
+Visual WHEN → IF → THEN flow. Name input. Trigger dropdown (task status changes, assigned, overdue, subtasks
+completed, new member, project %). Condition dropdown (optional). Action dropdown (change status, assign, notify,
+create task, move, add tag). 'Add another action' (max 5). 'Save Automation': validate, save to automations table
+(trigger_config, conditions, actions as jsonb). 'Test' button.
+9. AUTOMATION EXECUTION ENGINE
+Check automations on every task status change, assignment change, completion event in team_tasks. Match trigger →
+check conditions → execute actions. Log to automation_logs.
+PART C: AI FEATURES
+10. AI COMMAND BAR (AICommandBar.tsx)
+Floating bar, top center. Opens on Ctrl+K / Cmd+K. Large input (50px). 4 suggestion chips. Closes on Escape.
+Fix 31 — KEYBOARD CONFLICT: Use event.preventDefault() on the keydown handler before opening the bar
+(Ctrl+K conflicts with browser address bar in Chrome/Edge). Also add a visible 'Command' button in the
+AppSidebar footer as a fallback click trigger.
+Process using the existing OpenAI integration: Send user query + context (current project, user tasks) to OpenAI. Parse
+response for actions (create task, navigate, search) or display text response. (Fix 15)
+11. AI COACH PANEL (AICoach.tsx)
+Right sidebar (320px), collapsible. 'AI Coach' header with sparkle icon. 'Today's Plan': top 3 tasks by priority/due from
+team_tasks DB. 'Focus Recommendations': Use OpenAI to analyze meeting-free blocks + task priorities. 'Insights': Use
+OpenAI to compare this week vs last week. 'Ask your coach...' input: sends to OpenAI with user context. (Fix 15: Real AI)
+12. SMART SEARCH (SmartSearch.tsx)
+Fix 33 — TRIGGER MECHANISM: SmartSearch opens when the user presses Ctrl+Shift+F (or Cmd+Shift+F on
+Mac). Use event.preventDefault() on the keydown handler. Also add a 'Search' button in the AppSidebar footer
+(magnifying glass icon) as a click fallback — same approach as AICommandBar (Fix 31). Do NOT use Ctrl+K
+(already taken by AICommandBar).
+Full-width overlay. Category tabs: All, Tasks, Documents, People, Messages. Search across team_tasks titles,
+documents, member names, messages from DB. Results grouped by category. Closes on Escape or clicking outside.
+13. NOTIFICATION CENTER (NotificationCenter.tsx)
+Fix 26 — BELL PLACEMENT: Add the bell icon button to the SidebarHeader in
+client/src/components/AppSidebar.tsx, next to the SidebarTrigger button (already in the header). The bell shows
+a red badge with unread count. Clicking opens the NotificationCenter dropdown.
+Dropdown (360px, max-height 480px). Items: icon, title, description, timestamp. Unread = blue dot. 'Mark all read' updates
+DB. Generate notifications from events: task assignments, completions, approaching deadlines (24h), mentions. Save to
+notifications table.
+DATABASE TABLES
+• automations: id (serial PK), workspaceId (int), name (text, notNull), triggerType (text), triggerConfig:
+jsonb.$defaultFn(() => ({})), conditions: jsonb.$defaultFn(() => []), actions: jsonb.$defaultFn(() => []),
+isActive (boolean, default true), createdBy (text), createdAt, lastTriggeredAt (nullable), triggerCount (int, default 0)
+• automation_logs: id (serial PK), automationId (int), triggeredAt, triggerEvent: jsonb.$defaultFn(() => ({})),
+actionsExecuted: jsonb.$defaultFn(() => []), status ('success'/'error'), errorMessage (text, nullable)
+• notifications: id (serial PK), workspaceId (int), userId (text), type (text), title (text), body (text), relatedEntityType
+(text), relatedEntityId (int), isRead (boolean, default false), createdAt
+API ROUTES
+• Goals: CRUD /api/okr-goals, GET /api/okr-goals?workspaceId=X&period=X
+• Goal links: POST/DELETE /api/goal-task-links
+• Automations: CRUD /api/automations, POST /api/automations/:id/test
+• AI: POST /api/ai/command (sends to OpenAI), POST /api/ai/coach (sends to OpenAI)
+• Search: GET /api/search?q=X
+• Notifications: GET /api/notifications, PATCH /api/notifications/mark-all-read, PATCH /api/notifications/:id/read
+PAGE REGISTRATION
+Fix 17+25 — EXPLICIT ROUTES:
+• Route /dashboard/okr-goals → OKRGoals (NOT /dashboard/goals — that route already exists)
+• Route /dashboard/automations → Automations
+Fix 24 — SIDEBAR: Add 'OKR Goals' (Target icon) and 'Automations' (Zap icon) to menuItems in AppSidebar.tsx.
+AFTER ALL CODE CHANGES: Run npx drizzle-kit push
+BOUNDARIES
+✖ Build everything described: Goals/OKRs + Automations + AI + Notifications + database + API routes + pages +
+sidebar
+✖ Only modify files from Prompts 1-5 for: event hooks in task status/assignment/completion handlers for automation
+engine and notification generation, + bell icon in AppSidebar header
+✖ Use okr_goals (not goals) and team_tasks (not tasks) for ALL references
+✖ This is the final prompt — the platform should be fully complete

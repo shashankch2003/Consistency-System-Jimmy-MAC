@@ -3253,5 +3253,194 @@ export async function registerRoutes(
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  // ── OKR GOALS ────────────────────────────────────────────────────────────
+  app.get("/api/okr-goals", isAuthenticated, async (req: any, res) => {
+    try {
+      const workspaceId = parseInt(req.query.workspaceId as string);
+      if (!workspaceId) return res.status(400).json({ message: "workspaceId required" });
+      const goals = await storage.getOkrGoals(workspaceId, req.query.period as string | undefined);
+      res.json(goals);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/okr-goals/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const goal = await storage.getOkrGoal(parseInt(req.params.id));
+      if (!goal) return res.status(404).json({ message: "Not found" });
+      res.json(goal);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/okr-goals", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const created = await storage.createOkrGoal({ ...req.body, ownerId: req.body.ownerId || userId });
+      res.status(201).json(created);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/okr-goals/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const updated = await storage.updateOkrGoal(parseInt(req.params.id), req.body);
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/okr-goals/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteOkrGoal(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/goal-task-links", isAuthenticated, async (req: any, res) => {
+    try {
+      const { goalId, taskId } = req.body;
+      const link = await storage.createGoalTaskLink(goalId, taskId);
+      res.status(201).json(link);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/goal-task-links", isAuthenticated, async (req: any, res) => {
+    try {
+      const { goalId, taskId } = req.body;
+      await storage.deleteGoalTaskLink(goalId, taskId);
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ── AUTOMATIONS ────────────────────────────────────────────────────────────
+  app.get("/api/automations", isAuthenticated, async (req: any, res) => {
+    try {
+      const workspaceId = parseInt(req.query.workspaceId as string);
+      if (!workspaceId) return res.status(400).json({ message: "workspaceId required" });
+      const list = await storage.getAutomations(workspaceId);
+      res.json(list);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/automations", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const created = await storage.createAutomation({ ...req.body, createdBy: userId });
+      res.status(201).json(created);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/automations/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const updated = await storage.updateAutomation(parseInt(req.params.id), req.body);
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/automations/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteAutomation(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/automations/:id/test", isAuthenticated, async (req: any, res) => {
+    try {
+      const auto = await storage.getAutomation(parseInt(req.params.id));
+      if (!auto) return res.status(404).json({ message: "Not found" });
+      await storage.logAutomation({ automationId: auto.id, status: "success", triggerEvent: { test: true }, actionsExecuted: auto.actions as any });
+      res.json({ success: true, message: "Test run completed" });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ── AI ENDPOINTS ───────────────────────────────────────────────────────────
+  app.post("/api/ai/command", isAuthenticated, async (req: any, res) => {
+    try {
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+      const { query, context } = req.body;
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `You are an AI assistant for the Consistency System productivity platform. 
+Help users navigate, create tasks, search, and get insights. 
+Context: ${JSON.stringify(context || {})}.
+Respond with a JSON object: { "action": "navigate|create_task|search|answer", "payload": {...}, "message": "..." }.
+For navigation: payload.url = "/dashboard/route".
+For create_task: payload.title, payload.description.
+For answer: just a message.`,
+          },
+          { role: "user", content: query },
+        ],
+        response_format: { type: "json_object" },
+      });
+      const result = JSON.parse(completion.choices[0].message.content || "{}");
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/ai/coach", isAuthenticated, async (req: any, res) => {
+    try {
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+      const { type, context, message } = req.body;
+      const systemPrompts: Record<string, string> = {
+        focus: "You are an AI productivity coach. Analyze the user's task list and suggest 3 focus recommendations for the day. Be concise, actionable, bullet points.",
+        insights: "You are an AI productivity coach. Compare this week's productivity data vs last week and provide 2-3 key insights. Be concise.",
+        chat: "You are an AI productivity coach called 'Coach'. Answer the user's question helpfully and concisely based on their work context.",
+      };
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompts[type] || systemPrompts.chat },
+          { role: "user", content: `Context: ${JSON.stringify(context || {})}. ${message || ""}` },
+        ],
+      });
+      res.json({ reply: completion.choices[0].message.content });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ── SEARCH ─────────────────────────────────────────────────────────────────
+  app.get("/api/search", isAuthenticated, async (req: any, res) => {
+    try {
+      const workspaceId = parseInt(req.query.workspaceId as string);
+      const q = (req.query.q as string) || "";
+      if (!q || !workspaceId) return res.json({ tasks: [], documents: [], members: [] });
+      const results = await storage.searchWorkspace(workspaceId, q);
+      res.json(results);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ── NOTIFICATIONS ───────────────────────────────────────────────────────────
+  app.get("/api/notifications", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const workspaceId = parseInt(req.query.workspaceId as string) || 0;
+      const list = await storage.getNotifications(userId, workspaceId);
+      res.json(list);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/notifications/mark-all-read", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const workspaceId = parseInt(req.body.workspaceId) || 0;
+      await storage.markAllNotificationsRead(userId, workspaceId);
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/notifications/:id/read", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.markNotificationRead(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   return httpServer;
 }
