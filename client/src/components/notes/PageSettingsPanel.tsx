@@ -26,16 +26,33 @@ function relativeTime(date: Date) {
   return `${d}d ago`;
 }
 
+function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+  return (
+    <div className={`w-10 h-5 rounded-full relative transition-colors cursor-pointer ${checked ? "bg-blue-500" : "bg-gray-200"}`} onClick={onChange}>
+      <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow transition-all ${checked ? "right-0.5" : "left-0.5"}`} />
+    </div>
+  );
+}
+
 export default function PageSettingsPanel() {
-  const { selectedPage, updatePage, deletePage, duplicatePage, setSettingsPanelOpen, selectPage } = useNotes();
+  const {
+    selectedPage, updatePage, deletePage, duplicatePage, setSettingsPanelOpen, selectPage,
+    aiCoachEnabled, toggleAiCoach,
+    pageInsights, generateInsights,
+    smartTagSuggestions, generateSmartTags, acceptSmartTag, dismissSmartTag,
+  } = useNotes();
   const { toast } = useToast();
   const [showShare, setShowShare] = useState(false);
   const [sharePermission, setSharePermission] = useState("view");
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [tagsLoading, setTagsLoading] = useState(false);
 
   if (!selectedPage) return null;
 
   const wordCount = selectedPage.blocks.reduce((acc, b) => acc + b.content.split(/\s+/).filter(Boolean).length, 0);
   const readingTime = Math.max(1, Math.ceil(wordCount / 200));
+  const insights = pageInsights[selectedPage.id];
+  const tagSuggestions = smartTagSuggestions[selectedPage.id] ?? [];
 
   const handleExport = () => {
     const lines: string[] = [`# ${selectedPage.title}`, ""];
@@ -49,7 +66,7 @@ export default function PageSettingsPanel() {
       else if (b.type === "quote") lines.push(`> ${b.content}`, "");
       else if (b.type === "code") lines.push(`\`\`\`${b.properties.language || ""}\n${b.content}\n\`\`\``, "");
       else if (b.type === "divider") lines.push("---", "");
-      else lines.push(b.content, "");
+      else if (b.content) lines.push(b.content, "");
     });
     const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
     const a = document.createElement("a");
@@ -88,13 +105,34 @@ export default function PageSettingsPanel() {
     input.click();
   };
 
+  const handleGenerateInsights = () => {
+    setInsightsLoading(true);
+    setTimeout(() => {
+      generateInsights(selectedPage.id);
+      setInsightsLoading(false);
+    }, 800);
+  };
+
+  const handleGenerateSmartTags = () => {
+    if (wordCount < 100) { toast({ title: "Need 100+ words to generate smart tags", variant: "destructive" }); return; }
+    setTagsLoading(true);
+    setTimeout(() => {
+      generateSmartTags(selectedPage.id);
+      setTagsLoading(false);
+    }, 600);
+  };
+
+  const sentimentColor: Record<string, string> = {
+    "Positive": "text-green-600 bg-green-50",
+    "Neutral": "text-gray-600 bg-gray-50",
+    "Negative": "text-red-600 bg-red-50",
+  };
+
   return (
     <div className="fixed right-0 top-0 h-full w-[340px] bg-white shadow-xl border-l z-40 overflow-y-auto">
       <div className="flex items-center justify-between border-b px-5 py-4">
         <h2 className="font-semibold text-lg text-gray-900">Page Settings</h2>
-        <button onClick={() => setSettingsPanelOpen(false)}>
-          <X className="w-5 h-5 text-gray-400 hover:text-gray-600" />
-        </button>
+        <button onClick={() => setSettingsPanelOpen(false)}><X className="w-5 h-5 text-gray-400 hover:text-gray-600" /></button>
       </div>
 
       <div className="px-5 py-4 space-y-6">
@@ -102,11 +140,8 @@ export default function PageSettingsPanel() {
           <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Appearance</div>
           <div className="grid grid-cols-3 gap-2 mb-3">
             {(["default", "serif", "mono"] as FontType[]).map(f => (
-              <button
-                key={f}
-                onClick={() => updatePage(selectedPage.id, { font: f })}
-                className={`rounded-lg border-2 p-3 text-center transition-colors ${selectedPage.font === f ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300"}`}
-              >
+              <button key={f} onClick={() => updatePage(selectedPage.id, { font: f })}
+                className={`rounded-lg border-2 p-3 text-center transition-colors ${selectedPage.font === f ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300"}`}>
                 <div className={`text-lg font-medium mb-1 ${f === "serif" ? "font-serif" : f === "mono" ? "font-mono" : ""}`}>Aa</div>
                 <div className="text-xs text-gray-500 capitalize">{f}</div>
               </button>
@@ -117,28 +152,30 @@ export default function PageSettingsPanel() {
             { label: "Full width", key: "fullWidth" as const },
             { label: "Lock page", key: "locked" as const },
           ].map(({ label, key }) => (
-            <div
-              key={key}
-              className="flex justify-between items-center py-2 text-sm text-gray-700 hover:bg-gray-50 rounded px-2 cursor-pointer"
-              onClick={() => updatePage(selectedPage.id, { [key]: !selectedPage[key] })}
-            >
+            <div key={key} className="flex justify-between items-center py-2 text-sm text-gray-700 hover:bg-gray-50 rounded px-2 cursor-pointer" onClick={() => updatePage(selectedPage.id, { [key]: !selectedPage[key] })}>
               <span>{label}</span>
-              <div className={`w-10 h-5 rounded-full relative transition-colors ${selectedPage[key] ? "bg-blue-500" : "bg-gray-200"}`}>
-                <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow transition-all ${selectedPage[key] ? "right-0.5" : "left-0.5"}`} />
-              </div>
+              <Toggle checked={!!selectedPage[key]} onChange={() => updatePage(selectedPage.id, { [key]: !selectedPage[key] })} />
             </div>
           ))}
+        </section>
+
+        <section>
+          <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">AI Features</div>
+          <div className="flex justify-between items-center py-2 text-sm text-gray-700 hover:bg-gray-50 rounded px-2 cursor-pointer" onClick={toggleAiCoach}>
+            <div>
+              <div className="font-medium">AI Writing Coach</div>
+              <div className="text-xs text-gray-400">Suggestions as you write</div>
+            </div>
+            <Toggle checked={aiCoachEnabled} onChange={toggleAiCoach} />
+          </div>
         </section>
 
         <section>
           <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Page Status</div>
           <div className="flex flex-wrap gap-2">
             {STATUS_LIST.map(s => (
-              <button
-                key={s.value}
-                onClick={() => updatePage(selectedPage.id, { status: s.value })}
-                className={`text-xs px-3 py-1.5 rounded-full font-medium transition-all ${s.cls} ${selectedPage.status === s.value ? "ring-2 ring-offset-1 ring-gray-400" : ""}`}
-              >
+              <button key={s.value} onClick={() => updatePage(selectedPage.id, { status: s.value })}
+                className={`text-xs px-3 py-1.5 rounded-full font-medium transition-all ${s.cls} ${selectedPage.status === s.value ? "ring-2 ring-offset-1 ring-gray-400" : ""}`}>
                 {s.label}
               </button>
             ))}
@@ -156,9 +193,76 @@ export default function PageSettingsPanel() {
         </section>
 
         <section>
-          <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">AI Insights</div>
-          <button className="border border-gray-200 rounded-md px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 w-full text-left mb-2">✨ Generate Insights</button>
-          <div className="text-xs text-gray-400 bg-gray-50 rounded-lg p-3">Insights will appear here</div>
+          <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Page Insights</div>
+          <button
+            className={`w-full px-3 py-2 rounded-xl border text-sm font-medium transition-colors mb-3 ${insightsLoading ? "bg-gray-50 text-gray-400 border-gray-100" : "bg-white border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-700"}`}
+            onClick={handleGenerateInsights}
+            disabled={insightsLoading}
+          >
+            {insightsLoading ? "Analyzing page..." : "✨ Generate Insights"}
+          </button>
+          {insights ? (
+            <div className="space-y-3">
+              <div className="bg-gray-50 rounded-xl p-3">
+                <div className="text-xs font-semibold text-gray-400 mb-1.5">Summary</div>
+                <p className="text-xs text-gray-700 leading-relaxed">{insights.summary}</p>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3">
+                <div className="text-xs font-semibold text-gray-400 mb-2">Key Topics</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {insights.topics.map(t => (
+                    <span key={t} className="text-xs bg-blue-50 text-blue-700 rounded-full px-2 py-0.5 border border-blue-100">{t}</span>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <div className="text-xs font-semibold text-gray-400 mb-1">Sentiment</div>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${sentimentColor[insights.sentiment] ?? "text-gray-600 bg-gray-50"}`}>{insights.sentiment}</span>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <div className="text-xs font-semibold text-gray-400 mb-1">Readability</div>
+                  <span className="text-xs text-gray-700 font-medium">{insights.readability}</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-gray-400 bg-gray-50 rounded-xl p-3 text-center">Click above to generate AI insights for this page</div>
+          )}
+        </section>
+
+        <section>
+          <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Smart Tags</div>
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {selectedPage.tags.map(tag => (
+              <span key={tag} className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 flex items-center gap-1">
+                {tag}
+                <button className="hover:text-red-500 ml-0.5" onClick={() => updatePage(selectedPage.id, { tags: selectedPage.tags.filter(t => t !== tag) })}>✕</button>
+              </span>
+            ))}
+          </div>
+          <button
+            className={`w-full px-3 py-2 rounded-xl border text-sm font-medium transition-colors mb-3 ${tagsLoading ? "bg-gray-50 text-gray-400 border-gray-100" : wordCount < 100 ? "bg-gray-50 text-gray-400 border-gray-100 cursor-not-allowed" : "bg-white border-gray-200 hover:border-purple-300 hover:bg-purple-50 text-gray-700"}`}
+            onClick={handleGenerateSmartTags}
+            disabled={tagsLoading || wordCount < 100}
+            title={wordCount < 100 ? "Need 100+ words for smart tags" : ""}
+          >
+            {tagsLoading ? "Analyzing..." : wordCount < 100 ? `🏷️ Need ${100 - wordCount} more words` : "🏷️ Suggest Smart Tags"}
+          </button>
+          {tagSuggestions.length > 0 && (
+            <div>
+              <div className="text-xs text-gray-400 mb-2">Suggested tags:</div>
+              <div className="flex flex-wrap gap-1.5">
+                {tagSuggestions.map(tag => (
+                  <div key={tag} className="flex items-center gap-1 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5">
+                    <span className="text-xs text-purple-700">{tag}</span>
+                    <button className="text-green-500 hover:text-green-700 text-xs font-bold ml-0.5" title="Accept" onClick={() => acceptSmartTag(selectedPage.id, tag)}>✓</button>
+                    <button className="text-gray-400 hover:text-red-500 text-xs ml-0.5" title="Dismiss" onClick={() => dismissSmartTag(selectedPage.id, tag)}>✕</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </section>
 
         <section>
@@ -167,11 +271,6 @@ export default function PageSettingsPanel() {
             {[
               { label: "Copy link", action: () => { navigator.clipboard.writeText(window.location.href); toast({ title: "Link copied to clipboard" }); } },
               { label: "Duplicate page", action: () => { const id = duplicatePage(selectedPage.id); selectPage(id); setSettingsPanelOpen(false); toast({ title: "Page duplicated" }); } },
-              { label: "Move to...", action: () => toast({ title: "Page picker coming soon" }) },
-              { label: "Suggest edits", action: () => {} },
-              { label: "Use with AI", action: () => {} },
-              { label: "Translate", action: () => {} },
-              { label: "History", action: () => toast({ title: "Version history available after database sync" }) },
               { label: "Share", action: () => setShowShare(true) },
               { label: "Export as Markdown", action: handleExport },
               { label: "Import from Markdown", action: handleImport },

@@ -1,0 +1,214 @@
+PROMPT 4 OF 7
+LOGIC: Database 6 Views + Collaboration + Search + Templates + AI
+Assistance
+■ REPLIT: AUTONOMOUS → ECONOMY | App Testing: OFF | Code Optimization: OFF
+■ FIX APPLIED: Fix 1 — Tech stack corrected
+■ FIX APPLIED: Fix 3 — File paths corrected
+■ FIX APPLIED: Fix 15 — PDF export approach specified (window.print() or jspdf)
+CONTEXT:
+App: AI-driven productivity platform with auth, teams, tasks
+Tech: React, TypeScript, Vite, Tailwind CSS, Shadcn/UI, PostgreSQL, Drizzle ORM,
+Express.js backend in server/routes.ts
+Building: Advanced note-taking system with block editor, 35+ block types, databases,
+AI coaching, focus mode, voice notes, sketching, and 25 unique features beyond
+competitors
+Feature: 6 database views, 20 property types, comments, reactions, sharing, version
+history, command palette, templates, import/export, AI text assistance
+Current state: Prompt 3 done. All blocks and unique features work.
+Layer: Layer 2+3
+Files to change: client/src/components/notes/DatabaseView.tsx,
+client/src/components/notes/CollaborationPanel.tsx,
+client/src/components/notes/SearchCommandPalette.tsx,
+client/src/components/notes/PageSettingsPanel.tsx
+1. DATABASE VIEWS (6 views sharing same data):
+TABLE: Editable cells. Click cell to edit. Column resize. Sort by column click. Add
+row button. Add property (column) button. Property types: Text, Number, Select
+(dropdown), Multi-select, Status, Date, Person, Checkbox, URL, Email, Phone, Files,
+Formula, Relation, Rollup, Created time, Last edited, Created by, Last edited by.
+BOARD: Cards in columns grouped by a Select/Status property. Drag cards between
+columns. Click card opens row detail.
+CALENDAR: Monthly grid. Items placed on Date property. Click day to add. Drag to
+reschedule. Month navigation.
+TIMELINE: Horizontal bars. Start/end from Date property. Drag to resize duration.
+Zoom levels.
+GALLERY: Card grid with cover image from Files property. Title + 2-3 visible
+properties.
+LIST: Simple row list with title + key properties inline. Compact.
+Filter: Add filter rows (property + operator + value). AND/OR logic. Sort:
+Multi-column sort. Group: Group rows by any Select/Status property.
+2. COMMENTS: Click comment icon on page header opens CollaborationPanel. Type +
+Enter posts comment with name + time. Reply to create thread. "Resolve" hides thread
+(show resolved toggle). Inline comments: Select text → toolbar "Comment" → adds
+highlight + comment.
+3. BLOCK REACTIONS: Show reaction counts per block. Click to toggle your reaction.
+4. SHARING: Share button opens modal. "Copy link" copies page URL. Permission
+dropdown: "Can edit" / "Can comment" / "Can view". Toggle "Public page" generates
+shareable link. "Invite" email input.
+5. VERSION HISTORY: Triggered from settings "History". Shows list of auto-saved
+versions (every 10 minutes of editing). Click version shows page at that state.
+"Restore" replaces current with that version. Page comparison between versions.
+6. COMMAND PALETTE: Ctrl+K. Search filters pages by title (case-insensitive).
+Actions execute. Recent tracks last opened. Quick Capture saves text to inbox.
+Results show matched pages with icon + title + snippet + path.
+7. TEMPLATES: "Templates" button in new page flow. Gallery of templates: "Meeting
+Notes" / "Project Brief" / "Weekly Review" / "Decision Log" / "Research Notes" /
+"Daily Journal". Click creates page from template. "Save as template" from page
+menu.
+8. IMPORT: Settings → Import. Accept .md files. Parse markdown to blocks. Drag-drop
+file onto page to import.
+9. EXPORT: Settings → Export. Generate Markdown from blocks. Download as .md file.
+Export as PDF option: use the browser's window.print() method with a print-friendly
+stylesheet, or install jspdf for programmatic PDF generation.
+10. AI ASSISTANCE (in BlockToolbar): Select text → sparkle button. Options: "Improve
+writing" / "Fix grammar" / "Make shorter" / "Make longer" / "Change tone
+(Professional/Casual/Friendly)" / "Summarize" / "Translate" / "Explain" / "Continue
+writing" / "Generate from prompt". Mock AI: return slightly modified text for now.
+BOUNDARIES — CRITICAL:
+- Do not add any database reads or writes
+- All data in React state only (lost on refresh — expected)
+- Do not change any visual design from Prompt 1
+- Do not add any features not described above
+PROMPT 5 OF 7
+DB: Create ALL Tables + Connect Pages + Blocks + Sidebar
+■ REPLIT: AUTONOMOUS → ECONOMY | App Testing: OFF | Code Optimization: OFF
+■ FIX APPLIED: Fix 1 — Tech stack corrected
+■ FIX APPLIED: Fix 2 — Existing 'notes' table conflict noted
+■ FIX APPLIED: Fix 3 — File paths corrected
+■ FIX APPLIED: Fix 4 — Drizzle pgTable() syntax (not Prisma)
+■ FIX APPLIED: Fix 5 — npx drizzle-kit push command added
+■ FIX APPLIED: Fix 6 — uuid, jsonb, date imports added
+■ FIX APPLIED: Fix 7 — UUID PKs use uuid().defaultRandom().primaryKey()
+■ FIX APPLIED: Fix 8 — User FK columns use text() to match Replit Auth
+■ FIX APPLIED: Fix 9 — workspace_id replaced with userId(text)
+■ FIX APPLIED: Fix 10 — API routes instruction added for server/routes.ts
+■ FIX APPLIED: Fix 12 — IStorage interface pattern added
+■ FIX APPLIED: Fix 13 — jsonb defaults use .$defaultFn()
+■ FIX APPLIED: Fix 19 — npx drizzle-kit push in boundaries
+CONTEXT:
+App: AI-driven productivity platform with auth, teams, tasks
+Tech: React, TypeScript, Vite, Tailwind CSS, Shadcn/UI, PostgreSQL, Drizzle ORM,
+Express.js backend in server/routes.ts
+Building: Advanced note-taking system with block editor, 35+ block types, databases,
+AI coaching, focus mode, voice notes, sketching, and 25 unique features beyond
+competitors
+Feature: Create every database table + connect pages, blocks, sidebar tree,
+favorites, tags, recent to database
+Current state: Prompts 1-4 done. Everything works with React state.
+Layer: Layer 4 — Database
+IMPORTANT: The app already has a 'notes' table in shared/schema.ts that handled
+basic notes. The new 'pages' table replaces it. Do NOT delete the old notes table —
+just create new ones alongside it.
+Files to change: client/src/components/notes/Sidebar.tsx,
+client/src/components/notes/PageView.tsx,
+client/src/components/notes/BlockEditor.tsx,
+client/src/components/notes/SlashCommandGrid.tsx, shared/schema.ts,
+server/routes.ts, server/storage.ts
+PREREQUISITE — SCHEMA IMPORTS:
+[FIX 24: Your schema.ts already imports uuid, jsonb, date. Inspect the actual
+import line before changes. Only add what is genuinely missing.]
+Check the existing import from drizzle-orm/pg-core in shared/schema.ts:
+uuid, jsonb, date
+(Your file currently imports: pgTable, text, serial, integer, boolean, timestamp,
+varchar — add the missing ones.)
+=== PART A: CREATE ALL 18 TABLES ===
+Add all 18 tables to shared/schema.ts using Drizzle's pgTable() syntax.
+Use uuid().defaultRandom().primaryKey() for all primary keys.
+Use text() for all user ID foreign key columns (Replit Auth stores user IDs as text
+strings, not UUIDs).
+Use .$defaultFn(() => ({})) for jsonb columns with default {}, and .$defaultFn(() =>
+[]) for default [].
+Notes are personal data scoped to the authenticated user. Use userId (text) as the
+owner column instead of workspace_id. (The app has a workspace system, but notes
+are individual-user-owned.)
+Do NOT connect to UI yet in Part A. Create tables first.
+1. "pages": id(uuid PK), userId(text, FK to user), parent_page_id(uuid self-ref
+nullable), title(text default "Untitled"), icon(text nullable), cover_type(text
+nullable "gradient"/"image"), cover_value(text nullable), font(text default
+"default"), small_text(boolean false), full_width(boolean false), is_locked(boolean
+false), status(text default "draft"), is_favorite(boolean false),
+is_template(boolean false), is_public(boolean false), word_count(integer 0),
+sort_order(integer 0), last_visited_at(timestamp nullable), created_by(text, FK to
+user), created_at(timestamp), updated_at(timestamp), deleted_at(timestamp nullable)
+2. "blocks": id(uuid PK), page_id(uuid FK pages), parent_block_id(uuid self-ref
+nullable for nested), type(text not null), content(text default ""),
+properties(jsonb .$defaultFn(() => ({}))), sort_order(integer 0),
+indent_level(integer 0), is_synced(boolean false), synced_source_id(uuid nullable),
+created_at(timestamp), updated_at(timestamp)
+3. "block_reactions": id(uuid PK), block_id(uuid FK blocks), user_id(text FK),
+emoji(text), created_at(timestamp). UNIQUE(block_id, user_id, emoji)
+4. "block_bookmarks": id(uuid PK), user_id(text FK), block_id(uuid FK blocks),
+page_id(uuid FK pages), label(text nullable), created_at(timestamp)
+5. "page_tags": id(uuid PK), page_id(uuid FK pages), tag_name(text),
+is_ai_suggested(boolean false), created_at(timestamp)
+6. "page_versions": id(uuid PK), page_id(uuid FK pages), version_number(integer),
+blocks_snapshot(jsonb), created_by(text FK), created_at(timestamp), description(text
+nullable)
+7. "page_shares": id(uuid PK), page_id(uuid FK pages), shared_with_id(text FK
+nullable), shared_with_email(text nullable), permission(text default "view"),
+is_public_link(boolean false), created_by(text FK), created_at(timestamp)
+8. "comments": id(uuid PK), page_id(uuid FK pages), block_id(uuid FK nullable),
+parent_comment_id(uuid self-ref nullable), author_id(text FK), content(text),
+is_resolved(boolean false), selection_text(text nullable), created_at(timestamp),
+updated_at(timestamp)
+9. "databases_meta": id(uuid PK), block_id(uuid FK blocks), name(text),
+description(text nullable), created_at(timestamp), updated_at(timestamp)
+10. "database_properties": id(uuid PK), database_id(uuid FK databases_meta),
+name(text), type(text), config(jsonb .$defaultFn(() => ({}))), sort_order(integer),
+is_visible(boolean true), created_at(timestamp)
+11. "database_rows": id(uuid PK), database_id(uuid FK databases_meta), values(jsonb
+.$defaultFn(() => ({}))), created_by(text FK), created_at(timestamp),
+updated_at(timestamp), deleted_at(timestamp nullable)
+12. "database_views": id(uuid PK), database_id(uuid FK databases_meta), name(text),
+type(text "table"/"board"/"calendar"/"timeline"/"gallery"/"list"), config(jsonb),
+is_default(boolean false), sort_order(integer), created_at(timestamp)
+[FIX 27: Before creating tables 13-17, check your existing schema.ts for name
+conflicts. If any exist, prefix with "note_" (e.g., "note_snippets").]
+13. "snippets": id(uuid PK), user_id(text FK), name(text), blocks_data(jsonb),
+created_at(timestamp), updated_at(timestamp)
+14. "captures": id(uuid PK), user_id(text FK), content(text), source(text nullable),
+is_processed(boolean false), created_at(timestamp)
+15. "note_journal_entries": id(uuid PK), user_id(text FK), date(date), page_id(uuid
+FK pages), mood(text nullable), streak_count(integer default 0), created_at(timestamp)
+[FIX 23: Renamed from "journal_entries" — your schema already has that table.]
+16. "page_insights": id(uuid PK), page_id(uuid FK pages), summary(text),
+topics(text[]), sentiment(text), readability_score(integer), generated_at(timestamp)
+17. "page_templates": id(uuid PK), userId(text FK), name(text), description(text),
+icon(text), blocks_data(jsonb), category(text), usage_count(integer 0),
+created_by(text FK), created_at(timestamp)
+18. "recent_pages": id(uuid PK), user_id(text FK), page_id(uuid FK pages),
+visited_at(timestamp). UNIQUE(user_id, page_id)
+After adding all tables to shared/schema.ts, run: npx drizzle-kit push
+=== PART B: CONNECT PAGES + BLOCKS + SIDEBAR ===
+IMPORTANT: For all database operations, add methods to the IStorage interface in
+server/storage.ts and implement them there, then call storage.* methods from routes
+— this is the existing pattern in the app. Add all necessary API routes to
+server/routes.ts following the same patterns as existing routes, using
+isAuthenticated middleware and req.user.claims.sub for user ID.
+After tables are created, connect these features to the database:
+1. PAGES: Create → Insert into pages with userId from req.user.claims.sub. Load page
+tree: Load all pages for user, build tree from parent_page_id. Update
+title/icon/cover/font/width/small_text/status/lock on change. Delete → Set
+deleted_at (soft delete). Restore from trash → Clear deleted_at.
+2. BLOCKS: On page open → Load blocks for page_id ordered by sort_order. Create
+block → Insert. Update content/type/properties on change (debounced 1 second).
+Delete block → Delete row. Reorder (drag-drop) → Update sort_order for affected
+blocks. Indent/outdent → Update indent_level.
+3. SIDEBAR TREE: Load from pages table. Drag reorder → Update sort_order +
+parent_page_id. Expand/collapse state stored in localStorage.
+4. FAVORITES: Star → Update is_favorite on page. Load favorites tab: pages where
+is_favorite=true.
+5. TAGS: Add tag → Insert page_tags. Remove → Delete. Load Tags tab: Get distinct
+tag_name from page_tags, count pages per tag. Click tag → Load pages with that tag.
+6. RECENT: On page open → Upsert recent_pages (user+page, update visited_at). Load
+Recent tab: Order by visited_at desc limit 10.
+7. QUICK CAPTURE: Save → Insert into captures. Load inbox → captures where
+is_processed=false. "Move to page" → Create block from capture, set
+is_processed=true.
+8. VERSION AUTO-SAVE: Every 10 minutes of editing → Snapshot all blocks as JSON,
+insert page_versions. Increment version_number. Keep last 50 versions.
+BOUNDARIES — CRITICAL:
+- Do not change any UI design or layout
+- Do not change any interaction behavior
+- Only add database operations (schema, storage methods, API routes)
+- After adding all tables, run: npx drizzle-kit push
+- Do not add any features not described above

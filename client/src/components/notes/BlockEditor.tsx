@@ -1,21 +1,603 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { ChevronRight, ChevronDown, GripVertical, Copy, Trash2, MoreHorizontal } from "lucide-react";
+import katex from "katex";
+import "katex/dist/katex.min.css";
+import { ChevronRight, GripVertical, Copy, Trash2, Play, Square, Mic, RotateCcw, Plus, CheckCircle } from "lucide-react";
 import { useNotes, Block, BlockType, makeBlock, uid } from "./NotesContext";
 import SlashCommandGrid from "./SlashCommandGrid";
 import BlockToolbar from "./BlockToolbar";
 
 const TEXT_COLORS = ["#1a1a1a","#ef4444","#f97316","#eab308","#22c55e","#3b82f6","#8b5cf6","#ec4899","#6b7280","#ffffff"];
 const BG_COLORS  = ["transparent","#fef2f2","#fff7ed","#fefce8","#f0fdf4","#eff6ff","#faf5ff","#fdf4ff","#f9fafb","#111827"];
-
 const LANGUAGES = ["javascript","typescript","python","rust","go","java","c","cpp","csharp","html","css","sql","bash","json","yaml","markdown","plaintext"];
+const REACTION_EMOJIS = ["👍","❤️","😂","😮","😢","🔥","✅","💡","⭐","🎯","👀","🙌"];
+const SKETCH_COLORS = ["#1a1a1a","#ef4444","#f97316","#22c55e","#3b82f6","#8b5cf6","#ec4899","#ffffff"];
 
 interface SlashState { blockId: string; query: string; }
 interface ToolbarState { x: number; y: number; blockId: string; }
 interface BlockMenuState { x: number; y: number; blockId: string; }
 interface ColorPickerState { x: number; y: number; mode: "text" | "bg"; blockId: string; }
 
+function EquationBlock({ block, onUpdateProps }: { block: Block; onUpdateProps: (id: string, p: any) => void }) {
+  const [editing, setEditing] = useState(block.properties.editing ?? false);
+  const [latex, setLatex] = useState(block.properties.latex ?? "E = mc^2");
+  let rendered = "";
+  try { rendered = katex.renderToString(latex, { throwOnError: false, displayMode: true }); } catch { rendered = latex; }
+
+  const commit = () => {
+    setEditing(false);
+    onUpdateProps(block.id, { latex, editing: false });
+  };
+
+  if (editing) {
+    return (
+      <div className="border border-blue-300 rounded-lg p-3 my-1 bg-blue-50">
+        <div className="text-xs text-blue-500 mb-1 font-mono">LaTeX / KaTeX</div>
+        <input
+          className="w-full bg-transparent font-mono text-sm text-gray-800 outline-none border-b border-blue-200 pb-1"
+          value={latex}
+          onChange={e => setLatex(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") commit(); }}
+          onBlur={commit}
+          autoFocus
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="my-2 p-3 rounded-lg bg-gray-50 border border-gray-200 hover:border-blue-200 cursor-pointer group" onClick={() => setEditing(true)}>
+      <div dangerouslySetInnerHTML={{ __html: rendered }} className="overflow-x-auto" />
+      <div className="text-xs text-gray-300 group-hover:text-gray-400 mt-1 font-mono transition-colors">{latex}</div>
+    </div>
+  );
+}
+
+function VoiceNoteBlock({ block, onUpdateProps }: { block: Block; onUpdateProps: (id: string, p: any) => void }) {
+  const [recording, setRecording] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<number>(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const amplitudes = block.properties.amplitudes ?? [];
+  const audioUrl = block.properties.audioUrl;
+  const transcription = block.properties.transcription ?? "";
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      recorderRef.current = recorder;
+      chunksRef.current = [];
+      recorder.ondataavailable = e => chunksRef.current.push(e.data);
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const url = URL.createObjectURL(blob);
+        const fakeAmps = Array.from({ length: 30 }, () => Math.random() * 0.8 + 0.1);
+        onUpdateProps(block.id, { audioUrl: url, amplitudes: fakeAmps, duration: elapsed });
+        stream.getTracks().forEach(t => t.stop());
+      };
+      recorder.start();
+      setRecording(true);
+      setElapsed(0);
+      timerRef.current = window.setInterval(() => setElapsed(t => t + 1), 1000);
+    } catch {
+      onUpdateProps(block.id, { error: "Microphone access denied. Voice recording requires HTTPS and microphone permission." });
+    }
+  };
+
+  const stopRecording = () => {
+    recorderRef.current?.stop();
+    clearInterval(timerRef.current);
+    setRecording(false);
+  };
+
+  const togglePlay = () => {
+    if (!audioUrl) return;
+    if (!audioRef.current) audioRef.current = new Audio(audioUrl);
+    if (playing) { audioRef.current.pause(); setPlaying(false); }
+    else { audioRef.current.play(); setPlaying(true); audioRef.current.onended = () => setPlaying(false); }
+  };
+
+  const transcribe = () => {
+    const mockTexts = ["This is a voice note transcription generated by AI.", "Meeting discussion about project timelines and deliverables.", "Ideas for the new feature: user onboarding flow improvements."];
+    onUpdateProps(block.id, { transcription: mockTexts[Math.floor(Math.random() * mockTexts.length)] });
+  };
+
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
+
+  return (
+    <div className="border border-gray-200 rounded-xl p-4 my-2 bg-white">
+      <div className="flex items-center gap-3">
+        {!audioUrl ? (
+          <>
+            <button
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${recording ? "bg-red-500 animate-pulse" : "bg-gray-100 hover:bg-red-100"}`}
+              onClick={recording ? stopRecording : startRecording}
+            >
+              {recording ? <Square className="w-4 h-4 text-red-500" /> : <Mic className="w-5 h-5 text-red-500" />}
+            </button>
+            {recording ? (
+              <div className="flex items-center gap-2 flex-1">
+                <div className="flex items-end gap-0.5 h-8">
+                  {Array.from({ length: 20 }).map((_, i) => (
+                    <div key={i} className="w-1 bg-red-400 rounded-sm animate-pulse" style={{ height: `${(Math.random() * 60 + 20)}%`, animationDelay: `${i * 50}ms` }} />
+                  ))}
+                </div>
+                <span className="text-red-500 font-mono text-sm ml-2">{fmt(elapsed)}</span>
+              </div>
+            ) : (
+              <span className="text-gray-400 text-sm">Click to record voice note</span>
+            )}
+          </>
+        ) : (
+          <>
+            <button className={`w-9 h-9 rounded-full flex items-center justify-center ${playing ? "bg-blue-500" : "bg-blue-100 hover:bg-blue-200"}`} onClick={togglePlay}>
+              {playing ? <Square className="w-3.5 h-3.5 text-white" /> : <Play className="w-3.5 h-3.5 text-blue-600 ml-0.5" />}
+            </button>
+            <div className="flex items-end gap-0.5 flex-1 h-8">
+              {amplitudes.map((a, i) => (
+                <div key={i} className={`flex-1 rounded-sm transition-colors ${playing && i < Math.floor(amplitudes.length * 0.4) ? "bg-blue-500" : "bg-gray-200"}`} style={{ height: `${a * 100}%` }} />
+              ))}
+            </div>
+            <span className="text-gray-400 text-xs font-mono">{fmt(block.properties.duration ?? 0)}</span>
+            <button className="text-blue-500 text-xs hover:text-blue-700 ml-2" onClick={transcribe}>Transcribe</button>
+          </>
+        )}
+      </div>
+      {block.properties.error && <p className="text-red-400 text-xs mt-2">{block.properties.error}</p>}
+      {transcription && (
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          <div className="text-xs text-gray-400 mb-1">Transcription</div>
+          <p className="text-sm text-gray-700">{transcription}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SketchBlock({ block, onUpdateProps }: { block: Block; onUpdateProps: (id: string, p: any) => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [tool, setTool] = useState<"pen" | "eraser">("pen");
+  const [color, setColor] = useState("#1a1a1a");
+  const [size, setSize] = useState(3);
+  const [drawing, setDrawing] = useState(false);
+  const [undoStack, setUndoStack] = useState<ImageData[]>([]);
+  const lastPoint = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    const ctx = canvasRef.current.getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    if (block.properties.imageData) {
+      const img = new Image();
+      img.onload = () => { ctx.drawImage(img, 0, 0); };
+      img.src = block.properties.imageData;
+    }
+  }, []);
+
+  const getPos = (e: React.MouseEvent | React.TouchEvent) => {
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    if ("touches" in e) {
+      return { x: (e.touches[0].clientX - rect.left) * scaleX, y: (e.touches[0].clientY - rect.top) * scaleY };
+    }
+    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+  };
+
+  const startDraw = (e: React.MouseEvent) => {
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!ctx || !canvasRef.current) return;
+    setUndoStack(s => [...s.slice(-19), ctx.getImageData(0, 0, canvasRef.current!.width, canvasRef.current!.height)]);
+    setDrawing(true);
+    lastPoint.current = getPos(e);
+  };
+
+  const draw = (e: React.MouseEvent) => {
+    if (!drawing || !canvasRef.current) return;
+    const ctx = canvasRef.current.getContext("2d")!;
+    const pos = getPos(e);
+    ctx.beginPath();
+    ctx.globalCompositeOperation = tool === "eraser" ? "destination-out" : "source-over";
+    ctx.strokeStyle = tool === "eraser" ? "rgba(0,0,0,1)" : color;
+    ctx.lineWidth = tool === "eraser" ? size * 4 : size;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    if (lastPoint.current) { ctx.moveTo(lastPoint.current.x, lastPoint.current.y); ctx.lineTo(pos.x, pos.y); }
+    ctx.stroke();
+    lastPoint.current = pos;
+  };
+
+  const endDraw = () => {
+    setDrawing(false);
+    lastPoint.current = null;
+    const dataUrl = canvasRef.current?.toDataURL("image/png") ?? "";
+    onUpdateProps(block.id, { imageData: dataUrl });
+  };
+
+  const undo = () => {
+    if (undoStack.length === 0) return;
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!ctx) return;
+    const last = undoStack[undoStack.length - 1];
+    ctx.putImageData(last, 0, 0);
+    setUndoStack(s => s.slice(0, -1));
+    onUpdateProps(block.id, { imageData: canvasRef.current?.toDataURL("image/png") ?? "" });
+  };
+
+  const clearCanvas = () => {
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!ctx || !canvasRef.current) return;
+    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    onUpdateProps(block.id, { imageData: "" });
+  };
+
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden my-2">
+      <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200 flex-wrap">
+        <button className={`text-xs px-2 py-1 rounded ${tool === "pen" ? "bg-blue-500 text-white" : "bg-white border hover:bg-gray-100 text-gray-600"}`} onClick={() => setTool("pen")}>✏️ Pen</button>
+        <button className={`text-xs px-2 py-1 rounded ${tool === "eraser" ? "bg-blue-500 text-white" : "bg-white border hover:bg-gray-100 text-gray-600"}`} onClick={() => setTool("eraser")}>⬜ Eraser</button>
+        <div className="flex gap-1">
+          {[2, 4, 8].map(s => (
+            <button key={s} className={`rounded-full flex items-center justify-center border ${size === s ? "border-blue-400" : "border-transparent"}`} style={{ width: s + 10, height: s + 10 }} onClick={() => setSize(s)}>
+              <div className="rounded-full bg-gray-700" style={{ width: s, height: s }} />
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1">
+          {SKETCH_COLORS.map(c => (
+            <button key={c} className={`w-5 h-5 rounded-full border-2 ${color === c ? "border-blue-400 scale-110" : "border-transparent"}`} style={{ background: c }} onClick={() => setColor(c)} />
+          ))}
+        </div>
+        <button className="text-xs px-2 py-1 bg-white border rounded hover:bg-gray-100 text-gray-600 ml-auto" onClick={undo}><RotateCcw className="w-3 h-3 inline mr-1" />Undo</button>
+        <button className="text-xs px-2 py-1 bg-white border rounded hover:bg-gray-100 text-red-500" onClick={clearCanvas}>Clear</button>
+      </div>
+      <canvas
+        ref={canvasRef}
+        width={800} height={300}
+        className="w-full h-[300px] bg-white cursor-crosshair block"
+        style={{ cursor: tool === "eraser" ? "cell" : "crosshair", touchAction: "none" }}
+        onMouseDown={startDraw}
+        onMouseMove={draw}
+        onMouseUp={endDraw}
+        onMouseLeave={endDraw}
+      />
+    </div>
+  );
+}
+
+function FlashcardBlock({ block, onUpdateProps }: { block: Block; onUpdateProps: (id: string, p: any) => void }) {
+  const flipped = block.properties.flipped ?? false;
+  const front = block.properties.front ?? "Question?";
+  const back = block.properties.back ?? "Answer";
+  const [editSide, setEditSide] = useState<"front" | "back" | null>(null);
+  const [editVal, setEditVal] = useState("");
+
+  return (
+    <div className="my-2">
+      <div className="relative h-[160px] cursor-pointer group" style={{ perspective: "1000px" }} onClick={() => {
+        if (editSide) return;
+        onUpdateProps(block.id, { flipped: !flipped });
+      }}>
+        <div className="absolute inset-0 transition-transform duration-300" style={{ transformStyle: "preserve-3d", transform: flipped ? "rotateY(180deg)" : "rotateY(0)" }}>
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl p-6 flex flex-col items-center justify-center" style={{ backfaceVisibility: "hidden" }}>
+            <div className="text-xs text-blue-400 uppercase tracking-wider mb-3">Front</div>
+            {editSide === "front" ? (
+              <input className="text-center text-lg font-medium text-blue-900 bg-transparent outline-none border-b border-blue-300 w-full" value={editVal} onChange={e => setEditVal(e.target.value)}
+                onBlur={() => { onUpdateProps(block.id, { front: editVal }); setEditSide(null); }}
+                onKeyDown={e => { if (e.key === "Enter") { onUpdateProps(block.id, { front: editVal }); setEditSide(null); } }}
+                autoFocus onClick={e => e.stopPropagation()} />
+            ) : (
+              <p className="text-lg font-medium text-blue-900 text-center" onDoubleClick={e => { e.stopPropagation(); setEditVal(front); setEditSide("front"); }}>{front}</p>
+            )}
+          </div>
+          <div className="absolute inset-0 bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200 rounded-xl p-6 flex flex-col items-center justify-center" style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}>
+            <div className="text-xs text-emerald-400 uppercase tracking-wider mb-3">Back</div>
+            {editSide === "back" ? (
+              <input className="text-center text-base text-emerald-900 bg-transparent outline-none border-b border-emerald-300 w-full" value={editVal} onChange={e => setEditVal(e.target.value)}
+                onBlur={() => { onUpdateProps(block.id, { back: editVal }); setEditSide(null); }}
+                onKeyDown={e => { if (e.key === "Enter") { onUpdateProps(block.id, { back: editVal }); setEditSide(null); } }}
+                autoFocus onClick={e => e.stopPropagation()} />
+            ) : (
+              <p className="text-base text-emerald-900 text-center" onDoubleClick={e => { e.stopPropagation(); setEditVal(back); setEditSide("back"); }}>{back}</p>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center justify-between mt-2 px-1">
+        <div className="flex gap-2">
+          <button className="text-xs bg-white border border-gray-200 hover:bg-gray-50 text-gray-600 rounded-lg px-3 py-1" onClick={() => onUpdateProps(block.id, { flipped: !flipped })}>
+            {flipped ? "Show Front" : "Flip Card →"}
+          </button>
+          <button className="text-xs text-gray-400 hover:text-blue-500 transition-colors" onDoubleClick={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setEditVal(flipped ? back : front); setEditSide(flipped ? "back" : "front"); }}>
+            ✏️ Edit
+          </button>
+        </div>
+        <button
+          className={`text-xs flex items-center gap-1 rounded-lg px-3 py-1 border transition-colors ${block.properties.addedToDeck ? "bg-green-50 border-green-200 text-green-600" : "bg-white border-gray-200 hover:bg-gray-50 text-gray-500"}`}
+          onClick={() => onUpdateProps(block.id, { addedToDeck: !block.properties.addedToDeck })}
+        >
+          <CheckCircle className="w-3 h-3" />
+          {block.properties.addedToDeck ? "In study deck" : "Add to study deck"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ProgressTrackerBlock({ block, onUpdateProps }: { block: Block; onUpdateProps: (id: string, p: any) => void }) {
+  const label = block.properties.label ?? "Progress";
+  const value = block.properties.value ?? 60;
+  const color = block.properties.color ?? "blue";
+  const colorMap: Record<string, { bar: string; text: string }> = {
+    green: { bar: "bg-green-500", text: "text-green-700" },
+    blue: { bar: "bg-blue-500", text: "text-blue-700" },
+    orange: { bar: "bg-orange-500", text: "text-orange-700" },
+    red: { bar: "bg-red-500", text: "text-red-700" },
+  };
+  const c = colorMap[color] ?? colorMap.blue;
+  return (
+    <div className="border border-gray-200 rounded-xl p-4 my-2 bg-white">
+      <div className="flex items-center gap-3 mb-3">
+        <input className="flex-1 text-sm font-medium text-gray-700 outline-none border-b border-transparent focus:border-gray-300" value={label} onChange={e => onUpdateProps(block.id, { label: e.target.value })} />
+        <span className={`text-sm font-bold ${c.text}`}>{value}%</span>
+      </div>
+      <div className="bg-gray-100 rounded-full h-3 overflow-hidden mb-3">
+        <div className={`h-full rounded-full transition-all duration-500 ${c.bar}`} style={{ width: `${value}%` }} />
+      </div>
+      <div className="flex items-center gap-4">
+        <input type="range" min={0} max={100} value={value} className="flex-1" onChange={e => onUpdateProps(block.id, { value: parseInt(e.target.value) })} />
+        <div className="flex gap-1.5">
+          {Object.keys(colorMap).map(col => (
+            <button key={col} className={`w-4 h-4 rounded-full border-2 ${color === col ? "border-gray-500 scale-110" : "border-transparent"} ${colorMap[col].bar}`} onClick={() => onUpdateProps(block.id, { color: col })} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReadingListBlock({ block, onUpdateProps }: { block: Block; onUpdateProps: (id: string, p: any) => void }) {
+  const items = block.properties.items ?? [];
+  const [urlInput, setUrlInput] = useState("");
+
+  const addItem = () => {
+    if (!urlInput.trim()) return;
+    const url = urlInput.trim();
+    const domain = (() => { try { return new URL(url).hostname; } catch { return url; } })();
+    const newItem = { url, title: domain, favicon: "🔗", read: false };
+    onUpdateProps(block.id, { items: [...items, newItem] });
+    setUrlInput("");
+  };
+
+  return (
+    <div className="border border-gray-200 rounded-xl p-4 my-2 bg-white">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="text-sm font-medium text-gray-700 flex items-center gap-1.5">📚 Reading List <span className="text-gray-400 font-normal text-xs">({items.length} items)</span></div>
+      </div>
+      <div className="space-y-2 mb-3">
+        {items.map((item: any, i: number) => (
+          <div key={i} className={`flex items-center gap-3 p-2 rounded-lg border transition-colors ${item.read ? "bg-gray-50 border-gray-100" : "bg-white border-gray-200 hover:border-blue-200"}`}>
+            <span className="text-base shrink-0">{item.favicon}</span>
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-medium truncate ${item.read ? "text-gray-400 line-through" : "text-gray-800"}`}>{item.title}</p>
+              <p className="text-xs text-gray-400 truncate">{item.url}</p>
+            </div>
+            <button
+              className={`text-xs px-2 py-0.5 rounded-full border shrink-0 transition-colors ${item.read ? "border-green-200 text-green-600 bg-green-50" : "border-gray-200 text-gray-500 hover:border-blue-200"}`}
+              onClick={() => {
+                const newItems = [...items];
+                newItems[i] = { ...item, read: !item.read };
+                onUpdateProps(block.id, { items: newItems });
+              }}
+            >
+              {item.read ? "✓ Read" : "Unread"}
+            </button>
+            <button className="text-gray-300 hover:text-red-400 text-xs ml-1" onClick={() => onUpdateProps(block.id, { items: items.filter((_: any, j: number) => j !== i) })}>✕</button>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input
+          className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-300"
+          placeholder="Paste URL to add..."
+          value={urlInput}
+          onChange={e => setUrlInput(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") addItem(); }}
+        />
+        <button className="text-sm bg-blue-500 text-white rounded-lg px-3 py-1.5 hover:bg-blue-600 transition-colors" onClick={addItem}><Plus className="w-4 h-4" /></button>
+      </div>
+    </div>
+  );
+}
+
+function TimelineBlock({ block, onUpdateProps }: { block: Block; onUpdateProps: (id: string, p: any) => void }) {
+  const entries = block.properties.entries ?? [];
+
+  const addEntry = () => {
+    const newEntry = { date: new Date().toLocaleDateString(), title: "New Event", description: "" };
+    onUpdateProps(block.id, { entries: [...entries, newEntry] });
+  };
+
+  const updateEntry = (i: number, field: string, val: string) => {
+    const newEntries = entries.map((e: any, idx: number) => idx === i ? { ...e, [field]: val } : e);
+    onUpdateProps(block.id, { entries: newEntries });
+  };
+
+  return (
+    <div className="border border-gray-200 rounded-xl p-4 my-2 bg-white overflow-x-auto">
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-sm font-medium text-gray-700">🕐 Timeline</span>
+      </div>
+      <div className="flex gap-0 min-w-max relative">
+        <div className="absolute top-4 left-0 right-0 h-0.5 bg-gray-200" />
+        {entries.map((entry: any, i: number) => (
+          <div key={i} className="flex flex-col items-center relative z-10 mr-8 last:mr-0" style={{ minWidth: 140 }}>
+            <div className="w-3 h-3 rounded-full bg-blue-500 border-2 border-white shadow-sm mb-2 shrink-0" />
+            <div className="text-center">
+              <input className="text-xs text-gray-400 text-center outline-none hover:border-b border-gray-200 w-full" value={entry.date} onChange={e => updateEntry(i, "date", e.target.value)} />
+              <input className="text-sm font-medium text-gray-800 text-center outline-none hover:border-b border-gray-200 w-full mt-1" value={entry.title} onChange={e => updateEntry(i, "title", e.target.value)} />
+              <input className="text-xs text-gray-500 text-center outline-none hover:border-b border-gray-200 w-full mt-0.5" value={entry.description} onChange={e => updateEntry(i, "description", e.target.value)} placeholder="Description..." />
+            </div>
+          </div>
+        ))}
+        <div className="flex flex-col items-center relative z-10">
+          <div className="w-3 h-3 rounded-full border-2 border-dashed border-gray-300 mb-2 shrink-0" />
+          <button className="text-xs text-blue-500 hover:text-blue-700 whitespace-nowrap" onClick={addEntry}>+ Add entry</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PollBlock({ block, onUpdateProps }: { block: Block; onUpdateProps: (id: string, p: any) => void }) {
+  const question = block.properties.question ?? "What do you think?";
+  const options: { text: string; votes: number }[] = block.properties.options ?? [];
+  const voted = block.properties.voted ?? false;
+  const votedOption = block.properties.votedOption ?? -1;
+  const totalVotes = options.reduce((a, o) => a + o.votes, 0);
+
+  const vote = (idx: number) => {
+    if (voted) return;
+    const newOptions = options.map((o, i) => i === idx ? { ...o, votes: o.votes + 1 } : o);
+    onUpdateProps(block.id, { options: newOptions, voted: true, votedOption: idx });
+  };
+
+  const addOption = () => {
+    if (options.length >= 6) return;
+    onUpdateProps(block.id, { options: [...options, { text: `Option ${options.length + 1}`, votes: 0 }] });
+  };
+
+  const updateOptionText = (idx: number, text: string) => {
+    const newOptions = options.map((o, i) => i === idx ? { ...o, text } : o);
+    onUpdateProps(block.id, { options: newOptions });
+  };
+
+  return (
+    <div className="border border-gray-200 rounded-xl p-4 my-2 bg-white">
+      <input
+        className="text-base font-semibold text-gray-800 outline-none border-b border-transparent focus:border-gray-300 w-full mb-4"
+        value={question} onChange={e => onUpdateProps(block.id, { question: e.target.value })} placeholder="Poll question..."
+      />
+      <div className="space-y-2 mb-3">
+        {options.map((opt, i) => {
+          const pct = totalVotes > 0 ? Math.round((opt.votes / totalVotes) * 100) : 0;
+          return (
+            <div key={i} className="relative">
+              {voted ? (
+                <div className={`rounded-lg border overflow-hidden ${votedOption === i ? "border-blue-300" : "border-gray-200"}`}>
+                  <div className={`h-full absolute left-0 top-0 bottom-0 rounded-lg transition-all duration-700 ${votedOption === i ? "bg-blue-100" : "bg-gray-100"}`} style={{ width: `${pct}%` }} />
+                  <div className="relative flex items-center justify-between px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      {votedOption === i && <span className="text-blue-500 text-xs">✓</span>}
+                      <input className={`text-sm outline-none bg-transparent ${votedOption === i ? "text-blue-700 font-medium" : "text-gray-700"}`} value={opt.text} onChange={e => updateOptionText(i, e.target.value)} />
+                    </div>
+                    <span className="text-xs text-gray-500 shrink-0">{opt.votes} ({pct}%)</span>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  className="w-full flex items-center gap-2 border border-gray-200 hover:border-blue-300 hover:bg-blue-50 rounded-lg px-3 py-2 transition-colors text-left group"
+                  onClick={() => vote(i)}
+                >
+                  <input className="flex-1 text-sm text-gray-700 outline-none bg-transparent cursor-pointer" value={opt.text} onChange={e => { e.stopPropagation(); updateOptionText(i, e.target.value); }} onClick={e => e.stopPropagation()} />
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-between">
+        {options.length < 6 && <button className="text-xs text-blue-500 hover:text-blue-700" onClick={addOption}>+ Add option</button>}
+        {voted && <button className="text-xs text-gray-400 hover:text-gray-600" onClick={() => onUpdateProps(block.id, { voted: false, votedOption: -1, options: options.map(o => ({ ...o, votes: 0 })) })}>Reset votes</button>}
+        {voted && <span className="text-xs text-gray-400">{totalVotes} total vote{totalVotes !== 1 ? "s" : ""}</span>}
+      </div>
+    </div>
+  );
+}
+
+function CodeRunnerBlock({ block, onUpdateProps }: { block: Block; onUpdateProps: (id: string, p: any) => void }) {
+  const [code, setCode] = useState(block.content || "// Write JavaScript code here\nconsole.log('Hello, World!');");
+  const [running, setRunning] = useState(false);
+  const [output, setOutput] = useState(block.properties.output ?? "");
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const runCode = () => {
+    setRunning(true);
+    setOutput("");
+    const srcdoc = `
+<!DOCTYPE html>
+<html>
+<head><script>
+  const logs = [];
+  const origLog = console.log;
+  console.log = (...args) => {
+    origLog(...args);
+    logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' '));
+    window.parent.postMessage({ type: 'log', lines: logs }, '*');
+  };
+  window.onerror = (msg) => {
+    logs.push('Error: ' + msg);
+    window.parent.postMessage({ type: 'log', lines: logs }, '*');
+  };
+</script></head>
+<body><script>
+try { ${code} } catch(e) { console.log('Error: ' + e.message); }
+</script></body>
+</html>`;
+
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === "log") {
+        setOutput(e.data.lines.join("\n"));
+        onUpdateProps(block.id, { output: e.data.lines.join("\n") });
+      }
+    };
+    window.addEventListener("message", handler);
+    if (iframeRef.current) iframeRef.current.srcdoc = srcdoc;
+    setTimeout(() => { setRunning(false); window.removeEventListener("message", handler); }, 2000);
+  };
+
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden my-2">
+      <div className="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-700">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-red-500" /><div className="w-3 h-3 rounded-full bg-yellow-500" /><div className="w-3 h-3 rounded-full bg-green-500" />
+          <span className="text-gray-400 text-xs ml-2">JavaScript</span>
+        </div>
+        <button
+          className={`text-xs px-3 py-1 rounded-md transition-colors flex items-center gap-1.5 ${running ? "bg-gray-700 text-gray-400" : "bg-green-600 hover:bg-green-500 text-white"}`}
+          onClick={runCode} disabled={running}
+        >
+          <Play className="w-3 h-3" /> {running ? "Running..." : "Run"}
+        </button>
+      </div>
+      <textarea
+        className="w-full bg-gray-950 text-green-400 font-mono text-sm p-4 outline-none resize-none min-h-[100px]"
+        value={code} onChange={e => { setCode(e.target.value); onUpdateProps(block.id, {}); }}
+        onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); const s = e.currentTarget; const st = s.selectionStart; const en = s.selectionEnd; s.value = s.value.substring(0, st) + "  " + s.value.substring(en); s.selectionStart = s.selectionEnd = st + 2; } }}
+        spellCheck={false}
+      />
+      {output !== "" && (
+        <div className="bg-gray-900 border-t border-gray-700 p-3">
+          <div className="text-xs text-gray-500 mb-1">Output</div>
+          <pre className="text-sm text-white font-mono whitespace-pre-wrap">{output}</pre>
+        </div>
+      )}
+      <iframe ref={iframeRef} sandbox="allow-scripts" className="hidden" title="code-runner" />
+    </div>
+  );
+}
+
 export default function BlockEditor() {
-  const { selectedPage, updatePage, uid: ctxUid } = useNotes();
+  const { selectedPage, updatePage, uid: ctxUid, pages, bookmarkBlock, addSnippet } = useNotes();
   const blocks = selectedPage?.blocks ?? [];
   const locked = selectedPage?.locked ?? false;
 
@@ -27,7 +609,8 @@ export default function BlockEditor() {
   const [colorPicker, setColorPicker] = useState<ColorPickerState | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
-  const [turnIntoOpen, setTurnIntoOpen] = useState(false);
+  const [snippetNamePrompt, setSnippetNamePrompt] = useState<{ blockId: string } | null>(null);
+  const [snippetName, setSnippetName] = useState("");
 
   const elRefs = useRef<Map<string, HTMLElement>>(new Map());
   const pendingFocusId = useRef<string | null>(null);
@@ -68,23 +651,22 @@ export default function BlockEditor() {
   }, [selectedPage, updatePage, pushHistory]);
 
   const undo = useCallback(() => {
-    if (histIdx > 0) {
-      const newIdx = histIdx - 1;
-      setHistIdx(newIdx);
-      updatePage(selectedPage!.id, { blocks: history[newIdx] });
-    }
+    if (histIdx > 0) { const ni = histIdx - 1; setHistIdx(ni); updatePage(selectedPage!.id, { blocks: history[ni] }); }
   }, [histIdx, history, selectedPage, updatePage]);
 
   const redo = useCallback(() => {
-    if (histIdx < history.length - 1) {
-      const newIdx = histIdx + 1;
-      setHistIdx(newIdx);
-      updatePage(selectedPage!.id, { blocks: history[newIdx] });
-    }
+    if (histIdx < history.length - 1) { const ni = histIdx + 1; setHistIdx(ni); updatePage(selectedPage!.id, { blocks: history[ni] }); }
   }, [histIdx, history, selectedPage, updatePage]);
 
   const updateBlockContent = useCallback((id: string, content: string, addHist = false) => {
-    setBlocks(prev => prev.map(b => b.id === id ? { ...b, content } : b), addHist);
+    setBlocks(prev => {
+      const b = prev.find(b => b.id === id);
+      if (b?.properties?.syncId) {
+        const syncId = b.properties.syncId;
+        return prev.map(bl => bl.id === id || bl.properties?.syncId === syncId ? { ...bl, content } : bl);
+      }
+      return prev.map(bl => bl.id === id ? { ...bl, content } : bl);
+    }, addHist);
   }, [setBlocks]);
 
   const updateBlockProps = useCallback((id: string, props: Partial<Block["properties"]>) => {
@@ -114,24 +696,19 @@ export default function BlockEditor() {
   }, [setBlocks]);
 
   const changeBlockType = useCallback((id: string, type: BlockType) => {
-    setBlocks(prev => prev.map(b => b.id === id ? { ...b, type, properties: type === "callout" ? { color: "blue", icon: "💡" } : type === "code" ? { language: "javascript" } : type === "todo" ? { checked: false } : type === "toggle" ? { expanded: true } : {} } : b));
+    setBlocks(prev => prev.map(b => b.id === id ? {
+      ...b, type,
+      properties: type === "callout" ? { color: "blue", icon: "💡" } : type === "code" ? { language: "javascript" } : type === "code_runner" ? { language: "javascript", output: "" } : type === "todo" ? { checked: false } : type === "toggle" ? { expanded: true } : type === "equation" ? { latex: "E = mc^2", editing: true } : type === "flashcard" ? { front: "Question?", back: "Answer", flipped: false } : type === "progress_tracker" ? { label: "Progress", value: 50, color: "blue" } : type === "reading_list" ? { items: [] } : type === "timeline" ? { entries: [] } : type === "poll" ? { question: "What do you think?", options: [{ text: "Option A", votes: 0 }, { text: "Option B", votes: 0 }], voted: false, votedOption: -1 } : {}
+    } : b));
     setSlash(null);
-    setTimeout(() => {
-      const el = elRefs.current.get(id);
-      if (el) { el.focus(); }
-    }, 50);
+    setTimeout(() => { const el = elRefs.current.get(id); if (el) el.focus(); }, 50);
   }, [setBlocks]);
 
   const duplicateBlock = useCallback((id: string) => {
     const block = blocks.find(b => b.id === id);
     if (!block) return;
     const copy = { ...block, id: uid() };
-    setBlocks(prev => {
-      const idx = prev.findIndex(b => b.id === id);
-      const next = [...prev];
-      next.splice(idx + 1, 0, copy);
-      return next;
-    });
+    setBlocks(prev => { const idx = prev.findIndex(b => b.id === id); const next = [...prev]; next.splice(idx + 1, 0, copy); return next; });
   }, [blocks, setBlocks]);
 
   const moveBlock = useCallback((id: string, dir: "up" | "down") => {
@@ -139,25 +716,43 @@ export default function BlockEditor() {
       const idx = prev.findIndex(b => b.id === id);
       if (dir === "up" && idx === 0) return prev;
       if (dir === "down" && idx === prev.length - 1) return prev;
-      const next = [...prev];
-      const swap = dir === "up" ? idx - 1 : idx + 1;
+      const next = [...prev]; const swap = dir === "up" ? idx - 1 : idx + 1;
       [next[idx], next[swap]] = [next[swap], next[idx]];
       return next;
     });
+  }, [setBlocks]);
+
+  const syncBlock = useCallback((id: string) => {
+    const syncId = uid();
+    setBlocks(prev => {
+      const b = prev.find(bl => bl.id === id);
+      if (!b) return prev;
+      const synced = { ...b, id: uid(), properties: { ...b.properties, syncId, synced: true } };
+      const updated = prev.map(bl => bl.id === id ? { ...bl, properties: { ...bl.properties, syncId, synced: true } } : bl);
+      const idx = updated.findIndex(bl => bl.id === id);
+      updated.splice(idx + 1, 0, synced);
+      return updated;
+    });
+  }, [setBlocks]);
+
+  const unsyncBlock = useCallback((id: string) => {
+    setBlocks(prev => prev.map(b => b.id === id ? { ...b, properties: { ...b.properties, syncId: undefined, synced: false } } : b));
   }, [setBlocks]);
 
   const applyMarkdownShortcut = useCallback((id: string, rawText: string): boolean => {
     const map: [RegExp, BlockType][] = [
       [/^# $/, "heading1"], [/^## $/, "heading2"], [/^### $/, "heading3"],
       [/^[-*] $/, "bullet_list"], [/^1\. $/, "numbered_list"],
-      [/^(\[\] |\[ \] )/, "todo"], [/^> $/, "quote"],
-      [/^---$/, "divider"],
+      [/^(\[\] |\[ \] )/, "todo"], [/^> $/, "quote"], [/^---$/, "divider"],
+      [/^\/voice$/, "voice_note"], [/^\/sketch$/, "sketch"], [/^\/flashcard$/, "flashcard"],
+      [/^\/progress$/, "progress_tracker"], [/^\/readinglist$/, "reading_list"],
+      [/^\/timeline$/, "timeline"], [/^\/poll$/, "poll"], [/^\/run$/, "code_runner"],
     ];
     for (const [re, type] of map) {
       if (re.test(rawText)) {
         const el = elRefs.current.get(id);
         const newContent = el ? el.innerText.replace(re, "") : "";
-        setBlocks(prev => prev.map(b => b.id === id ? { ...b, type, content: newContent, properties: type === "todo" ? { checked: false } : type === "callout" ? { color: "blue", icon: "💡" } : {} } : b));
+        setBlocks(prev => prev.map(b => b.id === id ? { ...b, type, content: newContent, properties: type === "todo" ? { checked: false } : type === "callout" ? { color: "blue", icon: "💡" } : type === "equation" ? { latex: "E = mc^2", editing: true } : {} } : b));
         if (el) el.innerText = newContent;
         return true;
       }
@@ -173,7 +768,6 @@ export default function BlockEditor() {
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLElement>, block: Block) => {
     if (locked) return;
-
     const el = e.currentTarget as HTMLElement;
     const content = el.innerText;
 
@@ -189,6 +783,7 @@ export default function BlockEditor() {
       if (e.key === "ArrowUp") { e.preventDefault(); moveBlock(block.id, "up"); return; }
       if (e.key === "ArrowDown") { e.preventDefault(); moveBlock(block.id, "down"); return; }
       if (e.key === "Delete") { e.preventDefault(); deleteBlock(block.id); return; }
+      if (e.shiftKey && e.key === "F") { return; }
       const shiftMap: Record<string, BlockType> = { "0": "text", "1": "heading1", "2": "heading2", "3": "heading3", "4": "todo", "5": "bullet_list", "6": "numbered_list" };
       if (e.shiftKey && shiftMap[e.key]) { e.preventDefault(); changeBlockType(block.id, shiftMap[e.key]); return; }
     }
@@ -205,22 +800,14 @@ export default function BlockEditor() {
       const currentContent = el.innerText;
       if (block.type === "divider") { insertBlockAfter(block.id); return; }
       if (["bullet_list", "numbered_list", "todo"].includes(block.type) && currentContent.trim() === "") {
-        changeBlockType(block.id, "text");
-        return;
+        changeBlockType(block.id, "text"); return;
       }
-      const nextType: BlockType = ["bullet_list", "numbered_list"].includes(block.type)
-        ? block.type
-        : block.type === "todo" ? "todo"
-        : "text";
+      const nextType: BlockType = ["bullet_list", "numbered_list"].includes(block.type) ? block.type : block.type === "todo" ? "todo" : "text";
       insertBlockAfter(block.id, nextType);
       return;
     }
 
-    if (e.key === "Backspace" && content === "" && blocks.length > 1) {
-      e.preventDefault();
-      deleteBlock(block.id);
-      return;
-    }
+    if (e.key === "Backspace" && content === "" && blocks.length > 1) { e.preventDefault(); deleteBlock(block.id); return; }
 
     if (e.key === " ") {
       const text = content + " ";
@@ -248,19 +835,13 @@ export default function BlockEditor() {
       const rect = range.getBoundingClientRect();
       let blockId = "";
       let node: Node | null = range.commonAncestorContainer;
-      while (node) {
-        const el = node as HTMLElement;
-        if (el.dataset?.blockId) { blockId = el.dataset.blockId; break; }
-        node = node.parentNode;
-      }
+      while (node) { const el = node as HTMLElement; if (el.dataset?.blockId) { blockId = el.dataset.blockId; break; } node = node.parentNode; }
       if (blockId) setToolbar({ x: rect.left + rect.width / 2, y: rect.top - 8, blockId });
     }, 10);
   }, []);
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { setSlash(null); setBlockMenu(null); setColorPicker(null); setToolbar(null); }
-    };
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") { setSlash(null); setBlockMenu(null); setColorPicker(null); setToolbar(null); } };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, []);
@@ -271,6 +852,21 @@ export default function BlockEditor() {
 
   return (
     <div className="w-full min-h-[400px] pb-32" onMouseUp={handleMouseUp}>
+      {snippetNamePrompt && (
+        <div className="fixed inset-0 bg-black/40 z-[300] flex items-center justify-center" onClick={() => setSnippetNamePrompt(null)}>
+          <div className="bg-white rounded-xl p-6 shadow-xl w-80" onClick={e => e.stopPropagation()}>
+            <div className="text-sm font-medium text-gray-800 mb-3">Save as Snippet</div>
+            <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-300 mb-4" placeholder="Snippet name..." value={snippetName} onChange={e => setSnippetName(e.target.value)} autoFocus
+              onKeyDown={e => { if (e.key === "Enter" && snippetName.trim()) { const b = blocks.find(b => b.id === snippetNamePrompt.blockId); if (b) addSnippet(snippetName.trim(), [b]); setSnippetNamePrompt(null); setSnippetName(""); } if (e.key === "Escape") setSnippetNamePrompt(null); }} />
+            <div className="flex gap-2 justify-end">
+              <button className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50" onClick={() => setSnippetNamePrompt(null)}>Cancel</button>
+              <button className="text-sm px-3 py-1.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                onClick={() => { const b = blocks.find(b => b.id === snippetNamePrompt.blockId); if (b && snippetName.trim()) addSnippet(snippetName.trim(), [b]); setSnippetNamePrompt(null); setSnippetName(""); }}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {blocks.map((block, index) => {
         if (block.type === "numbered_list") {
           const indent = block.indent;
@@ -305,6 +901,12 @@ export default function BlockEditor() {
             onChangeType={changeBlockType}
             onUpdateProps={updateBlockProps}
             onBlockMenu={(x, y, id) => setBlockMenu({ x, y, blockId: id })}
+            onSync={syncBlock}
+            onUnsync={unsyncBlock}
+            onBookmark={(blockId, content, type) => {
+              if (selectedPage) bookmarkBlock(blockId, selectedPage.id, selectedPage.title || "Untitled", content, type);
+            }}
+            onSaveSnippet={(blockId) => { setSnippetNamePrompt({ blockId }); setSnippetName(""); }}
           />
         );
       })}
@@ -325,7 +927,12 @@ export default function BlockEditor() {
       {slash && (
         <SlashCommandGrid
           query={slash.query}
-          onSelect={type => { changeBlockType(slash.blockId, type); const el = elRefs.current.get(slash.blockId); if (el) el.innerText = ""; updateBlockContent(slash.blockId, "", false); }}
+          onSelect={type => {
+            changeBlockType(slash.blockId, type);
+            const el = elRefs.current.get(slash.blockId);
+            if (el) el.innerText = "";
+            updateBlockContent(slash.blockId, "", false);
+          }}
           onClose={() => setSlash(null)}
         />
       )}
@@ -343,14 +950,9 @@ export default function BlockEditor() {
         <div className="fixed z-[200] bg-gray-900 rounded-lg shadow-xl p-2" style={{ left: colorPicker.x - 80, top: colorPicker.y - 50 }}>
           <div className="flex gap-1 mb-1">
             {(colorPicker.mode === "text" ? TEXT_COLORS : BG_COLORS).map(c => (
-              <button
-                key={c}
-                className="w-5 h-5 rounded cursor-pointer border border-white/20 hover:scale-110 transition-transform"
+              <button key={c} className="w-5 h-5 rounded cursor-pointer border border-white/20 hover:scale-110 transition-transform"
                 style={{ background: c === "transparent" ? "url(\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAJUlEQVQYV2NkYGBg+M9AAGRgYGD4z8BQDwAAAP//AwAI/AL+hc2rNAAAAABJRU5ErkJggg==\")" : c }}
-                onClick={() => {
-                  document.execCommand(colorPicker.mode === "text" ? "foreColor" : "backColor", false, c);
-                  setColorPicker(null);
-                }}
+                onClick={() => { document.execCommand(colorPicker.mode === "text" ? "foreColor" : "backColor", false, c); setColorPicker(null); }}
               />
             ))}
           </div>
@@ -358,13 +960,16 @@ export default function BlockEditor() {
       )}
 
       {blockMenu && (
-        <div className="fixed z-[200] bg-white rounded-lg shadow-xl border py-1 min-w-[180px]" style={{ left: blockMenu.x, top: blockMenu.y }} onClick={() => setBlockMenu(null)}>
+        <div className="fixed z-[200] bg-white rounded-lg shadow-xl border py-1 min-w-[200px]" style={{ left: blockMenu.x, top: blockMenu.y }} onClick={() => setBlockMenu(null)}>
           {[
-            { label: "Delete", action: () => deleteBlock(blockMenu.blockId), danger: true },
-            { label: "Duplicate", action: () => duplicateBlock(blockMenu.blockId) },
-            { label: "Move up", action: () => moveBlock(blockMenu.blockId, "up") },
-            { label: "Move down", action: () => moveBlock(blockMenu.blockId, "down") },
-            { label: "Copy link to block", action: () => {} },
+            { label: "🗑️ Delete", action: () => deleteBlock(blockMenu.blockId), danger: true },
+            { label: "📋 Duplicate", action: () => duplicateBlock(blockMenu.blockId) },
+            { label: "⬆️ Move up", action: () => moveBlock(blockMenu.blockId, "up") },
+            { label: "⬇️ Move down", action: () => moveBlock(blockMenu.blockId, "down") },
+            { label: "🔗 Copy link to block", action: () => {} },
+            { label: "🔖 Bookmark this block", action: () => { const b = blocks.find(bl => bl.id === blockMenu.blockId); if (b && selectedPage) bookmarkBlock(b.id, selectedPage.id, selectedPage.title || "Untitled", b.content, b.type); } },
+            { label: "✂️ Save as snippet", action: () => { setSnippetNamePrompt({ blockId: blockMenu.blockId }); setSnippetName(""); } },
+            { label: "🔄 Sync this block", action: () => { const b = blocks.find(bl => bl.id === blockMenu.blockId); if (b?.properties?.syncId) unsyncBlock(blockMenu.blockId); else syncBlock(blockMenu.blockId); } },
           ].map(item => (
             <button key={item.label} className={`w-full text-left px-4 py-1.5 hover:bg-gray-50 text-sm ${(item as any).danger ? "text-red-500" : "text-gray-700"}`} onClick={item.action}>
               {item.label}
@@ -372,7 +977,7 @@ export default function BlockEditor() {
           ))}
           <div className="border-t border-gray-100 mt-1 pt-1 px-2 pb-1">
             <div className="text-xs text-gray-400 mb-1 px-2">Turn into</div>
-            {(["text","heading1","heading2","heading3","bullet_list","numbered_list","todo","quote","callout","code","divider"] as BlockType[]).map(t => (
+            {(["text","heading1","heading2","heading3","bullet_list","numbered_list","todo","quote","callout","code","divider","equation","flashcard","poll"] as BlockType[]).map(t => (
               <button key={t} className="w-full text-left px-2 py-1 hover:bg-gray-50 text-sm text-gray-700 rounded" onClick={() => changeBlockType(blockMenu.blockId, t)}>
                 {t.replace(/_/g," ")}
               </button>
@@ -406,12 +1011,18 @@ interface BlockRowProps {
   onChangeType: (id: string, type: BlockType) => void;
   onUpdateProps: (id: string, props: Partial<Block["properties"]>) => void;
   onBlockMenu: (x: number, y: number, id: string) => void;
+  onSync: (id: string) => void;
+  onUnsync: (id: string) => void;
+  onBookmark: (blockId: string, content: string, type: BlockType) => void;
+  onSaveSnippet: (blockId: string) => void;
 }
 
-function BlockRow({ block, blocks, index, counter, locked, elRefs, dragId, dragOver, slash, onInput, onKeyDown, onSetDragId, onSetDragOver, onSetBlocks, onInsertAfter, onDelete, onDuplicate, onChangeType, onUpdateProps, onBlockMenu }: BlockRowProps) {
+function BlockRow({ block, blocks, index, counter, locked, elRefs, dragId, dragOver, slash, onInput, onKeyDown, onSetDragId, onSetDragOver, onSetBlocks, onInsertAfter, onDelete, onDuplicate, onChangeType, onUpdateProps, onBlockMenu, onSync, onUnsync, onBookmark, onSaveSnippet }: BlockRowProps) {
+  const { pages } = useNotes();
   const [hovered, setHovered] = useState(false);
-  const [codeExpanded, setCodeExpanded] = useState(true);
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
   const indentPx = block.indent * 24;
+  const isSynced = block.properties.syncId !== undefined;
 
   const setRef = (el: HTMLElement | null) => {
     if (el) elRefs.current.set(block.id, el);
@@ -425,6 +1036,23 @@ function BlockRow({ block, blocks, index, counter, locked, elRefs, dragId, dragO
     onInput: (e: React.FormEvent<HTMLElement>) => onInput(e, block),
     onKeyDown: (e: React.KeyboardEvent<HTMLElement>) => onKeyDown(e, block),
     dangerouslySetInnerHTML: { __html: block.content },
+  };
+
+  const reactions = block.properties.reactions ?? [];
+  const toggleReaction = (emoji: string) => {
+    const existing = reactions.find((r: any) => r.emoji === emoji);
+    let newReactions;
+    if (existing) {
+      if (existing.voted) {
+        newReactions = existing.count <= 1 ? reactions.filter((r: any) => r.emoji !== emoji) : reactions.map((r: any) => r.emoji === emoji ? { ...r, count: r.count - 1, voted: false } : r);
+      } else {
+        newReactions = reactions.map((r: any) => r.emoji === emoji ? { ...r, count: r.count + 1, voted: true } : r);
+      }
+    } else {
+      newReactions = [...reactions, { emoji, count: 1, voted: true }];
+    }
+    onUpdateProps(block.id, { reactions: newReactions });
+    setShowReactionPicker(false);
   };
 
   const renderContent = () => {
@@ -447,10 +1075,8 @@ function BlockRow({ block, blocks, index, counter, locked, elRefs, dragId, dragO
       );
       case "todo": return (
         <div className="flex items-start gap-2 py-0.5" style={{ paddingLeft: `${indentPx}px` }}>
-          <div
-            className={`w-4 h-4 rounded border-2 mt-1 shrink-0 cursor-pointer flex items-center justify-center ${block.properties.checked ? "border-blue-500 bg-blue-500" : "border-gray-300"}`}
-            onClick={() => onUpdateProps(block.id, { checked: !block.properties.checked })}
-          >
+          <div className={`w-4 h-4 rounded border-2 mt-1 shrink-0 cursor-pointer flex items-center justify-center ${block.properties.checked ? "border-blue-500 bg-blue-500" : "border-gray-300"}`}
+            onClick={() => onUpdateProps(block.id, { checked: !block.properties.checked })}>
             {block.properties.checked && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 12 12" stroke="currentColor" strokeWidth="2.5"><path d="M2 6l3 3 5-5"/></svg>}
           </div>
           <div ref={setRef} className={`flex-1 text-base outline-none min-h-[1.75rem] cursor-text ${block.properties.checked ? "line-through text-gray-400" : "text-gray-700"}`} {...baseEditable} />
@@ -469,9 +1095,7 @@ function BlockRow({ block, blocks, index, counter, locked, elRefs, dragId, dragO
             {block.properties.expanded && (
               <div className="pl-6 border-l border-gray-100 ml-2 mt-0.5">
                 {block.children.length === 0 && <div className="text-sm text-gray-400 py-1 px-2 italic">Empty — press Enter inside to add content</div>}
-                {block.children.map(child => (
-                  <div key={child.id} className="text-base text-gray-700 py-0.5 px-1">{child.content}</div>
-                ))}
+                {block.children.map(child => (<div key={child.id} className="text-base text-gray-700 py-0.5 px-1">{child.content}</div>))}
               </div>
             )}
           </div>
@@ -484,10 +1108,8 @@ function BlockRow({ block, blocks, index, counter, locked, elRefs, dragId, dragO
       );
       case "callout": {
         const colorMap: Record<string, { bg: string; border: string }> = {
-          blue: { bg: "bg-blue-50", border: "border-blue-400" },
-          amber: { bg: "bg-amber-50", border: "border-amber-400" },
-          green: { bg: "bg-green-50", border: "border-green-400" },
-          red: { bg: "bg-red-50", border: "border-red-400" },
+          blue: { bg: "bg-blue-50", border: "border-blue-400" }, amber: { bg: "bg-amber-50", border: "border-amber-400" },
+          green: { bg: "bg-green-50", border: "border-green-400" }, red: { bg: "bg-red-50", border: "border-red-400" },
           purple: { bg: "bg-purple-50", border: "border-purple-400" },
         };
         const c = colorMap[block.properties.color ?? "blue"] ?? colorMap.blue;
@@ -502,11 +1124,7 @@ function BlockRow({ block, blocks, index, counter, locked, elRefs, dragId, dragO
       case "code": return (
         <div className="bg-gray-900 rounded-lg my-1 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
-            <select
-              className="bg-transparent text-gray-400 text-xs outline-none"
-              value={block.properties.language ?? "javascript"}
-              onChange={e => onUpdateProps(block.id, { language: e.target.value })}
-            >
+            <select className="bg-transparent text-gray-400 text-xs outline-none" value={block.properties.language ?? "javascript"} onChange={e => onUpdateProps(block.id, { language: e.target.value })}>
               {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
             </select>
             <button className="text-gray-400 hover:text-white text-xs flex items-center gap-1" onClick={() => navigator.clipboard.writeText(block.content)}>
@@ -517,7 +1135,7 @@ function BlockRow({ block, blocks, index, counter, locked, elRefs, dragId, dragO
         </div>
       );
       case "table": {
-        const rows = block.properties.rows ?? [["", "", ""]];
+        const rows = block.properties.rows ?? [["","",""]];
         return (
           <div className="border border-gray-200 rounded-lg overflow-auto my-1">
             <table className="text-sm w-full">
@@ -526,24 +1144,13 @@ function BlockRow({ block, blocks, index, counter, locked, elRefs, dragId, dragO
                   <tr key={ri} className={ri === 0 && block.properties.headerRow ? "bg-gray-50 font-medium" : "hover:bg-gray-50"}>
                     {row.map((cell: string, ci: number) => (
                       <td key={ci} className="border border-gray-200 px-3 py-2">
-                        <div
-                          contentEditable={!locked}
-                          suppressContentEditableWarning
-                          className="outline-none min-w-[60px]"
+                        <div contentEditable={!locked} suppressContentEditableWarning className="outline-none min-w-[60px]"
                           dangerouslySetInnerHTML={{ __html: cell }}
                           onInput={e => {
                             const newRows = rows.map((r: string[], ri2: number) => ri2 === ri ? r.map((c: string, ci2: number) => ci2 === ci ? (e.target as HTMLElement).innerText : c) : r);
                             onUpdateProps(block.id, { rows: newRows });
                           }}
-                          onKeyDown={e => {
-                            if (e.key === "Tab") {
-                              e.preventDefault();
-                              if (ri === rows.length - 1 && ci === row.length - 1) {
-                                const newRow = Array(row.length).fill("");
-                                onUpdateProps(block.id, { rows: [...rows, newRow] });
-                              }
-                            }
-                          }}
+                          onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); if (ri === rows.length - 1 && ci === row.length - 1) onUpdateProps(block.id, { rows: [...rows, Array(row.length).fill("")] }); } }}
                         />
                       </td>
                     ))}
@@ -559,16 +1166,10 @@ function BlockRow({ block, blocks, index, counter, locked, elRefs, dragId, dragO
           {block.properties.url ? (
             <img src={block.properties.url} alt={block.properties.caption ?? ""} className="w-full object-cover" />
           ) : (
-            <div
-              className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-lg p-8 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-colors"
-              onClick={() => { const u = prompt("Image URL:"); if (u) onUpdateProps(block.id, { url: u }); }}
-            >
+            <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-lg p-8 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-colors" onClick={() => { const u = prompt("Image URL:"); if (u) onUpdateProps(block.id, { url: u }); }}>
               <div className="text-3xl mb-2">🖼️</div>
               <p className="text-sm text-gray-400">Click to add image URL</p>
             </div>
-          )}
-          {block.properties.caption !== undefined && (
-            <div className="px-2 py-1 text-xs text-gray-400 text-center" contentEditable suppressContentEditableWarning onInput={e => onUpdateProps(block.id, { caption: (e.target as HTMLElement).innerText })}>{block.properties.caption}</div>
           )}
         </div>
       );
@@ -581,93 +1182,266 @@ function BlockRow({ block, blocks, index, counter, locked, elRefs, dragId, dragO
           ) : (
             <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-lg p-8 text-center cursor-pointer hover:border-blue-300 transition-colors" onClick={() => { const u = prompt("Video URL (YouTube/Vimeo):"); if (u) onUpdateProps(block.id, { url: u }); }}>
               <div className="text-3xl mb-2">🎬</div>
-              <p className="text-sm text-gray-400">Paste YouTube or Vimeo URL</p>
+              <p className="text-sm text-gray-400">Click to add video URL</p>
             </div>
           )}
         </div>
       );
       case "file": return (
-        <div className="my-1 flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+        <div className="my-1 flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:border-blue-200 cursor-pointer bg-gray-50" onClick={() => { const n = prompt("File name (for display):"); if (n) onUpdateProps(block.id, { fileName: n }); }}>
           <span className="text-2xl">📎</span>
-          <div>
-            <div className="text-sm text-gray-700 font-medium">{block.properties.filename ?? "Click to attach file"}</div>
-            {block.properties.size && <div className="text-xs text-gray-400">{block.properties.size}</div>}
-          </div>
+          <span className="text-sm text-gray-600">{block.properties.fileName ?? "Click to set file name"}</span>
         </div>
       );
       case "bookmark": return (
-        <div className="my-1 border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow cursor-pointer">
-          {block.properties.url ? (
-            <div className="flex items-start gap-3 p-3">
-              <div className="flex-1">
-                <div className="text-sm font-medium text-gray-800">{block.properties.title ?? block.properties.url}</div>
-                <div className="text-xs text-gray-400 mt-0.5 truncate">{block.properties.url}</div>
-              </div>
-            </div>
-          ) : (
-            <div className="p-4 text-center text-gray-400 text-sm cursor-pointer" onClick={() => { const u = prompt("URL:"); if (u) onUpdateProps(block.id, { url: u, title: u }); }}>
-              🔖 Paste a URL to create a bookmark
-            </div>
-          )}
+        <div className="my-1 border border-gray-200 rounded-lg p-4 hover:border-blue-200 cursor-pointer" onClick={() => { const u = prompt("Bookmark URL:"); if (u) onUpdateProps(block.id, { url: u, title: u }); }}>
+          <div className="text-sm font-medium text-gray-800">{block.properties.title ?? "📌 Click to add bookmark URL"}</div>
+          {block.properties.url && <div className="text-xs text-blue-500 mt-1">{block.properties.url}</div>}
         </div>
       );
       case "embed": return (
-        <div className="my-2 rounded-lg overflow-hidden border border-gray-200">
+        <div className="my-2">
           {block.properties.url ? (
-            <iframe src={block.properties.url} className="w-full h-64" />
+            <iframe src={block.properties.url} className="w-full h-[400px] rounded-lg border border-gray-200" title="embed" sandbox="allow-scripts allow-same-origin" />
           ) : (
-            <div className="p-8 text-center text-gray-400 text-sm cursor-pointer border-2 border-dashed border-gray-200 rounded-lg" onClick={() => { const u = prompt("Embed URL:"); if (u) onUpdateProps(block.id, { url: u }); }}>
-              🔗 Paste URL to embed
+            <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-lg p-8 text-center cursor-pointer" onClick={() => { const u = prompt("Embed URL:"); if (u) onUpdateProps(block.id, { url: u }); }}>
+              <div className="text-3xl mb-2">🌐</div>
+              <p className="text-sm text-gray-400">Click to embed a URL</p>
             </div>
           )}
         </div>
       );
-      default: return <div ref={setRef} className="text-base text-gray-700 py-1 px-1 outline-none cursor-text" {...baseEditable} />;
+      case "equation": return <EquationBlock block={block} onUpdateProps={onUpdateProps} />;
+      case "table_of_contents": {
+        const headings = blocks.filter(b => ["heading1","heading2","heading3"].includes(b.type) && b.content);
+        return (
+          <div className="border border-gray-200 rounded-xl p-4 my-2 bg-gray-50">
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Table of Contents</div>
+            {headings.length === 0 ? (
+              <p className="text-sm text-gray-400 italic">No headings yet. Add heading blocks to see them here.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {headings.map(h => (
+                  <div key={h.id}
+                    className={`text-sm hover:text-blue-600 cursor-pointer text-gray-700 transition-colors flex items-center gap-1.5 ${h.type === "heading1" ? "font-semibold" : h.type === "heading2" ? "pl-3" : "pl-6 text-gray-500"}`}
+                    onClick={() => { const el = document.querySelector(`[data-block-id="${h.id}"]`) as HTMLElement; if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); }}
+                  >
+                    <span className="text-gray-300 text-xs">{h.type === "heading1" ? "H1" : h.type === "heading2" ? "H2" : "H3"}</span>
+                    {h.content}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      }
+      case "link_to_page": {
+        const targetPageId = block.properties.pageId;
+        const targetPage = targetPageId ? pages.find(p => p.id === targetPageId) : null;
+        return (
+          <div className="my-1">
+            {targetPage ? (
+              <div className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition-colors group"
+                onClick={() => {}}>
+                <span className="text-2xl shrink-0">{targetPage.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-gray-800 group-hover:text-blue-700">{targetPage.title || "Untitled"}</div>
+                  <div className="text-xs text-gray-400 truncate">{targetPage.blocks.find(b => b.type === "text" && b.content)?.content?.slice(0, 80) ?? "No content"}</div>
+                </div>
+                <span className="text-gray-300 group-hover:text-blue-300 text-xs">→</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 p-3 border border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-blue-300 transition-colors"
+                onClick={() => {
+                  const titles = pages.map((p, i) => `${i + 1}. ${p.icon} ${p.title || "Untitled"}`).join("\n");
+                  const res = prompt(`Link to page:\n${titles}\n\nEnter number:`);
+                  const idx = parseInt(res ?? "") - 1;
+                  if (idx >= 0 && idx < pages.length) onUpdateProps(block.id, { pageId: pages[idx].id });
+                }}>
+                <span className="text-gray-300 text-2xl">📄</span>
+                <span className="text-sm text-gray-400">Click to link a page</span>
+              </div>
+            )}
+          </div>
+        );
+      }
+      case "link_preview": return (
+        <div className="my-2 border border-gray-200 rounded-xl overflow-hidden hover:border-blue-200 transition-colors cursor-pointer" onClick={() => { if (block.properties.url) window.open(block.properties.url, "_blank"); else { const u = prompt("External URL:"); if (u) onUpdateProps(block.id, { url: u, title: (() => { try { return new URL(u).hostname; } catch { return u; } })(), description: "External link preview", favicon: "🔗" }); } }}>
+          {block.properties.url ? (
+            <div className="flex gap-4 p-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span className="text-sm">{block.properties.favicon ?? "🔗"}</span>
+                  <span className="text-xs text-gray-400 truncate">{(() => { try { return new URL(block.properties.url ?? "").hostname; } catch { return block.properties.url; } })()}</span>
+                </div>
+                <div className="text-sm font-medium text-gray-800 mb-1">{block.properties.title ?? block.properties.url}</div>
+                <div className="text-xs text-gray-500">{block.properties.description ?? "Click to open link"}</div>
+              </div>
+              {block.properties.image && <img src={block.properties.image} className="w-24 h-16 object-cover rounded-lg shrink-0" alt="" />}
+            </div>
+          ) : (
+            <div className="p-4 flex items-center gap-3 text-gray-400">
+              <span className="text-xl">🔗</span>
+              <span className="text-sm">Click to add external URL</span>
+            </div>
+          )}
+        </div>
+      );
+      case "synced_block": return (
+        <div className="border-2 border-orange-300 rounded-xl p-3 my-1 bg-orange-50">
+          <div className="text-xs text-orange-500 font-medium mb-2 flex items-center justify-between">
+            <span>🔄 Synced Block</span>
+            <button className="text-orange-400 hover:text-orange-600 text-xs" onClick={() => onUnsync(block.id)}>Unsync</button>
+          </div>
+          <div ref={setRef} className="text-base text-gray-700 outline-none min-h-[1.75rem] cursor-text" {...baseEditable} />
+        </div>
+      );
+      case "template_button": {
+        const label = block.properties.buttonLabel ?? "Add Meeting Notes";
+        return (
+          <div className="my-2">
+            <button
+              className="flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"
+              onClick={() => {
+                const templateBlocks = [
+                  makeBlock("heading2", "Meeting Notes"),
+                  makeBlock("text", `Date: ${new Date().toLocaleDateString()}`),
+                  makeBlock("bullet_list", "Attendees: "),
+                  makeBlock("heading3", "Action Items"),
+                  makeBlock("todo", ""),
+                ];
+                onSetBlocks(prev => {
+                  const idx = prev.findIndex(b => b.id === block.id);
+                  const next = [...prev];
+                  next.splice(idx + 1, 0, ...templateBlocks);
+                  return next;
+                });
+              }}
+            >
+              <Plus className="w-4 h-4" /> {label}
+            </button>
+            <div className="text-xs text-gray-400 mt-1 pl-1">
+              <input
+                className="text-xs text-gray-400 bg-transparent outline-none hover:border-b border-gray-200"
+                value={label}
+                onChange={e => onUpdateProps(block.id, { buttonLabel: e.target.value })}
+                placeholder="Button label..."
+                onClick={e => e.stopPropagation()}
+              />
+            </div>
+          </div>
+        );
+      }
+      case "mention": return (
+        <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-sm cursor-pointer hover:bg-blue-200 transition-colors my-1">
+          <span>@</span>
+          <div ref={setRef} className="outline-none min-w-[40px]" {...baseEditable} />
+        </div>
+      );
+      case "voice_note": return <VoiceNoteBlock block={block} onUpdateProps={onUpdateProps} />;
+      case "sketch": return <SketchBlock block={block} onUpdateProps={onUpdateProps} />;
+      case "flashcard": return <FlashcardBlock block={block} onUpdateProps={onUpdateProps} />;
+      case "progress_tracker": return <ProgressTrackerBlock block={block} onUpdateProps={onUpdateProps} />;
+      case "reading_list": return <ReadingListBlock block={block} onUpdateProps={onUpdateProps} />;
+      case "timeline": return <TimelineBlock block={block} onUpdateProps={onUpdateProps} />;
+      case "poll": return <PollBlock block={block} onUpdateProps={onUpdateProps} />;
+      case "code_runner": return <CodeRunnerBlock block={block} onUpdateProps={onUpdateProps} />;
+      case "columns": return (
+        <div className="flex gap-4 my-2">
+          <div className="flex-1 border border-dashed border-gray-200 rounded-lg p-3 min-h-[80px]">
+            <p className="text-xs text-gray-300 italic">Column 1 — drag blocks here</p>
+          </div>
+          <div className="flex-1 border border-dashed border-gray-200 rounded-lg p-3 min-h-[80px]">
+            <p className="text-xs text-gray-300 italic">Column 2 — drag blocks here</p>
+          </div>
+        </div>
+      );
+      default: return <div ref={setRef} className="text-base text-gray-700 py-1 px-1 outline-none min-h-[1.75rem] cursor-text" {...baseEditable} />;
     }
   };
 
+  const isDragging = dragId === block.id;
   const isDropTarget = dragOver === block.id && dragId !== block.id;
+  const isSyncedBlock = isSynced;
 
   return (
     <div
-      className={`group relative py-0.5 ${isDropTarget ? "border-t-2 border-blue-400" : ""}`}
-      style={{ paddingLeft: !["bullet_list","numbered_list","todo"].includes(block.type) ? `${indentPx}px` : undefined }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      className={`group relative flex flex-col ${isDragging ? "opacity-40" : ""} ${isDropTarget ? "border-t-2 border-blue-400" : ""} ${isSyncedBlock ? "" : ""}`}
+      draggable
+      onDragStart={e => { e.dataTransfer.setData("blockId", block.id); onSetDragId(block.id); }}
       onDragOver={e => { e.preventDefault(); onSetDragOver(block.id); }}
+      onDragEnd={() => { onSetDragId(null); onSetDragOver(null); }}
       onDrop={e => {
-        e.preventDefault();
         const fromId = e.dataTransfer.getData("blockId");
-        if (!fromId || fromId === block.id) { onSetDragOver(null); onSetDragId(null); return; }
+        if (!fromId || fromId === block.id) return;
         onSetBlocks(prev => {
           const fromIdx = prev.findIndex(b => b.id === fromId);
           const toIdx = prev.findIndex(b => b.id === block.id);
           if (fromIdx === -1 || toIdx === -1) return prev;
           const next = [...prev];
-          const [moved] = next.splice(fromIdx, 1);
-          next.splice(toIdx, 0, moved);
+          const [item] = next.splice(fromIdx, 1);
+          next.splice(toIdx, 0, item);
           return next;
         });
-        onSetDragOver(null);
         onSetDragId(null);
+        onSetDragOver(null);
       }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => { setHovered(false); setShowReactionPicker(false); }}
     >
-      {hovered && block.type !== "divider" && (
-        <div
-          className="absolute -left-8 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-gray-300 hover:text-gray-500 cursor-grab z-10"
-          draggable
-          onDragStart={e => { e.dataTransfer.setData("blockId", block.id); onSetDragId(block.id); }}
-          onDragEnd={() => { onSetDragId(null); onSetDragOver(null); }}
-          onContextMenu={e => { e.preventDefault(); onBlockMenu(e.clientX, e.clientY, block.id); }}
-          onClick={e => { e.stopPropagation(); onBlockMenu(e.clientX, e.clientY, block.id); }}
-        >
-          <GripVertical className="w-4 h-4" />
+      <div className="flex items-start gap-1 relative">
+        <div className={`absolute -left-8 top-1 flex gap-0.5 transition-opacity ${hovered ? "opacity-100" : "opacity-0"}`}>
+          <button
+            className="w-5 h-5 flex items-center justify-center text-gray-300 hover:text-gray-600 cursor-grab active:cursor-grabbing rounded hover:bg-gray-100"
+            onMouseDown={() => {}}
+          >
+            <GripVertical className="w-3.5 h-3.5" />
+          </button>
+          <button className="w-5 h-5 flex items-center justify-center text-gray-300 hover:text-gray-600 rounded hover:bg-gray-100" onClick={e => { onBlockMenu(e.clientX, e.clientY, block.id); }}>
+            <span className="text-xs leading-none">⊕</span>
+          </button>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          {renderContent()}
+        </div>
+
+        {hovered && !locked && (
+          <div className="absolute right-0 bottom-0 flex gap-1">
+            <button
+              className="text-[10px] w-5 h-5 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-all"
+              title="Add reaction"
+              onClick={() => setShowReactionPicker(v => !v)}
+            >
+              <span>+</span>
+            </button>
+          </div>
+        )}
+
+        {showReactionPicker && (
+          <div className="absolute right-0 bottom-6 z-50 bg-white rounded-xl shadow-xl border p-2 flex flex-wrap gap-1 w-[200px]">
+            {REACTION_EMOJIS.map(emoji => (
+              <button key={emoji} className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-lg text-base transition-colors" onClick={() => toggleReaction(emoji)}>
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {reactions.length > 0 && (
+        <div className="flex gap-1.5 flex-wrap mt-1 ml-0">
+          {reactions.map((r: any) => (
+            <button
+              key={r.emoji}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-colors ${r.voted ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-gray-50 border-gray-200 text-gray-600 hover:border-gray-300"}`}
+              onClick={() => toggleReaction(r.emoji)}
+            >
+              {r.emoji} <span>{r.count}</span>
+            </button>
+          ))}
         </div>
       )}
-      <div onContextMenu={e => { e.preventDefault(); onBlockMenu(e.clientX, e.clientY, block.id); }}>
-        {renderContent()}
-      </div>
     </div>
   );
 }
-

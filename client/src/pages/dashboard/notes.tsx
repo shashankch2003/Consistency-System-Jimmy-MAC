@@ -6,9 +6,10 @@ import SearchCommandPalette from "@/components/notes/SearchCommandPalette";
 import FocusMode from "@/components/notes/FocusMode";
 import SplitView from "@/components/notes/SplitView";
 import ContentMap from "@/components/notes/ContentMap";
+import PresentationMode from "@/components/notes/PresentationMode";
 
 function NotesLayout() {
-  const { settingsPanelOpen, searchOpen, focusModeOpen, splitViewOpen, contentMapOpen } = useNotes();
+  const { settingsPanelOpen, searchOpen, focusModeOpen, splitViewOpen, contentMapOpen, presentationModeOpen } = useNotes();
 
   return (
     <div className="flex h-full w-full overflow-hidden relative">
@@ -20,6 +21,7 @@ function NotesLayout() {
       {searchOpen && <SearchCommandPalette />}
       {focusModeOpen && <FocusMode />}
       {contentMapOpen && <ContentMap />}
+      {presentationModeOpen && <PresentationMode />}
     </div>
   );
 }

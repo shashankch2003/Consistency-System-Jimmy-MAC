@@ -1,0 +1,134 @@
+PROMPT 3 OF 7
+LOGIC: Advanced Blocks + Unique Blocks + AI + Focus + All Unique
+Features
+■ REPLIT: AUTONOMOUS → ECONOMY | App Testing: OFF | Code Optimization: OFF
+■ FIX APPLIED: Fix 1 — Tech stack corrected
+■ FIX APPLIED: Fix 3 — File paths corrected
+■ FIX APPLIED: Fix 14 — KaTeX install instruction added
+■ FIX APPLIED: Fix 16 — Code Runner uses sandboxed iframe instead of eval()
+■ FIX APPLIED: Fix 17 — Voice note HTTPS/mic permission note added
+■ FIX APPLIED: Fix 18 — Content recycler handles NULL last_visited_at
+CONTEXT:
+App: AI-driven productivity platform with auth, teams, tasks
+Tech: React, TypeScript, Vite, Tailwind CSS, Shadcn/UI, PostgreSQL, Drizzle ORM,
+Express.js backend in server/routes.ts
+Building: Advanced note-taking system with block editor, 35+ block types, databases,
+AI coaching, focus mode, voice notes, sketching, and 25 unique features beyond
+competitors
+Feature: All special block types + 10 unique blocks + AI writing coach + smart links
++ focus mode + split view + presentation mode + snippet library + content recycler +
+daily journal + page insights + smart tags + page comparison + content map
+Current state: Prompt 2 done. Sidebar, page controls, core editor work.
+Layer: Layer 2+3
+Files to change: client/src/components/notes/BlockEditor.tsx,
+client/src/components/notes/SlashCommandGrid.tsx,
+client/src/components/notes/PageView.tsx,
+client/src/components/notes/PageSettingsPanel.tsx,
+client/src/components/notes/FocusMode.tsx,
+client/src/components/notes/SplitView.tsx,
+client/src/components/notes/ContentMap.tsx, client/src/components/notes/Sidebar.tsx
+PREREQUISITE: Install katex package first — add katex to dependencies.
+=== PART A: REMAINING STANDARD BLOCKS ===
+1. EQUATION BLOCK: Renders LaTeX/KaTeX math using the katex package. Click to edit
+raw LaTeX, blur renders formula. Inline equations with $formula$ syntax.
+2. TABLE OF CONTENTS: Auto-generates from all headings on the page. Updates live as
+headings change. Click entry scrolls to that heading. Indented by heading level.
+3. MENTION (inline): Type @ to trigger user mention popup. Type [[ to trigger page
+mention popup. Type @date to insert date picker. Mentions render as colored pill
+links.
+4. SYNCED BLOCK: Create from block menu "Sync this block". Produces a synced copy
+that stays identical. Edit one, all copies update. Orange border indicator. "Unsync"
+option.
+5. TEMPLATE BUTTON BLOCK: Click creates pre-defined block structure. Configure:
+button label + template blocks array. Example: "Add Meeting Notes" button creates
+heading + date + attendees list + action items.
+6. LINK TO PAGE: Type /link or paste internal page URL. Renders as a card with page
+icon + title + preview text. Click navigates to page.
+7. LINK PREVIEW: Paste external URL on its own line. Auto-fetches and renders rich
+preview card (title, description, image, favicon).
+=== PART B: 10 UNIQUE BLOCKS (not in competitors) ===
+8. VOICE NOTE BLOCK: Type /voice. Shows record button (red circle). Click starts
+recording (animated pulse, timer counting). Click stop saves audio. Shows waveform
+visualization + play/pause + duration. "Transcribe" button generates text
+transcription below (mock AI for now). Transcription is searchable. NOTE: Voice
+recording requires HTTPS and user microphone permission — this will work after
+deployment but may not work in Replit's dev preview.
+9. SKETCH BLOCK: Type /sketch. Opens canvas (h-[300px] bg-white border rounded-lg).
+Tools: pen (3 sizes), eraser, color picker (8 colors), undo, redo, clear. Draw with
+mouse/touch. Save as SVG in block state.
+10. FLASHCARD BLOCK: Type /flashcard. Card with front/back. Click "Flip" toggles (3D
+flip animation 300ms). Edit front (question) and back (answer). "Add to study deck"
+link. Multiple flashcards stack as a deck.
+11. PROGRESS TRACKER BLOCK: Type /progress. Shows: label input "Sprint Progress" +
+current value slider (0-100) + color selector (green/blue/orange/red). Renders as
+rounded bar with percentage text + label.
+12. READING LIST BLOCK: Type /readinglist. Add URL input. Shows card: favicon +
+title + domain + "Read"/"Unread" toggle badge. Stack multiple URLs as a list.
+13. TIMELINE BLOCK: Type /timeline. Horizontal scrollable timeline. Each entry: date
++ title + description. "Add entry" button. Entries shown as dots on a horizontal
+line with content below.
+14. POLL BLOCK: Type /poll. Question input + option inputs (2-6 options). "Add
+option" link. Shows results bar chart after voting. Click option to vote. Show
+counts.
+15. CODE RUNNER BLOCK: Type /run. Code editor (like code block) + "Run" button
+below. Executing shows output in a result area below code. Support JavaScript
+execution using a sandboxed iframe with srcdoc (do NOT use eval() as it may be
+blocked by CSP). Display console.log output captured from the iframe.
+16. BLOCK REACTIONS: Any block. Hover shows small "+" emoji button (bottom-right of
+block). Click opens emoji picker (12 common emojis). Selecting adds reaction.
+Reactions display below block as pills with count. Click existing reaction to
+add/remove your vote.
+17. BLOCK BOOKMARKS: From block menu select "Bookmark this block". Block saved to
+user's bookmark collection (viewable from sidebar). Bookmarks reference the original
+block and page.
+=== PART C: AI + FOCUS + ALL UNIQUE FEATURES ===
+18. AI WRITING COACH: Toggle in settings "AI Coach". When ON: Right margin shows
+suggestion cards (bg-blue-50 rounded-lg p-2 text-xs max-w-[200px]): "This sentence
+could be clearer" / "Consider a stronger verb" / "Reading level: Grade 8". Cards
+appear contextually as user types (debounced 2s after stop typing). Mock AI:
+generate 2-3 random suggestions from a preset list based on text length.
+19. SMART LINKS: As user types, detect words/phrases that match titles of other
+pages. Show subtle blue underline with tooltip "[Page Name] exists — click to link".
+Clicking inserts a page mention link. Check every 3 seconds (debounced).
+20. FOCUS MODE: Triggered from command palette or sidebar button or Ctrl+Shift+F.
+Hides sidebar, covers everything with dark bg. Only shows title + content centered.
+Current block text-white, other blocks text-white/30. Word count progress ring
+animates. Exit with Escape or X. Ambient sound buttons play/stop (mock: just toggle
+icon state). Timer counts down from configurable time (default 25 min).
+21. SPLIT VIEW: Triggered from command palette or Ctrl+\. Opens current page on
+left, page picker for right. Divider draggable to resize (min 30% each side). Each
+pane independently scrollable. X on pane tab closes split view.
+22. PRESENTATION MODE: Triggered from page menu "Present". Builds slides from page:
+each H1 or H2 starts a new slide. Content between headings = slide body. Full-screen
+overlay. Arrow keys or click navigate slides. Slide counter "3/12" bottom-right.
+Escape exits.
+23. SNIPPET LIBRARY: Accessible from sidebar "Snippets" or /snippet command. Save:
+Select blocks → block menu "Save as snippet" → name it. Insert: /snippet opens
+library, click inserts blocks at cursor. Store as array of block objects in state.
+24. CONTENT RECYCLER: Surfaces pages not visited in 30+ days. Query: WHERE
+(last_visited_at < 30 days ago OR last_visited_at IS NULL) AND word_count > 50.
+Shows in sidebar as "Rediscover" section (collapsible, max 3 items). Each: page icon
++ title + "Last visited 45 days ago" (or "Never visited" if null). Click opens page.
+Dismiss removes from recycler.
+page with template: Date heading + Mood selector (5 emojis: ■■■■■
+25. DAILY JOURNAL: Sidebar button "Today's Journal". Creates/opens today's journal
+) + "What's
+streak■
+on your mind?" prompt + Gratitude section + Goals section. Streak counter: "7 day
+" in sidebar.
+26. PAGE INSIGHTS: "Generate Insights" in settings panel. Analyzes page content
+(mock AI): Generates summary (2-3 sentences), key topics extracted (as tags),
+sentiment (Positive/Neutral/Negative), readability score. Display in settings panel.
+27. SMART TAGS: After page has 100+ words, AI auto-suggests tags (mock: extract most
+common nouns). Show "Suggested tags" in settings with Accept/Reject per tag.
+28. PAGE COMPARISON: From version history, select 2 versions. Opens side-by-side
+view. Differences highlighted: green for additions, red for deletions, yellow for
+changes.
+29. CONTENT MAP: Click node opens that page. Lines drawn between pages that link to
+each other (from mentions/link-to-page blocks). Zoom in/out with +/- buttons. Drag
+canvas to pan. Node size reflects word count.
+BOUNDARIES — CRITICAL:
+- Do not add any database reads or writes
+- All data in React state only (lost on refresh — expected)
+- Do not change any visual design from Prompt 1
+- Do not add any features not described above
