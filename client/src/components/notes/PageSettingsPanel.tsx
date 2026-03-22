@@ -1,56 +1,146 @@
+import { useState } from "react";
 import { X } from "lucide-react";
+import { useNotes, FontType, PageStatus } from "./NotesContext";
+import { useToast } from "@/hooks/use-toast";
 
-const statuses = [
-  { label: "Draft", cls: "bg-gray-100 text-gray-600" },
-  { label: "In Progress", cls: "bg-yellow-100 text-yellow-700" },
-  { label: "Review", cls: "bg-blue-100 text-blue-700" },
-  { label: "Final", cls: "bg-green-100 text-green-700" },
-  { label: "Archived", cls: "bg-gray-200 text-gray-400" },
+const STATUS_LIST: { value: PageStatus; label: string; cls: string }[] = [
+  { value: "draft", label: "Draft", cls: "bg-gray-100 text-gray-600" },
+  { value: "in_progress", label: "In Progress", cls: "bg-yellow-100 text-yellow-700" },
+  { value: "review", label: "Review", cls: "bg-blue-100 text-blue-700" },
+  { value: "final", label: "Final", cls: "bg-green-100 text-green-700" },
+  { value: "archived", label: "Archived", cls: "bg-gray-200 text-gray-400" },
 ];
 
-const actions = [
-  "Copy link", "Duplicate page", "Move to...", "Lock page",
-  "Suggest edits", "Use with AI", "Translate", "History", "Share", "Export", "Import",
-];
+function formatDate(d: Date) {
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function relativeTime(date: Date) {
+  const diff = Date.now() - date.getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d === 1) return "Yesterday";
+  return `${d}d ago`;
+}
 
 export default function PageSettingsPanel() {
+  const { selectedPage, updatePage, deletePage, duplicatePage, setSettingsPanelOpen, selectPage } = useNotes();
+  const { toast } = useToast();
+  const [showShare, setShowShare] = useState(false);
+  const [sharePermission, setSharePermission] = useState("view");
+
+  if (!selectedPage) return null;
+
+  const wordCount = selectedPage.blocks.reduce((acc, b) => acc + b.content.split(/\s+/).filter(Boolean).length, 0);
+  const readingTime = Math.max(1, Math.ceil(wordCount / 200));
+
+  const handleExport = () => {
+    const lines: string[] = [`# ${selectedPage.title}`, ""];
+    selectedPage.blocks.forEach(b => {
+      if (b.type === "heading1") lines.push(`# ${b.content}`, "");
+      else if (b.type === "heading2") lines.push(`## ${b.content}`, "");
+      else if (b.type === "heading3") lines.push(`### ${b.content}`, "");
+      else if (b.type === "bullet_list") lines.push(`- ${b.content}`);
+      else if (b.type === "numbered_list") lines.push(`1. ${b.content}`);
+      else if (b.type === "todo") lines.push(`- [${b.properties.checked ? "x" : " "}] ${b.content}`);
+      else if (b.type === "quote") lines.push(`> ${b.content}`, "");
+      else if (b.type === "code") lines.push(`\`\`\`${b.properties.language || ""}\n${b.content}\n\`\`\``, "");
+      else if (b.type === "divider") lines.push("---", "");
+      else lines.push(b.content, "");
+    });
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${selectedPage.title || "untitled"}.md`;
+    a.click();
+    toast({ title: "Page exported as Markdown" });
+  };
+
+  const handleImport = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".md,.txt";
+    input.onchange = e => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const text = ev.target?.result as string;
+        const newBlocks = text.split("\n").filter(Boolean).map(line => {
+          const id = Math.random().toString(36).slice(2);
+          if (line.startsWith("# ")) return { id, type: "heading1" as const, content: line.slice(2), properties: {}, children: [], indent: 0 };
+          if (line.startsWith("## ")) return { id, type: "heading2" as const, content: line.slice(3), properties: {}, children: [], indent: 0 };
+          if (line.startsWith("### ")) return { id, type: "heading3" as const, content: line.slice(4), properties: {}, children: [], indent: 0 };
+          if (line.startsWith("- ")) return { id, type: "bullet_list" as const, content: line.slice(2), properties: {}, children: [], indent: 0 };
+          if (line.startsWith("> ")) return { id, type: "quote" as const, content: line.slice(2), properties: {}, children: [], indent: 0 };
+          if (line === "---") return { id, type: "divider" as const, content: "", properties: {}, children: [], indent: 0 };
+          return { id, type: "text" as const, content: line, properties: {}, children: [], indent: 0 };
+        });
+        updatePage(selectedPage.id, { blocks: newBlocks });
+        toast({ title: "Page imported from Markdown" });
+        setSettingsPanelOpen(false);
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
   return (
     <div className="fixed right-0 top-0 h-full w-[340px] bg-white shadow-xl border-l z-40 overflow-y-auto">
       <div className="flex items-center justify-between border-b px-5 py-4">
         <h2 className="font-semibold text-lg text-gray-900">Page Settings</h2>
-        <X className="w-5 h-5 text-gray-400 cursor-pointer hover:text-gray-600" />
+        <button onClick={() => setSettingsPanelOpen(false)}>
+          <X className="w-5 h-5 text-gray-400 hover:text-gray-600" />
+        </button>
       </div>
 
       <div className="px-5 py-4 space-y-6">
         <section>
           <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Appearance</div>
           <div className="grid grid-cols-3 gap-2 mb-3">
-            {[
-              { label: "Default", active: true, preview: "Aa" },
-              { label: "Serif", active: false, preview: "Aa" },
-              { label: "Mono", active: false, preview: "Aa" },
-            ].map(f => (
-              <div key={f.label} className={`rounded-lg border-2 p-3 text-center cursor-pointer ${f.active ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300"}`}>
-                <div className={`text-lg font-medium mb-1 ${f.label === "Serif" ? "font-serif" : f.label === "Mono" ? "font-mono" : ""}`}>{f.preview}</div>
-                <div className="text-xs text-gray-500">{f.label}</div>
-              </div>
+            {(["default", "serif", "mono"] as FontType[]).map(f => (
+              <button
+                key={f}
+                onClick={() => updatePage(selectedPage.id, { font: f })}
+                className={`rounded-lg border-2 p-3 text-center transition-colors ${selectedPage.font === f ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300"}`}
+              >
+                <div className={`text-lg font-medium mb-1 ${f === "serif" ? "font-serif" : f === "mono" ? "font-mono" : ""}`}>Aa</div>
+                <div className="text-xs text-gray-500 capitalize">{f}</div>
+              </button>
             ))}
           </div>
-          <div className="flex justify-between items-center py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 rounded px-2">
-            <span>Small text</span>
-            <div className="w-10 h-5 bg-gray-200 rounded-full relative"><div className="w-4 h-4 bg-white rounded-full absolute top-0.5 left-0.5 shadow" /></div>
-          </div>
-          <div className="flex justify-between items-center py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 rounded px-2">
-            <span>Full width</span>
-            <div className="w-10 h-5 bg-blue-500 rounded-full relative"><div className="w-4 h-4 bg-white rounded-full absolute top-0.5 right-0.5 shadow" /></div>
-          </div>
+          {[
+            { label: "Small text", key: "smallText" as const },
+            { label: "Full width", key: "fullWidth" as const },
+            { label: "Lock page", key: "locked" as const },
+          ].map(({ label, key }) => (
+            <div
+              key={key}
+              className="flex justify-between items-center py-2 text-sm text-gray-700 hover:bg-gray-50 rounded px-2 cursor-pointer"
+              onClick={() => updatePage(selectedPage.id, { [key]: !selectedPage[key] })}
+            >
+              <span>{label}</span>
+              <div className={`w-10 h-5 rounded-full relative transition-colors ${selectedPage[key] ? "bg-blue-500" : "bg-gray-200"}`}>
+                <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow transition-all ${selectedPage[key] ? "right-0.5" : "left-0.5"}`} />
+              </div>
+            </div>
+          ))}
         </section>
 
         <section>
           <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Page Status</div>
           <div className="flex flex-wrap gap-2">
-            {statuses.map(s => (
-              <span key={s.label} className={`text-xs px-3 py-1.5 rounded-full cursor-pointer font-medium ${s.cls}`}>{s.label}</span>
+            {STATUS_LIST.map(s => (
+              <button
+                key={s.value}
+                onClick={() => updatePage(selectedPage.id, { status: s.value })}
+                className={`text-xs px-3 py-1.5 rounded-full font-medium transition-all ${s.cls} ${selectedPage.status === s.value ? "ring-2 ring-offset-1 ring-gray-400" : ""}`}
+              >
+                {s.label}
+              </button>
             ))}
           </div>
         </section>
@@ -58,59 +148,71 @@ export default function PageSettingsPanel() {
         <section>
           <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Page Info</div>
           <div className="space-y-2 text-sm text-gray-600">
-            <div className="flex items-center gap-2 py-1">
-              <span className="text-gray-400 w-24 shrink-0">Icon</span>
-              <button className="px-3 py-1 border border-gray-200 rounded-md hover:bg-gray-50 text-base">📁</button>
-            </div>
-            <div className="flex items-center gap-2 py-1">
-              <span className="text-gray-400 w-24 shrink-0">Cover</span>
-              <button className="px-3 py-1 border border-gray-200 rounded-md hover:bg-gray-50 text-xs">Change cover</button>
-            </div>
-            <div className="flex items-center gap-2 py-1">
-              <span className="text-gray-400 w-24 shrink-0">Created</span>
-              <span>Mar 1, 2026</span>
-            </div>
-            <div className="flex items-center gap-2 py-1">
-              <span className="text-gray-400 w-24 shrink-0">Last edited</span>
-              <span>3h ago</span>
-            </div>
-            <div className="flex items-center gap-2 py-1">
-              <span className="text-gray-400 w-24 shrink-0">Words</span>
-              <span>342</span>
-            </div>
-            <div className="flex items-center gap-2 py-1">
-              <span className="text-gray-400 w-24 shrink-0">Read time</span>
-              <span>2 min</span>
-            </div>
+            <div className="flex items-center gap-2 py-1"><span className="text-gray-400 w-28 shrink-0">Created</span><span>{formatDate(selectedPage.createdAt)}</span></div>
+            <div className="flex items-center gap-2 py-1"><span className="text-gray-400 w-28 shrink-0">Last edited</span><span>{relativeTime(selectedPage.updatedAt)}</span></div>
+            <div className="flex items-center gap-2 py-1"><span className="text-gray-400 w-28 shrink-0">Words</span><span>{wordCount}</span></div>
+            <div className="flex items-center gap-2 py-1"><span className="text-gray-400 w-28 shrink-0">Read time</span><span>{readingTime} min</span></div>
           </div>
         </section>
 
         <section>
           <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">AI Insights</div>
-          <button className="border border-gray-200 rounded-md px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 w-full text-left mb-2">
-            ✨ Generate Insights
-          </button>
+          <button className="border border-gray-200 rounded-md px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 w-full text-left mb-2">✨ Generate Insights</button>
           <div className="text-xs text-gray-400 bg-gray-50 rounded-lg p-3">Insights will appear here</div>
         </section>
 
         <section>
           <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Actions</div>
           <div className="space-y-0.5">
-            {actions.map(action => (
-              <div key={action} className="h-10 flex items-center hover:bg-gray-50 rounded px-2 text-sm cursor-pointer text-gray-700">
-                {action}
-              </div>
+            {[
+              { label: "Copy link", action: () => { navigator.clipboard.writeText(window.location.href); toast({ title: "Link copied to clipboard" }); } },
+              { label: "Duplicate page", action: () => { const id = duplicatePage(selectedPage.id); selectPage(id); setSettingsPanelOpen(false); toast({ title: "Page duplicated" }); } },
+              { label: "Move to...", action: () => toast({ title: "Page picker coming soon" }) },
+              { label: "Suggest edits", action: () => {} },
+              { label: "Use with AI", action: () => {} },
+              { label: "Translate", action: () => {} },
+              { label: "History", action: () => toast({ title: "Version history available after database sync" }) },
+              { label: "Share", action: () => setShowShare(true) },
+              { label: "Export as Markdown", action: handleExport },
+              { label: "Import from Markdown", action: handleImport },
+            ].map(item => (
+              <button key={item.label} className="w-full h-10 flex items-center hover:bg-gray-50 rounded px-2 text-sm cursor-pointer text-gray-700 text-left" onClick={item.action}>
+                {item.label}
+              </button>
             ))}
           </div>
         </section>
 
         <section>
           <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Danger Zone</div>
-          <div className="h-10 flex items-center hover:bg-red-50 rounded px-2 text-sm cursor-pointer text-red-500">
+          <button className="w-full h-10 flex items-center hover:bg-red-50 rounded px-2 text-sm cursor-pointer text-red-500 text-left" onClick={() => { deletePage(selectedPage.id); setSettingsPanelOpen(false); }}>
             Move to Trash
-          </div>
+          </button>
         </section>
       </div>
+
+      {showShare && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowShare(false)}>
+          <div className="bg-white rounded-xl shadow-2xl p-5 w-80" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900">Share page</h3>
+              <button onClick={() => setShowShare(false)}><X className="w-4 h-4 text-gray-400" /></button>
+            </div>
+            <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 mb-3">
+              <span className="text-xs text-gray-600 flex-1 truncate">{window.location.href}</span>
+              <button className="text-blue-600 text-xs font-medium shrink-0" onClick={() => { navigator.clipboard.writeText(window.location.href); toast({ title: "Link copied" }); }}>Copy</button>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-600">Permission</span>
+              <select className="text-sm border border-gray-200 rounded px-2 py-1 outline-none" value={sharePermission} onChange={e => setSharePermission(e.target.value)}>
+                <option value="view">Can view</option>
+                <option value="comment">Can comment</option>
+                <option value="edit">Can edit</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -62,6 +62,18 @@ Preferred communication style: Simple, everyday language.
     -   UI components: ChannelSidebar, MessageList, MessageComposer, ChannelView — all in `client/src/components/connect/`
     -   Route: /dashboard/connect → ConnectPage
 
+-   **Notes System (Prompts 1–2 DONE)**:
+    -   12 UI shell components in `client/src/components/notes/`
+    -   Central state via `NotesContext.tsx` (NotesProvider, useNotes hook): pages[], selectedPageId, UI state flags
+    -   Sidebar: tab switching (Pages/Recent/Favorites/Tags), page tree with expand/collapse/drag-drop/right-click context menu, quick capture inbox, Ctrl+K global shortcut
+    -   PageView: contentEditable title, cover picker (6 gradients), emoji icon picker, status dropdown, reading stats (word count/read time), settings panel trigger, lock toggle
+    -   PageSettingsPanel: font selector, small text/full width/lock toggles, status pills, page info, export as Markdown, import .md, share modal, duplicate, delete
+    -   BlockEditor: 20+ block types (text, heading1-3, bullet_list, numbered_list, todo, toggle, quote, callout, divider, code, table, image, video, file, bookmark, embed), contentEditable per block, Enter/Backspace/Tab behavior, 50-step undo/redo, drag-drop reordering with grip handles, markdown shortcuts (#/##/###/- /1. /[ ] /> /---), keyboard shortcuts (Ctrl+Z/Y/B/I/U/E/D/Delete/Up/Down/Shift+0-6), block context menu, inline slash command grid
+    -   SlashCommandGrid: searchable, keyboard-navigable, all block types with categories
+    -   BlockToolbar: floating on text selection, execCommand formatting (bold/italic/underline/strike/code/link), color picker, copy
+    -   FocusMode + ContentMap + SplitView: context-connected overlays with Esc to close
+    -   Page: `client/src/pages/dashboard/notes.tsx` — wraps everything in NotesProvider
+
 ### Shared Code
 -   `shared/` directory contains common types, API route definitions with validation schemas (`shared/routes.ts`), and database schemas (`shared/schema.ts`).
 

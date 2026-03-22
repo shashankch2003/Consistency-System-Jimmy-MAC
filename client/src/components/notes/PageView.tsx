@@ -1,93 +1,202 @@
-import { ChevronRight } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { ChevronRight, Settings, Lock, Unlock } from "lucide-react";
+import { useNotes, Page, PageStatus, FontType } from "./NotesContext";
+import BlockEditor from "./BlockEditor";
+
+const COVERS = [
+  "from-blue-400 to-purple-500",
+  "from-green-400 to-teal-500",
+  "from-rose-400 to-pink-500",
+  "from-yellow-400 to-orange-500",
+  "from-indigo-400 to-purple-500",
+  "from-cyan-400 to-teal-500",
+];
+
+const EMOJIS = ["📄","📝","📋","📌","⭐","🎯","💡","🔥","📊","🎨","💼","🏠","📱","🎬","🎵","📚","🌟","🚀","💰","🔑","🔬","📁","🗂️","🗓️","📎","✏️","🎓","🏆","🌐","⚡","🔐","🎪","🎭","🖼️","🗺️","🏔️","🌿","🌊","🎵","🎺","🎸","🎹","🎻","🥁"];
+
+const STATUS_MAP: Record<PageStatus, { label: string; cls: string }> = {
+  draft: { label: "Draft", cls: "bg-gray-100 text-gray-600" },
+  in_progress: { label: "In Progress", cls: "bg-yellow-100 text-yellow-700" },
+  review: { label: "Review", cls: "bg-blue-100 text-blue-700" },
+  final: { label: "Final", cls: "bg-green-100 text-green-700" },
+  archived: { label: "Archived", cls: "bg-gray-200 text-gray-400" },
+};
+
+function Breadcrumbs({ page, pages }: { page: Page; pages: Page[] }) {
+  const { selectPage } = useNotes();
+  const chain: Page[] = [];
+  let cur: Page | undefined = page;
+  while (cur?.parentId) {
+    const par = pages.find(p => p.id === cur!.parentId);
+    if (par) { chain.unshift(par); cur = par; } else break;
+  }
+  return (
+    <div className="flex items-center gap-1 text-xs text-gray-400 mt-3 flex-wrap">
+      <span className="hover:text-gray-600 cursor-pointer">Notes</span>
+      {chain.map(p => (
+        <span key={p.id} className="flex items-center gap-1">
+          <ChevronRight className="w-3 h-3" />
+          <span className="hover:text-gray-600 cursor-pointer" onClick={() => selectPage(p.id)}>{p.title || "Untitled"}</span>
+        </span>
+      ))}
+      <ChevronRight className="w-3 h-3" />
+      <span className="text-gray-600">{page.title || "Untitled"}</span>
+    </div>
+  );
+}
 
 export default function PageView() {
+  const { selectedPage, pages, updatePage, setSettingsPanelOpen } = useNotes();
+  const [showCoverPicker, setShowCoverPicker] = useState(false);
+  const [showIconPicker, setShowIconPicker] = useState(false);
+  const [showStatusDrop, setShowStatusDrop] = useState(false);
+  const titleRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (titleRef.current && selectedPage) {
+      const cur = titleRef.current.innerText;
+      if (cur !== selectedPage.title) titleRef.current.innerText = selectedPage.title;
+    }
+  }, [selectedPage?.id]);
+
+  const wordCount = selectedPage?.blocks.reduce((acc, b) => acc + b.content.split(/\s+/).filter(Boolean).length, 0) ?? 0;
+  const readingTime = Math.max(1, Math.ceil(wordCount / 200));
+  const lastEdited = selectedPage ? relativeTime(selectedPage.updatedAt) : "";
+
+  if (!selectedPage) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+        <div className="text-center">
+          <div className="text-4xl mb-4">📄</div>
+          <p>Select a page from the sidebar</p>
+          <p className="text-xs mt-1">or create a new one</p>
+        </div>
+      </div>
+    );
+  }
+
+  const fontClass = selectedPage.font === "serif" ? "font-serif" : selectedPage.font === "mono" ? "font-mono" : "font-sans";
+  const textSizeClass = selectedPage.smallText ? "text-sm" : "text-base";
+
   return (
-    <div className="flex-1 max-w-[900px] mx-auto px-16 py-8">
-      <div className="h-[200px] w-full bg-gradient-to-r from-blue-400 to-purple-500 rounded-b-lg relative mb-2">
-        <div className="absolute bottom-3 right-3 text-white/70 text-xs cursor-pointer hover:text-white">Change cover</div>
-      </div>
-
-      <div className="text-5xl -mt-8 ml-2 relative z-10 cursor-pointer select-none">📁</div>
-
-      <div className="flex items-center gap-1 text-xs text-gray-400 mt-3">
-        <span className="hover:text-gray-600 cursor-pointer">Notes</span>
-        <ChevronRight className="w-3 h-3" />
-        <span className="hover:text-gray-600 cursor-pointer">Project Notes</span>
-        <ChevronRight className="w-3 h-3" />
-        <span className="text-gray-600">Sprint 1</span>
-        <span className="bg-yellow-100 text-yellow-700 text-xs px-2 py-0.5 rounded-full ml-2">In Progress</span>
-        <span className="text-xs text-gray-400 ml-auto">342 words · 2 min read · Last edited 3h ago</span>
-      </div>
-
-      <h1 className="text-4xl font-bold text-gray-900 mt-2 outline-none w-full border-0 bg-transparent">
-        Sprint 1 Planning
-      </h1>
-
-      <div className="mt-6 min-h-[400px] space-y-1">
-        <div className="group relative py-0.5">
-          <div className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center text-gray-300 cursor-grab">
-            <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
-              <circle cx="5" cy="5" r="1.2" /><circle cx="5" cy="8" r="1.2" /><circle cx="5" cy="11" r="1.2" />
-              <circle cx="11" cy="5" r="1.2" /><circle cx="11" cy="8" r="1.2" /><circle cx="11" cy="11" r="1.2" />
-            </svg>
-          </div>
-          <p className="text-base text-gray-700 py-1 px-1">
-            This sprint focuses on delivering the core authentication flow, dashboard layout, and the first set of productivity tracking features. The team will work in two-week cycles with daily standups.
-          </p>
+    <div className={`flex-1 overflow-y-auto ${fontClass} ${textSizeClass}`} style={{ maxWidth: selectedPage.fullWidth ? "100%" : "900px", margin: "0 auto" }}>
+      <div className="px-4 md:px-16 py-8">
+        <div className={`h-[200px] w-full bg-gradient-to-r ${selectedPage.cover} rounded-b-lg relative`}>
+          <button
+            className="absolute bottom-3 right-3 text-white/70 text-xs hover:text-white bg-black/20 px-2 py-1 rounded"
+            onClick={() => setShowCoverPicker(true)}
+          >
+            Change cover
+          </button>
         </div>
 
-        <div className="group relative py-0.5">
-          <div className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center text-gray-300 cursor-grab">
-            <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
-              <circle cx="5" cy="5" r="1.2" /><circle cx="5" cy="8" r="1.2" /><circle cx="5" cy="11" r="1.2" />
-              <circle cx="11" cy="5" r="1.2" /><circle cx="11" cy="8" r="1.2" /><circle cx="11" cy="11" r="1.2" />
-            </svg>
+        {showCoverPicker && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowCoverPicker(false)}>
+            <div className="bg-white rounded-xl shadow-2xl p-5 w-80" onClick={e => e.stopPropagation()}>
+              <p className="text-sm font-semibold text-gray-700 mb-3">Choose Cover</p>
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                {COVERS.map(c => (
+                  <div
+                    key={c}
+                    className={`h-12 rounded-lg bg-gradient-to-r ${c} cursor-pointer hover:scale-105 transition-transform ${selectedPage.cover === c ? "ring-2 ring-blue-500" : ""}`}
+                    onClick={() => { updatePage(selectedPage.id, { cover: c }); setShowCoverPicker(false); }}
+                  />
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <button className="flex-1 border border-gray-200 rounded-lg py-2 text-sm text-gray-600 hover:bg-gray-50">Upload</button>
+                <button className="flex-1 border border-red-100 rounded-lg py-2 text-sm text-red-500 hover:bg-red-50" onClick={() => { updatePage(selectedPage.id, { cover: "from-gray-200 to-gray-300" }); setShowCoverPicker(false); }}>Remove</button>
+              </div>
+            </div>
           </div>
-          <h2 className="text-2xl font-semibold text-gray-900 py-2">Key Decisions</h2>
+        )}
+
+        <div className="relative">
+          <div
+            className="text-5xl -mt-8 ml-2 relative z-10 cursor-pointer select-none inline-block"
+            onClick={() => setShowIconPicker(v => !v)}
+          >
+            {selectedPage.icon}
+          </div>
+          {showIconPicker && (
+            <div className="absolute top-0 left-0 z-50 bg-white rounded-xl shadow-2xl border p-3 w-72" style={{ marginTop: "2rem" }}>
+              <div className="grid grid-cols-8 gap-1">
+                {EMOJIS.map(e => (
+                  <button key={e} className="text-xl hover:bg-gray-100 rounded p-1" onClick={() => { updatePage(selectedPage.id, { icon: e }); setShowIconPicker(false); }}>
+                    {e}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="group relative py-0.5">
-          <div className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center text-gray-300 cursor-grab">
-            <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
-              <circle cx="5" cy="5" r="1.2" /><circle cx="5" cy="8" r="1.2" /><circle cx="5" cy="11" r="1.2" />
-              <circle cx="11" cy="5" r="1.2" /><circle cx="11" cy="8" r="1.2" /><circle cx="11" cy="11" r="1.2" />
-            </svg>
+        <Breadcrumbs page={selectedPage} pages={pages} />
+
+        <div className="flex items-center gap-2 mt-1 flex-wrap">
+          <div className="relative">
+            <button
+              className={`text-xs px-2 py-0.5 rounded-full font-medium cursor-pointer ${STATUS_MAP[selectedPage.status].cls}`}
+              onClick={() => setShowStatusDrop(v => !v)}
+            >
+              {STATUS_MAP[selectedPage.status].label}
+            </button>
+            {showStatusDrop && (
+              <div className="absolute top-full left-0 mt-1 z-50 bg-white rounded-lg shadow-xl border py-1 min-w-[140px]">
+                {(Object.entries(STATUS_MAP) as [PageStatus, { label: string; cls: string }][]).map(([s, info]) => (
+                  <button
+                    key={s}
+                    className="w-full text-left px-3 py-1.5 hover:bg-gray-50 text-sm"
+                    onClick={() => { updatePage(selectedPage.id, { status: s }); setShowStatusDrop(false); }}
+                  >
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${info.cls}`}>{info.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          <ul className="pl-6 text-gray-700 text-base space-y-1 py-1">
-            <li className="list-disc">Use React Query for server state management</li>
-            <li className="list-disc">PostgreSQL with Drizzle ORM for the data layer</li>
-            <li className="list-disc">Replit Auth for user authentication</li>
-          </ul>
+          <span className="text-xs text-gray-400 ml-auto">{wordCount} words · {readingTime} min read · Last edited {lastEdited}</span>
+          <button
+            className="text-gray-400 hover:text-gray-600"
+            onClick={() => updatePage(selectedPage.id, { locked: !selectedPage.locked })}
+            title={selectedPage.locked ? "Unlock page" : "Lock page"}
+          >
+            {selectedPage.locked ? <Lock className="w-4 h-4 text-amber-500" /> : <Unlock className="w-4 h-4" />}
+          </button>
+          <button className="text-gray-400 hover:text-gray-600" onClick={() => setSettingsPanelOpen(true)}>
+            <Settings className="w-4 h-4" />
+          </button>
         </div>
 
-        <div className="group relative py-0.5">
-          <div className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center text-gray-300 cursor-grab">
-            <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
-              <circle cx="5" cy="5" r="1.2" /><circle cx="5" cy="8" r="1.2" /><circle cx="5" cy="11" r="1.2" />
-              <circle cx="11" cy="5" r="1.2" /><circle cx="11" cy="8" r="1.2" /><circle cx="11" cy="11" r="1.2" />
-            </svg>
-          </div>
-          <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-lg flex gap-3 my-2">
-            <span className="text-xl">💡</span>
-            <p className="text-sm text-blue-800">Remember to run drizzle-kit push after every schema change to keep the database in sync with the TypeScript types.</p>
-          </div>
-        </div>
+        <div
+          ref={titleRef}
+          contentEditable={!selectedPage.locked}
+          suppressContentEditableWarning
+          className="text-4xl font-bold text-gray-900 mt-2 outline-none w-full border-0 bg-transparent cursor-text"
+          data-placeholder="Untitled"
+          onInput={e => updatePage(selectedPage.id, { title: (e.target as HTMLDivElement).innerText })}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); } }}
+          style={{ minHeight: "2.5rem" }}
+        />
+        {!selectedPage.title && (
+          <style>{`.page-title-empty::before { content: "Untitled"; color: #d1d5db; }`}</style>
+        )}
 
-        <div className="group relative py-0.5">
-          <div className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center text-gray-300 cursor-grab">
-            <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
-              <circle cx="5" cy="5" r="1.2" /><circle cx="5" cy="8" r="1.2" /><circle cx="5" cy="11" r="1.2" />
-              <circle cx="11" cy="5" r="1.2" /><circle cx="11" cy="8" r="1.2" /><circle cx="11" cy="11" r="1.2" />
-            </svg>
-          </div>
-          <div className="bg-gray-900 text-green-400 rounded-lg p-4 font-mono text-sm my-2 relative">
-            <span className="absolute top-2 right-3 text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded">javascript</span>
-            <div>const queryClient = new QueryClient();</div>
-            <div>const storage = new DatabaseStorage();</div>
-            <div>await registerRoutes(httpServer, app);</div>
-          </div>
+        <div className="mt-6">
+          <BlockEditor />
         </div>
       </div>
     </div>
   );
+}
+
+function relativeTime(date: Date) {
+  const diff = Date.now() - date.getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d === 1) return "Yesterday";
+  return `${d}d ago`;
 }
