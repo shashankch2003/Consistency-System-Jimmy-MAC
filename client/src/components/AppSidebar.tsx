@@ -74,6 +74,7 @@ const menuItems = [
   { title: "Messages", icon: MessageSquare, url: "/dashboard/messages" },
   { title: "Wiki", icon: BookMarked, url: "/dashboard/wiki" },
   { title: "Automations", icon: Zap, url: "/dashboard/automations" },
+  { title: "Connect", icon: MessageSquare, url: "/dashboard/connect" },
   { title: "Workspace Setup", icon: Building2, url: "/dashboard/workspace-setup" },
   { title: "Team Management", icon: UsersRound, url: "/dashboard/team-management" },
   { title: "Members", icon: Users, url: "/dashboard/members" },

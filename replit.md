@@ -54,6 +54,13 @@ Preferred communication style: Simple, everyday language.
     -   AI Features: AICommandBar (Ctrl+K, real OpenAI gpt-4o-mini, action parsing), AICoach (slide-in 320px panel, today's plan, focus recs, insights, chat — all OpenAI), SmartSearch (Ctrl+Shift+F, category tabs, workspace-wide search)
     -   Notifications: NotificationCenter (bell in SidebarHeader, unread badge, mark-all-read, 30s polling); notifications table
     -   Keyboard shortcuts in layout.tsx; Command + Search + AI Coach buttons in SidebarFooter
+-   **Connect Messaging System (Sprints 1–2 DONE)**:
+    -   Real-time Socket.IO messaging via `server/services/socket-server.ts` + `socket-handlers.ts`
+    -   15 messaging tables (connect_ prefix): connect_channels, connect_channel_members, connect_messages, connect_message_reactions, connect_message_attachments, connect_pinned_messages, connect_conversations, connect_conversation_members, connect_direct_messages, connect_dm_attachments, connect_dm_reactions, connect_user_presence, connect_huddles, connect_message_bookmarks, connect_custom_emoji, connect_slash_commands
+    -   Presence service, typing service, unread service in `server/services/`
+    -   REST routes: GET/POST /api/connect/channels, GET /api/messages/:channelId (cursor paginated), POST /api/messages/pin, POST /api/messages/bookmark, GET /api/connect/conversations, GET /api/connect/dm/:conversationId
+    -   UI components: ChannelSidebar, MessageList, MessageComposer, ChannelView — all in `client/src/components/connect/`
+    -   Route: /dashboard/connect → ConnectPage
 
 ### Shared Code
 -   `shared/` directory contains common types, API route definitions with validation schemas (`shared/routes.ts`), and database schemas (`shared/schema.ts`).

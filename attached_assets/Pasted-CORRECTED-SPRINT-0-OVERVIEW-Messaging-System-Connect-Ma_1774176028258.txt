@@ -1,0 +1,973 @@
+CORRECTED SPRINT 0 — OVERVIEW
+Messaging System 'Connect' — Master Overview
+HOW TO USE THESE FILES
+This messaging system (called 'Connect') is split into sprint files. Build in order:
+• Read this overview
+• Follow Corrected Sprint 1 — Database + Socket.IO + Message CRUD
+• Follow Corrected Sprint 2 — Channels + DMs + Composer
+• Follow Corrected Sprint 3 — Threads + Search + Files + Notifications
+• Follow Corrected Sprint 4 — AI + Admin + Polish
+Never start a new sprint until the current one works without errors.
+MODULE NAME
+// client/src/lib/config.ts
+export const MESSAGING_MODULE_NAME = "Connect";
+FIX #18: Path corrected from src/lib/config.ts to client/src/lib/config.ts
+CORRECTED TECH STACK
+Frontend: React + Vite, TypeScript, Tailwind CSS, Shadcn/UI
+State: React Query (server state) + React Context or Zustand (local state)
+Real-Time: Socket.IO (in-memory adapter for single server; Redis optional)
+Backend: Express.js REST API (server/routes.ts)
+Database: PostgreSQL + Drizzle ORM (shared/schema.ts)
+Search: PostgreSQL full-text search (tsvector/tsquery) — NO pgvector
+File Storage: Local uploads initially (Cloudflare R2 as future upgrade)
+Auth: Replit Auth (req.user.claims.sub)
+Routing: wouter (client-side)
+Migration: npx drizzle-kit push
+FIXES #1,#2,#3,#4,#5,#14,#15,#16: Entire tech stack corrected
+CORRECTED FILE STRUCTURE
+client/src/
+|-- pages/
+| |-- messaging.tsx # Main messaging layout (3-column)
+|-- components/messaging/
+| |-- messaging-layout.tsx # 3-column layout
+| |-- channel-sidebar.tsx # Left sidebar
+| |-- channel-header.tsx # Top bar
+| |-- message-list.tsx # Scrollable message list
+| |-- message-item.tsx # Single message
+| |-- message-composer.tsx # Bottom composer
+| |-- thread-panel.tsx # Right panel: thread view
+| |-- channel-browser.tsx # Browse/search channels modal
+| |-- dm-list.tsx # DM conversation list
+| |-- file-preview.tsx # Inline file previews
+| |-- emoji-picker.tsx # Emoji picker
+| |-- mention-autocomplete.tsx # @mention dropdown
+| |-- reaction-bar.tsx # Reaction display
+| |-- typing-indicator.tsx # 'Alice is typing...'
+| |-- message-actions.tsx # Hover actions
+|-- hooks/
+| |-- use-socket.ts # Socket.IO connection hook
+| |-- use-messages.ts # Message fetching + realtime
+| |-- use-typing.ts # Typing indicator hook
+| |-- use-presence.ts # Presence tracking hook
+|-- lib/
+| |-- config.ts # Module name config
+shared/
+|-- schema.ts # Drizzle schema (ADD messaging tables here)
+server/
+|-- routes.ts # Express routes (ADD messaging endpoints)
+|-- services/
+| |-- socket-server.ts # Socket.IO server setup
+| |-- socket-handlers.ts # Socket event handlers
+| |-- presence-service.ts # Presence tracking (in-memory)
+| |-- typing-service.ts # Typing indicators (in-memory)
+| |-- unread-service.ts # Unread count tracking
+| |-- notification-service.ts # In-app notifications
+|-- db.ts # Drizzle DB connection (already exists)
+FIX #6,#7: All file paths corrected for React+Vite+Express structure
+IMPORTANT NOTES
+Regarding existing tables (FIXES #19, A): Your app already has group_messages,
+grow_group_messages, channels, and channel_messages tables. The new messaging tables are
+COMPLETELY SEPARATE. Do NOT modify the existing tables. The new messaging channels table is
+named 'connect_channels' (not 'channels') to avoid conflicts. Messages are already named
+'connect_messages'.
+Regarding workspaces (FIXES #10, B, D): Your app DOES have a workspace system (workspaces table with
+serial/integer PK, workspace_members, teams). All workspaceId columns in the new messaging schema use integer
+type to match the existing workspaces.id. Use the existing workspace system.
+Regarding user IDs (FIX C): Your users table uses varchar('id') for Replit Auth sub values (e.g. '12345').
+ALL user-referencing columns in the new schema (authorId, createdBy, userId, pinnedBy, startedBy)
+use text/varchar — NOT uuid. This matches req.user.claims.sub.
+Regarding Redis (FIXES #11, #15): All services are written with in-memory fallbacks. Redis is optional and can be
+added later for production scaling.
+Regarding external services (FIXES #12, #13, #16): File uploads via Cloudflare R2, voice huddles via
+LiveKit/Daily.co, and push notifications via Firebase are all deferred to future sprints. Initial build uses local
+alternatives or omits these features.
+CORRECTED SPRINT 1
+Database + Socket.IO + Message CRUD
+WHAT TO BUILD
+• All Drizzle ORM table definitions for the messaging system in shared/schema.ts
+• Socket.IO server with Replit Auth verification (no Redis adapter needed initially)
+• Presence service (online/offline/away/DND tracking) using in-memory Map
+• Typing indicator service using in-memory Map with auto-expiry
+• Unread count tracking service using in-memory Map
+• Message CRUD Express routes (send, edit, delete, list, pin, react)
+STEP 1: DRIZZLE SCHEMA
+Add these table definitions to your existing shared/schema.ts file.
+FIX #1: Completely rewritten from Prisma model syntax to Drizzle pgTable() format
+FIX J — MERGE IMPORTS: Do NOT add a new import block. Instead, merge these into your EXISTING imports at
+the top of shared/schema.ts. Your existing file already imports from 'drizzle-orm/pg-core' and 'drizzle-orm'.
+FIX K — ADD MISSING IMPORTS: Add 'jsonb', 'pgEnum', 'uniqueIndex', 'index' to the existing drizzle-orm/pg-core
+import. Add 'sql' to the existing drizzle-orm import.
+// ============================================================
+// MESSAGING SYSTEM — ALL TABLES (Drizzle ORM)
+// MERGE into existing shared/schema.ts imports (FIX J, K)
+// ============================================================
+// ADD to your existing drizzle-orm/pg-core import:
+// pgEnum, uniqueIndex, index, jsonb
+// ADD to your existing drizzle-orm import:
+// sql
+// Example: your existing import should become something like:
+// import { pgTable, uuid, varchar, text, boolean, timestamp,
+// integer, jsonb, uniqueIndex, index, pgEnum, serial
+// ... (keep all your existing imports) } from 'drizzle-orm/pg-core';
+// import { sql, relations } from 'drizzle-orm';
+FIX I — The channelTypeEnum is now properly USED in the connect_channels table definition below (type column
+uses channelTypeEnum instead of plain varchar).
+// Channel types enum (FIX I: now actually used in the table)
+export const channelTypeEnum = pgEnum("channel_type", [
+"public", "private", "project", "team", "announcement", "social"
+]);
+connect_channels (FIX A: renamed from 'channels' to avoid conflict)
+FIX A: Renamed from pgTable('channels', ...) to pgTable('connect_channels', ...) because your app already has a
+'channels' table with integer PK.
+FIX C: All user ID columns (createdBy) changed from uuid to text.
+FIX D: workspaceId changed from uuid to integer to match existing workspaces table.
+FIX M: All json() columns changed to jsonb() to match existing codebase.
+// ■■ Connect Channels (FIX A: renamed from "channels") ■■■■■■■■■■■■
+export const connectChannels = pgTable("connect_channels", {
+id: uuid("id").defaultRandom().primaryKey(),
+workspaceId: integer("workspace_id"), // FIX D: integer, not uuid
+name: varchar("name", { length: 80 }).notNull(),
+displayName: varchar("display_name", { length: 80 }).notNull(),
+slug: varchar("slug").notNull(),
+description: varchar("description", { length: 500 }),
+topic: varchar("topic", { length: 250 }),
+type: channelTypeEnum("type").default("public").notNull(), // FIX I: uses enum
+icon: varchar("icon"),
+color: varchar("color"),
+isDefault: boolean("is_default").default(false).notNull(),
+isArchived: boolean("is_archived").default(false).notNull(),
+isPinned: boolean("is_pinned").default(false).notNull(),
+linkedProjectId: uuid("linked_project_id"),
+linkedTeamId: uuid("linked_team_id"),
+postingPermission: varchar("posting_permission", { length: 30 })
+.default("everyone").notNull(),
+memberCount: integer("member_count").default(0).notNull(),
+messageCount: integer("message_count").default(0).notNull(),
+lastMessageAt: timestamp("last_message_at"),
+lastMessagePreview: varchar("last_message_preview", { length: 200 }),
+retentionDays: integer("retention_days"),
+createdBy: text("created_by").notNull(), // FIX C: text, not uuid
+createdAt: timestamp("created_at").defaultNow().notNull(),
+updatedAt: timestamp("updated_at").defaultNow().notNull(),
+deletedAt: timestamp("deleted_at"),
+}, (table) => ({
+workspaceNameUnique: uniqueIndex("cch_ws_name_idx")
+.on(table.workspaceId, table.name),
+workspaceTypeIdx: index("cch_ws_type_idx")
+.on(table.workspaceId, table.type),
+}));
+connect_channel_members
+// ■■ Channel Members ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+export const connectChannelMembers = pgTable("connect_channel_members", {
+id: uuid("id").defaultRandom().primaryKey(),
+channelId: uuid("channel_id").notNull()
+.references(() => connectChannels.id, { onDelete: "cascade" }),
+userId: text("user_id").notNull(), // FIX C: text, not uuid
+role: varchar("role", { length: 20 }).default("member").notNull(),
+joinedAt: timestamp("joined_at").defaultNow().notNull(),
+lastReadAt: timestamp("last_read_at").defaultNow().notNull(),
+lastReadMessageId: uuid("last_read_message_id"),
+notificationPref: varchar("notification_pref", { length: 20 })
+.default("all").notNull(),
+isMuted: boolean("is_muted").default(false).notNull(),
+isStarred: boolean("is_starred").default(false).notNull(),
+sidebarSection: varchar("sidebar_section"),
+}, (table) => ({
+channelUserUnique: uniqueIndex("ccm_ch_user_idx")
+.on(table.channelId, table.userId),
+userStarredIdx: index("ccm_user_starred_idx")
+.on(table.userId, table.isStarred),
+}));
+connect_messages
+// ■■ Messages ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+export const connectMessages = pgTable("connect_messages", {
+id: uuid("id").defaultRandom().primaryKey(),
+channelId: uuid("channel_id").notNull()
+.references(() => connectChannels.id),
+authorId: text("author_id").notNull(), // FIX C: text, not uuid
+content: text("content").notNull(),
+contentHtml: text("content_html"),
+contentBlocks: jsonb("content_blocks"), // FIX M: jsonb, not json
+type: varchar("type", { length: 20 }).default("user").notNull(),
+threadParentId: uuid("thread_parent_id"),
+threadReplyCount: integer("thread_reply_count").default(0).notNull(),
+threadLastReplyAt: timestamp("thread_last_reply_at"),
+threadParticipantIds: text("thread_participant_ids")
+.array().default(sql`ARRAY[]::text[]`), // FIX C: text array
+isEdited: boolean("is_edited").default(false).notNull(),
+editedAt: timestamp("edited_at"),
+isPinned: boolean("is_pinned").default(false).notNull(),
+pinnedAt: timestamp("pinned_at"),
+pinnedBy: text("pinned_by"), // FIX C: text, not uuid
+isBookmarked: boolean("is_bookmarked").default(false).notNull(),
+scheduledFor: timestamp("scheduled_for"),
+metadata: jsonb("metadata"), // FIX M: jsonb
+mentionedUserIds: text("mentioned_user_ids")
+.array().default(sql`ARRAY[]::text[]`), // FIX C: text array
+mentionedChannelIds: uuid("mentioned_channel_ids")
+.array().default(sql`ARRAY[]::uuid[]`),
+hasAttachments: boolean("has_attachments").default(false).notNull(),
+reactionSummary: jsonb("reaction_summary"), // FIX M: jsonb
+createdAt: timestamp("created_at").defaultNow().notNull(),
+updatedAt: timestamp("updated_at").defaultNow().notNull(),
+deletedAt: timestamp("deleted_at"),
+}, (table) => ({
+channelCreatedIdx: index("msg_ch_created_idx")
+.on(table.channelId, table.createdAt),
+channelThreadIdx: index("msg_ch_thread_idx")
+.on(table.channelId, table.threadParentId),
+authorCreatedIdx: index("msg_author_created_idx")
+.on(table.authorId, table.createdAt),
+}));
+message_reactions
+// ■■ Message Reactions ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+export const connectMessageReactions = pgTable("connect_message_reactions", {
+id: uuid("id").defaultRandom().primaryKey(),
+messageId: uuid("message_id").notNull()
+.references(() => connectMessages.id, { onDelete: "cascade" }),
+userId: text("user_id").notNull(), // FIX C: text
+emoji: varchar("emoji").notNull(),
+createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+uniqueReaction: uniqueIndex("cmr_unique_idx")
+.on(table.messageId, table.userId, table.emoji),
+messageIdx: index("cmr_message_idx").on(table.messageId),
+}));
+message_attachments
+// ■■ Message Attachments ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+export const connectMessageAttachments = pgTable("connect_message_attachments", {
+id: uuid("id").defaultRandom().primaryKey(),
+messageId: uuid("message_id").notNull()
+.references(() => connectMessages.id, { onDelete: "cascade" }),
+fileName: varchar("file_name").notNull(),
+fileUrl: varchar("file_url").notNull(),
+fileSize: integer("file_size").notNull(),
+mimeType: varchar("mime_type").notNull(),
+thumbnailUrl: varchar("thumbnail_url"),
+width: integer("width"),
+height: integer("height"),
+duration: integer("duration"),
+createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+messageIdx: index("cma_message_idx").on(table.messageId),
+}));
+pinned_messages
+// ■■ Pinned Messages ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+export const connectPinnedMessages = pgTable("connect_pinned_messages", {
+id: uuid("id").defaultRandom().primaryKey(),
+channelId: uuid("channel_id").notNull()
+.references(() => connectChannels.id, { onDelete: "cascade" }),
+messageId: uuid("message_id").notNull(),
+pinnedBy: text("pinned_by").notNull(), // FIX C: text
+pinnedAt: timestamp("pinned_at").defaultNow().notNull(),
+}, (table) => ({
+channelMessageUnique: uniqueIndex("cpm_ch_msg_idx")
+.on(table.channelId, table.messageId),
+}));
+conversations (DMs)
+// ■■ Conversations (DMs) ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+export const connectConversations = pgTable("connect_conversations", {
+id: uuid("id").defaultRandom().primaryKey(),
+workspaceId: integer("workspace_id"), // FIX D: integer
+type: varchar("type", { length: 10 }).default("dm").notNull(),
+name: varchar("name"),
+icon: varchar("icon"),
+participantIds: text("participant_ids") // FIX C: text array
+.array().default(sql`ARRAY[]::text[]`),
+participantHash: varchar("participant_hash").notNull(),
+lastMessageAt: timestamp("last_message_at"),
+lastMessagePreview: varchar("last_message_preview", { length: 200 }),
+messageCount: integer("message_count").default(0).notNull(),
+createdBy: text("created_by").notNull(), // FIX C: text
+createdAt: timestamp("created_at").defaultNow().notNull(),
+updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+wsHashUnique: uniqueIndex("cconv_ws_hash_idx")
+.on(table.workspaceId, table.participantHash),
+}));
+conversation_members
+// ■■ Conversation Members ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+export const connectConversationMembers = pgTable("connect_conversation_members", {
+id: uuid("id").defaultRandom().primaryKey(),
+conversationId: uuid("conversation_id").notNull()
+.references(() => connectConversations.id, { onDelete: "cascade" }),
+userId: text("user_id").notNull(), // FIX C: text
+lastReadAt: timestamp("last_read_at").defaultNow().notNull(),
+lastReadMessageId: uuid("last_read_message_id"),
+isMuted: boolean("is_muted").default(false).notNull(),
+joinedAt: timestamp("joined_at").defaultNow().notNull(),
+}, (table) => ({
+convUserUnique: uniqueIndex("ccvm_conv_user_idx")
+.on(table.conversationId, table.userId),
+userIdx: index("ccvm_user_idx").on(table.userId),
+}));
+direct_messages
+// ■■ Direct Messages ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+export const connectDirectMessages = pgTable("connect_direct_messages", {
+id: uuid("id").defaultRandom().primaryKey(),
+conversationId: uuid("conversation_id").notNull()
+.references(() => connectConversations.id),
+authorId: text("author_id").notNull(), // FIX C: text
+content: text("content").notNull(),
+contentHtml: text("content_html"),
+type: varchar("type", { length: 20 }).default("user").notNull(),
+threadParentId: uuid("thread_parent_id"),
+threadReplyCount: integer("thread_reply_count").default(0).notNull(),
+isEdited: boolean("is_edited").default(false).notNull(),
+editedAt: timestamp("edited_at"),
+mentionedUserIds: text("mentioned_user_ids") // FIX C: text array
+.array().default(sql`ARRAY[]::text[]`),
+hasAttachments: boolean("has_attachments").default(false).notNull(),
+reactionSummary: jsonb("reaction_summary"), // FIX M: jsonb
+metadata: jsonb("metadata"), // FIX M: jsonb
+createdAt: timestamp("created_at").defaultNow().notNull(),
+updatedAt: timestamp("updated_at").defaultNow().notNull(),
+deletedAt: timestamp("deleted_at"),
+}, (table) => ({
+convCreatedIdx: index("cdm_conv_created_idx")
+.on(table.conversationId, table.createdAt),
+}));
+dm_attachments (FIX #21: added conversationId)
+// ■■ DM Attachments (FIX #21: added conversationId) ■■■■■■
+export const connectDmAttachments = pgTable("connect_dm_attachments", {
+id: uuid("id").defaultRandom().primaryKey(),
+messageId: uuid("message_id").notNull()
+.references(() => connectDirectMessages.id, { onDelete: "cascade" }),
+conversationId: uuid("conversation_id").notNull(), // FIX #21
+fileName: varchar("file_name").notNull(),
+fileUrl: varchar("file_url").notNull(),
+fileSize: integer("file_size").notNull(),
+mimeType: varchar("mime_type").notNull(),
+thumbnailUrl: varchar("thumbnail_url"),
+createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+messageIdx: index("cdma_message_idx").on(table.messageId),
+convIdx: index("cdma_conv_idx").on(table.conversationId),
+}));
+dm_reactions
+// ■■ DM Reactions ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+export const connectDmReactions = pgTable("connect_dm_reactions", {
+id: uuid("id").defaultRandom().primaryKey(),
+messageId: uuid("message_id").notNull()
+.references(() => connectDirectMessages.id, { onDelete: "cascade" }),
+userId: text("user_id").notNull(), // FIX C: text
+emoji: varchar("emoji").notNull(),
+createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+uniqueReaction: uniqueIndex("cdmr_unique_idx")
+.on(table.messageId, table.userId, table.emoji),
+}));
+user_presence
+// ■■ User Presence ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+export const connectUserPresence = pgTable("connect_user_presence", {
+id: uuid("id").defaultRandom().primaryKey(),
+userId: text("user_id").unique().notNull(), // FIX C: text
+workspaceId: integer("workspace_id"), // FIX D: integer
+status: varchar("status", { length: 20 }).default("offline").notNull(),
+customText: varchar("custom_text", { length: 100 }),
+customEmoji: varchar("custom_emoji"),
+lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
+autoStatus: boolean("auto_status").default(true).notNull(),
+dndUntil: timestamp("dnd_until"),
+updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+huddles (schema only — feature deferred per FIX #13)
+// ■■ Huddles ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+export const connectHuddles = pgTable("connect_huddles", {
+id: uuid("id").defaultRandom().primaryKey(),
+channelId: uuid("channel_id").notNull(),
+workspaceId: integer("workspace_id"), // FIX D: integer
+startedBy: text("started_by").notNull(), // FIX C: text
+status: varchar("status", { length: 10 }).default("active").notNull(),
+participantIds: text("participant_ids") // FIX C: text array
+.array().default(sql`ARRAY[]::text[]`),
+maxParticipants: integer("max_participants").default(50).notNull(),
+isRecording: boolean("is_recording").default(false).notNull(),
+recordingUrl: varchar("recording_url"),
+liveCaption: boolean("live_caption").default(true).notNull(),
+transcript: text("transcript"),
+aiSummary: text("ai_summary"),
+startedAt: timestamp("started_at").defaultNow().notNull(),
+endedAt: timestamp("ended_at"),
+}, (table) => ({
+channelStatusIdx: index("ch_status_idx")
+.on(table.channelId, table.status),
+}));
+message_bookmarks
+// ■■ Message Bookmarks ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+export const connectMessageBookmarks = pgTable("connect_message_bookmarks", {
+id: uuid("id").defaultRandom().primaryKey(),
+userId: text("user_id").notNull(), // FIX C: text
+messageId: uuid("message_id").notNull(),
+messageType: varchar("message_type", { length: 10 })
+.default("channel").notNull(),
+note: varchar("note", { length: 200 }),
+createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+userMessageUnique: uniqueIndex("cmb_user_msg_idx")
+.on(table.userId, table.messageId),
+}));
+custom_emoji
+// ■■ Custom Emoji ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+export const connectCustomEmoji = pgTable("connect_custom_emoji", {
+id: uuid("id").defaultRandom().primaryKey(),
+workspaceId: integer("workspace_id"), // FIX D: integer
+name: varchar("name").notNull(),
+imageUrl: varchar("image_url").notNull(),
+createdBy: text("created_by").notNull(), // FIX C: text
+createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+wsNameUnique: uniqueIndex("cce_ws_name_idx")
+.on(table.workspaceId, table.name),
+}));
+slash_commands
+// ■■ Slash Commands ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+export const connectSlashCommands = pgTable("connect_slash_commands", {
+id: uuid("id").defaultRandom().primaryKey(),
+workspaceId: integer("workspace_id"), // FIX D: integer
+name: varchar("name").notNull(),
+description: varchar("description").notNull(),
+handler: varchar("handler").notNull(),
+isBuiltIn: boolean("is_built_in").default(false).notNull(),
+createdBy: text("created_by"), // FIX C: text
+createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+wsNameUnique: uniqueIndex("csc_ws_name_idx")
+.on(table.workspaceId, table.name),
+}));
+Run migration:
+npx drizzle-kit push
+FIX #2: Migration command corrected from 'npx prisma migrate dev' to 'npx drizzle-kit push'
+STEP 2: SOCKET.IO SERVER (CORRECTED)
+Create file: server/services/socket-server.ts
+FIXES #4,#5,#8: Auth changed from NextAuth to Replit Auth session, CORS fixed, import paths fixed
+// server/services/socket-server.ts
+// Socket.IO server setup — NO Redis adapter (single-server)
+import { Server as SocketIOServer } from "socket.io";
+import { registerSocketHandlers } from "./socket-handlers";
+let io: SocketIOServer | null = null;
+export function getIO(): SocketIOServer {
+if (!io) throw new Error("Socket.IO not initialized");
+return io;
+}
+export async function initSocketServer(httpServer: any): Promise<SocketIOServer> {
+if (io) return io;
+io = new SocketIOServer(httpServer, {
+path: "/api/socket",
+cors: {
+origin: process.env.REPLIT_DEV_DOMAIN
+? `https://${process.env.REPLIT_DEV_DOMAIN}`
+: "*",
+credentials: true,
+},
+transports: ["websocket", "polling"],
+pingInterval: 25000,
+pingTimeout: 20000,
+});
+// Auth middleware — verify Replit Auth session
+io.use(async (socket, next) => {
+try {
+const req = socket.request as any;
+if (!req.headers.cookie) {
+return next(new Error("No session cookie"));
+}
+// userId and userName passed from client via auth params
+const userId = socket.handshake.auth?.userId;
+const userName = socket.handshake.auth?.userName;
+if (!userId) {
+return next(new Error("Unauthorized - no userId"));
+}
+socket.data.userId = userId;
+socket.data.userName = userName || "Unknown";
+next();
+} catch (err) {
+next(new Error("Authentication failed"));
+}
+});
+io.on("connection", (socket) => {
+console.log(`User connected: ${socket.data.userId}`);
+registerSocketHandlers(io!, socket);
+});
+return io;
+}
+STEP 3: SOCKET HANDLERS (CORRECTED)
+Create file: server/services/socket-handlers.ts
+FIXES #3,#8,#20: All Prisma calls replaced with Drizzle, imports fixed, array push fixed
+FIX A: All references to 'channels' table updated to 'connectChannels'
+FIX C: userId is text/string, not uuid — cast removed from array_append
+// server/services/socket-handlers.ts
+import { Server as SocketIOServer, Socket } from "socket.io";
+import { db } from "../db";
+import { eq, and, sql, desc } from "drizzle-orm";
+import {
+connectMessages, connectChannels, connectChannelMembers,
+connectConversationMembers, connectMessageReactions, connectUserPresence
+} from "../../shared/schema";
+import { presenceService } from "./presence-service";
+import { typingService } from "./typing-service";
+import { unreadService } from "./unread-service";
+export function registerSocketHandlers(io: SocketIOServer, socket: Socket) {
+const userId = socket.data.userId;
+const userName = socket.data.userName;
+// ■■ CONNECTION ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+socket.on("join_workspace", async (data: { workspaceId?: string }) => {
+if (data.workspaceId) {
+socket.join(`workspace:${data.workspaceId}`);
+}
+await presenceService.setOnline(userId, data.workspaceId || "default");
+io.to(`workspace:${data.workspaceId || "default"}`).emit("presence_update", {
+userId, status: "online", lastSeenAt: new Date().toISOString(),
+});
+// Join all channels user is a member of
+const memberships = await db.select({ channelId: connectChannelMembers.channelId })
+.from(connectChannelMembers)
+.where(eq(connectChannelMembers.userId, userId));
+for (const m of memberships) {
+socket.join(`channel:${m.channelId}`);
+}
+// Join all DM conversations
+const convos = await db.select({ conversationId: connectConversationMembers.conversationId })
+.from(connectConversationMembers)
+.where(eq(connectConversationMembers.userId, userId));
+for (const c of convos) {
+socket.join(`conversation:${c.conversationId}`);
+}
+});
+socket.on("disconnect", async () => {
+console.log(`User disconnected: ${userId}`);
+setTimeout(async () => {
+const currentSockets = await io.in(`user:${userId}`).fetchSockets();
+if (currentSockets.length === 0) {
+await presenceService.setOffline(userId);
+}
+}, 30000);
+});
+STEP 3 (continued): Socket Handlers — Messaging Events
+// ■■ MESSAGING ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+socket.on("message_send", async (data: {
+channelId: string; content: string; contentHtml?: string;
+threadParentId?: string; mentionedUserIds?: string[];
+tempId: string;
+}) => {
+try {
+// Permission check
+const [membership] = await db.select()
+.from(connectChannelMembers)
+.where(and(
+eq(connectChannelMembers.channelId, data.channelId),
+eq(connectChannelMembers.userId, userId)
+));
+if (!membership) {
+socket.emit("message_error", {
+tempId: data.tempId, error: "Not a member of this channel"
+});
+return;
+}
+// Create message with Drizzle
+const [message] = await db.insert(connectMessages).values({
+channelId: data.channelId,
+authorId: userId,
+content: data.content,
+contentHtml: data.contentHtml,
+threadParentId: data.threadParentId,
+mentionedUserIds: data.mentionedUserIds || [],
+}).returning();
+// Update channel stats (FIX A: connectChannels)
+await db.update(connectChannels)
+.set({
+messageCount: sql`${connectChannels.messageCount} + 1`,
+lastMessageAt: new Date(),
+lastMessagePreview: data.content.slice(0, 200),
+})
+.where(eq(connectChannels.id, data.channelId));
+// If thread reply, update parent (FIX #20: sql`array_append`)
+// FIX C: no ::uuid cast needed — userId is text
+if (data.threadParentId) {
+await db.update(connectMessages)
+.set({
+threadReplyCount: sql`${connectMessages.threadReplyCount} + 1`,
+threadLastReplyAt: new Date(),
+threadParticipantIds: sql`array_append(
+${connectMessages.threadParticipantIds}, ${userId}
+)`,
+})
+.where(eq(connectMessages.id, data.threadParentId));
+}
+// Broadcast to channel
+io.to(`channel:${data.channelId}`).emit("message_new", {
+...message, tempId: data.tempId, authorName: userName,
+});
+// Update unread counts
+await unreadService.incrementUnread(data.channelId, userId);
+} catch (error: any) {
+socket.emit("message_error", {
+tempId: data.tempId, error: error.message
+});
+}
+});
+STEP 3 (continued): Edit, Delete, Typing, Mark Read
+// Edit message
+socket.on("message_edit", async (data: {
+messageId: string; content: string; contentHtml?: string;
+}) => {
+const [msg] = await db.select().from(connectMessages)
+.where(eq(connectMessages.id, data.messageId));
+if (!msg || msg.authorId !== userId) {
+socket.emit("error", { message: "Cannot edit this message" });
+return;
+}
+const [updated] = await db.update(connectMessages)
+.set({
+content: data.content, contentHtml: data.contentHtml,
+isEdited: true, editedAt: new Date(),
+})
+.where(eq(connectMessages.id, data.messageId))
+.returning();
+io.to(`channel:${msg.channelId}`).emit("message_updated", updated);
+});
+// Delete message (soft delete)
+socket.on("message_delete", async (data: { messageId: string }) => {
+const [msg] = await db.select().from(connectMessages)
+.where(eq(connectMessages.id, data.messageId));
+if (!msg) return;
+const [membership] = await db.select().from(connectChannelMembers)
+.where(and(
+eq(connectChannelMembers.channelId, msg.channelId),
+eq(connectChannelMembers.userId, userId)
+));
+if (msg.authorId !== userId &&
+!["owner", "admin"].includes(membership?.role || "")) {
+socket.emit("error", { message: "Cannot delete this message" });
+return;
+}
+await db.update(connectMessages)
+.set({ deletedAt: new Date() })
+.where(eq(connectMessages.id, data.messageId));
+io.to(`channel:${msg.channelId}`).emit("message_deleted", {
+messageId: data.messageId, channelId: msg.channelId,
+});
+});
+// Typing indicators
+socket.on("typing_start", (data: { channelId: string }) => {
+typingService.setTyping(userId, userName, data.channelId);
+socket.to(`channel:${data.channelId}`).emit("typing", {
+channelId: data.channelId, userId, userName, isTyping: true,
+});
+});
+socket.on("typing_stop", (data: { channelId: string }) => {
+typingService.clearTyping(userId, data.channelId);
+socket.to(`channel:${data.channelId}`).emit("typing", {
+channelId: data.channelId, userId, isTyping: false,
+});
+});
+socket.on("mark_read", async (data: { channelId: string; messageId: string }) => {
+await db.update(connectChannelMembers)
+.set({ lastReadAt: new Date(), lastReadMessageId: data.messageId })
+.where(and(
+eq(connectChannelMembers.channelId, data.channelId),
+eq(connectChannelMembers.userId, userId)
+));
+unreadService.clearUnread(data.channelId, userId);
+socket.emit("unread_updated", { channelId: data.channelId, unreadCount: 0 });
+});
+// Join user's personal room
+socket.join(`user:${userId}`);
+}
+STEP 4: PRESENCE SERVICE (IN-MEMORY, NO REDIS)
+Create file: server/services/presence-service.ts
+FIX #11: Redis replaced with in-memory Map
+// server/services/presence-service.ts
+// In-memory presence tracking (no Redis required)
+import { db } from "../db";
+import { eq } from "drizzle-orm";
+import { connectUserPresence } from "../../shared/schema";
+const presenceMap = new Map<string, { status: string; workspaceId: string }>();
+class PresenceService {
+async setOnline(userId: string, workspaceId: string) {
+presenceMap.set(userId, { status: "online", workspaceId });
+await db.insert(connectUserPresence).values({
+userId, workspaceId, status: "online", lastSeenAt: new Date(),
+}).onConflictDoUpdate({
+target: connectUserPresence.userId,
+set: { status: "online", lastSeenAt: new Date() },
+});
+}
+async setOffline(userId: string) {
+const entry = presenceMap.get(userId);
+presenceMap.delete(userId);
+if (entry) {
+await db.update(connectUserPresence)
+.set({ status: "offline", lastSeenAt: new Date() })
+.where(eq(connectUserPresence.userId, userId));
+}
+}
+async setStatus(userId: string, status: string, customText?: string) {
+const entry = presenceMap.get(userId);
+if (entry) presenceMap.set(userId, { ...entry, status });
+return db.insert(connectUserPresence).values({
+userId, workspaceId: entry?.workspaceId || "", status, customText,
+lastSeenAt: new Date(),
+}).onConflictDoUpdate({
+target: connectUserPresence.userId,
+set: { status, customText, lastSeenAt: new Date() },
+}).returning().then(r => r[0]);
+}
+getStatus(userId: string): string {
+return presenceMap.get(userId)?.status || "offline";
+}
+}
+export const presenceService = new PresenceService();
+STEP 5: TYPING SERVICE (IN-MEMORY)
+Create file: server/services/typing-service.ts
+// server/services/typing-service.ts
+// In-memory typing indicators (no Redis required)
+const typingMap = new Map<string, { userName: string; expiresAt: number }>();
+const TYPING_TTL = 5000; // 5 seconds
+class TypingService {
+setTyping(userId: string, userName: string, channelId: string) {
+const key = `${channelId}:${userId}`;
+typingMap.set(key, { userName, expiresAt: Date.now() + TYPING_TTL });
+setTimeout(() => {
+const entry = typingMap.get(key);
+if (entry && entry.expiresAt <= Date.now()) typingMap.delete(key);
+}, TYPING_TTL + 500);
+}
+clearTyping(userId: string, channelId: string) {
+typingMap.delete(`${channelId}:${userId}`);
+}
+getTypingUsers(channelId: string): Array<{ userId: string; userName: string }> {
+const now = Date.now();
+const users: Array<{ userId: string; userName: string }> = [];
+for (const [key, val] of typingMap.entries()) {
+if (key.startsWith(`${channelId}:`) && val.expiresAt > now) {
+const userId = key.split(":")[1];
+users.push({ userId, userName: val.userName });
+}
+}
+return users;
+}
+}
+export const typingService = new TypingService();
+STEP 6: UNREAD SERVICE (IN-MEMORY)
+Create file: server/services/unread-service.ts
+// server/services/unread-service.ts
+// In-memory unread counts (no Redis required)
+import { db } from "../db";
+import { eq, and, ne } from "drizzle-orm";
+import { connectChannelMembers } from "../../shared/schema";
+const unreadMap = new Map<string, number>(); // key: userId:channelId
+class UnreadService {
+async incrementUnread(channelId: string, senderUserId: string) {
+const members = await db.select({ userId: connectChannelMembers.userId })
+.from(connectChannelMembers)
+.where(and(
+eq(connectChannelMembers.channelId, channelId),
+ne(connectChannelMembers.userId, senderUserId)
+));
+for (const member of members) {
+const key = `${member.userId}:${channelId}`;
+unreadMap.set(key, (unreadMap.get(key) || 0) + 1);
+}
+}
+clearUnread(channelId: string, userId: string) {
+unreadMap.delete(`${userId}:${channelId}`);
+}
+getUnreadCount(userId: string, channelId: string): number {
+return unreadMap.get(`${userId}:${channelId}`) || 0;
+}
+getAllUnreadCounts(userId: string): Record<string, number> {
+const counts: Record<string, number> = {};
+for (const [key, count] of unreadMap.entries()) {
+if (key.startsWith(`${userId}:`) && count > 0) {
+const channelId = key.split(":")[1];
+counts[channelId] = count;
+}
+}
+return counts;
+}
+}
+export const unreadService = new UnreadService();
+STEP 7: EXPRESS ROUTES FOR MESSAGES (CORRECTED)
+Add to server/routes.ts (your existing Express routes file)
+FIX #3: Completely rewritten from tRPC router to Express route handlers
+FIX F: Check if isAuthenticated middleware already exists before defining a new one. If your Replit Auth setup
+already provides one, REUSE it.
+FIX L: Cursor pagination now ACTUALLY IMPLEMENTED with proper WHERE clause.
+// Add to server/routes.ts
+import { db } from "./db";
+import { eq, and, desc, sql, isNull, lt } from "drizzle-orm";
+import {
+connectMessages, connectChannels, connectChannelMembers,
+connectMessageReactions, connectPinnedMessages, connectMessageBookmarks
+} from "../shared/schema";
+// FIX F: Only define if not already provided by your auth setup
+// If your app already has isAuthenticated, skip this block.
+function isAuthenticated(req: any, res: any, next: any) {
+if (!req.user?.claims?.sub) {
+return res.status(401).json({ error: "Unauthorized" });
+}
+next();
+}
+GET /api/messages/:channelId — list messages (paginated, FIX L: cursor works)
+app.get("/api/messages/:channelId", isAuthenticated, async (req, res) => {
+try {
+const userId = req.user.claims.sub;
+const { channelId } = req.params;
+const limit = parseInt(req.query.limit as string) || 50;
+const cursor = req.query.cursor as string;
+const threadParentId = req.query.threadParentId as string;
+// Verify membership
+const [membership] = await db.select()
+.from(connectChannelMembers)
+.where(and(
+eq(connectChannelMembers.channelId, channelId),
+eq(connectChannelMembers.userId, userId)
+));
+if (!membership) {
+return res.status(403).json({ error: "Not a member of this channel" });
+}
+// FIX L: Build conditions array including cursor if provided
+const conditions = [
+eq(connectMessages.channelId, channelId),
+isNull(connectMessages.deletedAt),
+threadParentId
+? eq(connectMessages.threadParentId, threadParentId)
+: isNull(connectMessages.threadParentId),
+];
+// FIX L: If cursor provided, fetch the cursor message's createdAt
+// then filter for messages OLDER than the cursor
+if (cursor) {
+const [cursorMsg] = await db.select({ createdAt: connectMessages.createdAt })
+.from(connectMessages).where(eq(connectMessages.id, cursor));
+if (cursorMsg) {
+conditions.push(lt(connectMessages.createdAt, cursorMsg.createdAt));
+}
+}
+const results = await db.select().from(connectMessages)
+.where(and(...conditions))
+.orderBy(desc(connectMessages.createdAt))
+.limit(limit + 1);
+const hasMore = results.length > limit;
+const items = results.slice(0, limit).reverse();
+res.json({
+messages: items,
+hasMore,
+nextCursor: hasMore ? items[0]?.id : undefined,
+});
+} catch (error: any) {
+res.status(500).json({ error: error.message });
+}
+});
+POST /api/messages/pin — pin a message
+app.post("/api/messages/pin", isAuthenticated, async (req, res) => {
+const userId = req.user.claims.sub;
+const { messageId, channelId } = req.body;
+await db.insert(connectPinnedMessages).values({
+channelId, messageId, pinnedBy: userId,
+});
+await db.update(connectMessages).set({
+isPinned: true, pinnedAt: new Date(), pinnedBy: userId,
+}).where(eq(connectMessages.id, messageId));
+res.json({ success: true });
+});
+POST /api/messages/bookmark — bookmark a message
+app.post("/api/messages/bookmark", isAuthenticated, async (req, res) => {
+const userId = req.user.claims.sub;
+const { messageId, note } = req.body;
+await db.insert(connectMessageBookmarks).values({
+userId, messageId, note,
+}).onConflictDoUpdate({
+target: [connectMessageBookmarks.userId, connectMessageBookmarks.messageId],
+set: { note },
+});
+res.json({ success: true });
+});
+GET /api/messages/bookmarks — get user's bookmarks
+app.get("/api/messages/bookmarks", isAuthenticated, async (req, res) => {
+const userId = req.user.claims.sub;
+const bookmarks = await db.select().from(connectMessageBookmarks)
+.where(eq(connectMessageBookmarks.userId, userId))
+.orderBy(desc(connectMessageBookmarks.createdAt))
+.limit(50);
+res.json(bookmarks);
+});
+STEP 8: CLIENT SOCKET HOOK (CORRECTED)
+Create file: client/src/hooks/use-socket.ts
+FIXES #6,#5,#9: Path corrected, CORS env var fixed, works with React Query (no Zustand required)
+FIX E: REMOVED window.__USER_ID__ and window.__USER_NAME__. The hook now accepts userId and
+userName as parameters, obtained from the existing useAuth hook.
+// client/src/hooks/use-socket.ts
+import { useEffect, useRef, useCallback } from "react";
+import { io, Socket } from "socket.io-client";
+import { useQueryClient } from "@tanstack/react-query";
+let globalSocket: Socket | null = null;
+// FIX E: Accept userId and userName as parameters from useAuth hook
+export function useSocket(userId?: string, userName?: string, workspaceId?: string) {
+const socketRef = useRef<Socket | null>(null);
+const queryClient = useQueryClient();
+useEffect(() => {
+if (!userId) return; // Don't connect until auth is ready
+if (globalSocket?.connected) {
+socketRef.current = globalSocket;
+return;
+}
+const socket = io(window.location.origin, {
+path: "/api/socket",
+transports: ["websocket", "polling"],
+withCredentials: true,
+auth: {
+userId, // FIX E: from useAuth hook, not window globals
+userName, // FIX E: from useAuth hook, not window globals
+},
+});
+socket.on("connect", () => {
+console.log("Socket connected");
+socket.emit("join_workspace", { workspaceId });
+});
+// Invalidate React Query caches on real-time events
+socket.on("message_new", () => {
+queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+});
+socket.on("message_updated", () => {
+queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+});
+socket.on("message_deleted", () => {
+queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+});
+socket.on("disconnect", () => console.log("Socket disconnected"));
+globalSocket = socket;
+socketRef.current = socket;
+return () => { /* keep global connection */ };
+}, [userId, userName, workspaceId, queryClient]);
+const sendMessage = useCallback((data: any) => {
+socketRef.current?.emit("message_send", data);
+}, []);
+const editMessage = useCallback((data: any) => {
+socketRef.current?.emit("message_edit", data);
+}, []);
+const deleteMessage = useCallback((data: any) => {
+socketRef.current?.emit("message_delete", data);
+}, []);
+const startTyping = useCallback((channelId: string) => {
+socketRef.current?.emit("typing_start", { channelId });
+}, []);
+const stopTyping = useCallback((channelId: string) => {
+socketRef.current?.emit("typing_stop", { channelId });
+}, []);
+return {
+socket: socketRef.current,
+sendMessage, editMessage, deleteMessage,
+startTyping, stopTyping,
+};
+}
+// USAGE EXAMPLE (in your messaging component):
+// import { useAuth } from '../hooks/use-auth'; // your existing hook
+// const { user } = useAuth();
+// const { sendMessage, ... } = useSocket(user?.id, user?.name, workspaceId);
+SPRINT 1 VERIFICATION:
+• npx drizzle-kit push → all messaging tables created (connect_channels, connect_messages, etc.)
+• Socket.IO server starts and accepts connections
+• Send message via socket → saved in DB + broadcast to channel
+• Edit/delete message → updates broadcast correctly
+• Presence: connect → online, disconnect → 30s delay → offline
+• Typing indicators work and auto-clear after 5s

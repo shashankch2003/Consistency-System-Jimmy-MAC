@@ -36,6 +36,7 @@ import WorkloadPage from "@/pages/dashboard/workload";
 import ReportsPage from "@/pages/dashboard/reports";
 import OKRGoalsPage from "@/pages/dashboard/okr-goals";
 import AutomationsPage from "@/pages/dashboard/automations";
+import ConnectPage from "@/pages/dashboard/connect";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -198,6 +199,11 @@ function Router() {
       <Route path="/dashboard/automations">
         <DashboardLayout>
           <AutomationsPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/connect">
+        <DashboardLayout>
+          <ConnectPage />
         </DashboardLayout>
       </Route>
 

@@ -1,8 +1,9 @@
-import { pgTable, text, serial, integer, boolean, timestamp, varchar, uuid, jsonb, numeric, date, uniqueIndex, index } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { pgTable, text, serial, integer, boolean, timestamp, varchar, uuid, jsonb, numeric, date, uniqueIndex, index, pgEnum } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 export * from "./models/auth";
+export * from "./models/chat";
 
 export const payments = pgTable("payments", {
   id: serial("id").primaryKey(),
@@ -1174,3 +1175,274 @@ export const savedReports = pgTable("saved_reports", {
 export const insertSavedReportSchema = createInsertSchema(savedReports).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertSavedReport = z.infer<typeof insertSavedReportSchema>;
 export type SavedReport = typeof savedReports.$inferSelect;
+
+// ============================================================
+// CONNECT MESSAGING SYSTEM — ALL TABLES
+// ============================================================
+
+export const channelTypeEnum = pgEnum("channel_type", [
+  "public", "private", "project", "team", "announcement", "social",
+]);
+
+export const connectChannels = pgTable("connect_channels", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  workspaceId: integer("workspace_id"),
+  name: varchar("name", { length: 80 }).notNull(),
+  displayName: varchar("display_name", { length: 80 }).notNull(),
+  slug: varchar("slug").notNull(),
+  description: varchar("description", { length: 500 }),
+  topic: varchar("topic", { length: 250 }),
+  type: channelTypeEnum("type").default("public").notNull(),
+  icon: varchar("icon"),
+  color: varchar("color"),
+  isDefault: boolean("is_default").default(false).notNull(),
+  isArchived: boolean("is_archived").default(false).notNull(),
+  isPinned: boolean("is_pinned").default(false).notNull(),
+  linkedProjectId: uuid("linked_project_id"),
+  linkedTeamId: uuid("linked_team_id"),
+  postingPermission: varchar("posting_permission", { length: 30 }).default("everyone").notNull(),
+  memberCount: integer("member_count").default(0).notNull(),
+  messageCount: integer("message_count").default(0).notNull(),
+  lastMessageAt: timestamp("last_message_at"),
+  lastMessagePreview: varchar("last_message_preview", { length: 200 }),
+  retentionDays: integer("retention_days"),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => ({
+  workspaceNameUnique: uniqueIndex("cch_ws_name_idx").on(table.workspaceId, table.name),
+  workspaceTypeIdx: index("cch_ws_type_idx").on(table.workspaceId, table.type),
+}));
+
+export const connectChannelMembers = pgTable("connect_channel_members", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  channelId: uuid("channel_id").notNull().references(() => connectChannels.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  role: varchar("role", { length: 20 }).default("member").notNull(),
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+  lastReadAt: timestamp("last_read_at").defaultNow().notNull(),
+  lastReadMessageId: uuid("last_read_message_id"),
+  notificationPref: varchar("notification_pref", { length: 20 }).default("all").notNull(),
+  isMuted: boolean("is_muted").default(false).notNull(),
+  isStarred: boolean("is_starred").default(false).notNull(),
+  sidebarSection: varchar("sidebar_section"),
+}, (table) => ({
+  channelUserUnique: uniqueIndex("ccm_ch_user_idx").on(table.channelId, table.userId),
+  userStarredIdx: index("ccm_user_starred_idx").on(table.userId, table.isStarred),
+}));
+
+export const connectMessages = pgTable("connect_messages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  channelId: uuid("channel_id").notNull().references(() => connectChannels.id),
+  authorId: text("author_id").notNull(),
+  content: text("content").notNull(),
+  contentHtml: text("content_html"),
+  contentBlocks: jsonb("content_blocks"),
+  type: varchar("type", { length: 20 }).default("user").notNull(),
+  threadParentId: uuid("thread_parent_id"),
+  threadReplyCount: integer("thread_reply_count").default(0).notNull(),
+  threadLastReplyAt: timestamp("thread_last_reply_at"),
+  threadParticipantIds: text("thread_participant_ids").array().default(sql`ARRAY[]::text[]`),
+  isEdited: boolean("is_edited").default(false).notNull(),
+  editedAt: timestamp("edited_at"),
+  isPinned: boolean("is_pinned").default(false).notNull(),
+  pinnedAt: timestamp("pinned_at"),
+  pinnedBy: text("pinned_by"),
+  isBookmarked: boolean("is_bookmarked").default(false).notNull(),
+  scheduledFor: timestamp("scheduled_for"),
+  metadata: jsonb("metadata"),
+  mentionedUserIds: text("mentioned_user_ids").array().default(sql`ARRAY[]::text[]`),
+  mentionedChannelIds: uuid("mentioned_channel_ids").array().default(sql`ARRAY[]::uuid[]`),
+  hasAttachments: boolean("has_attachments").default(false).notNull(),
+  reactionSummary: jsonb("reaction_summary"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => ({
+  channelCreatedIdx: index("msg_ch_created_idx").on(table.channelId, table.createdAt),
+  channelThreadIdx: index("msg_ch_thread_idx").on(table.channelId, table.threadParentId),
+  authorCreatedIdx: index("msg_author_created_idx").on(table.authorId, table.createdAt),
+}));
+
+export const connectMessageReactions = pgTable("connect_message_reactions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  messageId: uuid("message_id").notNull().references(() => connectMessages.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  emoji: varchar("emoji").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  uniqueReaction: uniqueIndex("cmr_unique_idx").on(table.messageId, table.userId, table.emoji),
+  messageIdx: index("cmr_message_idx").on(table.messageId),
+}));
+
+export const connectMessageAttachments = pgTable("connect_message_attachments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  messageId: uuid("message_id").notNull().references(() => connectMessages.id, { onDelete: "cascade" }),
+  fileName: varchar("file_name").notNull(),
+  fileUrl: varchar("file_url").notNull(),
+  fileSize: integer("file_size").notNull(),
+  mimeType: varchar("mime_type").notNull(),
+  thumbnailUrl: varchar("thumbnail_url"),
+  width: integer("width"),
+  height: integer("height"),
+  duration: integer("duration"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  messageIdx: index("cma_message_idx").on(table.messageId),
+}));
+
+export const connectPinnedMessages = pgTable("connect_pinned_messages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  channelId: uuid("channel_id").notNull().references(() => connectChannels.id, { onDelete: "cascade" }),
+  messageId: uuid("message_id").notNull(),
+  pinnedBy: text("pinned_by").notNull(),
+  pinnedAt: timestamp("pinned_at").defaultNow().notNull(),
+}, (table) => ({
+  channelMessageUnique: uniqueIndex("cpm_ch_msg_idx").on(table.channelId, table.messageId),
+}));
+
+export const connectConversations = pgTable("connect_conversations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  workspaceId: integer("workspace_id"),
+  type: varchar("type", { length: 10 }).default("dm").notNull(),
+  name: varchar("name"),
+  icon: varchar("icon"),
+  participantIds: text("participant_ids").array().default(sql`ARRAY[]::text[]`),
+  participantHash: varchar("participant_hash").notNull(),
+  lastMessageAt: timestamp("last_message_at"),
+  lastMessagePreview: varchar("last_message_preview", { length: 200 }),
+  messageCount: integer("message_count").default(0).notNull(),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  wsHashUnique: uniqueIndex("cconv_ws_hash_idx").on(table.workspaceId, table.participantHash),
+}));
+
+export const connectConversationMembers = pgTable("connect_conversation_members", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  conversationId: uuid("conversation_id").notNull().references(() => connectConversations.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  lastReadAt: timestamp("last_read_at").defaultNow().notNull(),
+  lastReadMessageId: uuid("last_read_message_id"),
+  isMuted: boolean("is_muted").default(false).notNull(),
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+}, (table) => ({
+  convUserUnique: uniqueIndex("ccvm_conv_user_idx").on(table.conversationId, table.userId),
+  userIdx: index("ccvm_user_idx").on(table.userId),
+}));
+
+export const connectDirectMessages = pgTable("connect_direct_messages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  conversationId: uuid("conversation_id").notNull().references(() => connectConversations.id),
+  authorId: text("author_id").notNull(),
+  content: text("content").notNull(),
+  contentHtml: text("content_html"),
+  type: varchar("type", { length: 20 }).default("user").notNull(),
+  threadParentId: uuid("thread_parent_id"),
+  threadReplyCount: integer("thread_reply_count").default(0).notNull(),
+  isEdited: boolean("is_edited").default(false).notNull(),
+  editedAt: timestamp("edited_at"),
+  mentionedUserIds: text("mentioned_user_ids").array().default(sql`ARRAY[]::text[]`),
+  hasAttachments: boolean("has_attachments").default(false).notNull(),
+  reactionSummary: jsonb("reaction_summary"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => ({
+  convCreatedIdx: index("cdm_conv_created_idx").on(table.conversationId, table.createdAt),
+}));
+
+export const connectDmAttachments = pgTable("connect_dm_attachments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  messageId: uuid("message_id").notNull().references(() => connectDirectMessages.id, { onDelete: "cascade" }),
+  conversationId: uuid("conversation_id").notNull(),
+  fileName: varchar("file_name").notNull(),
+  fileUrl: varchar("file_url").notNull(),
+  fileSize: integer("file_size").notNull(),
+  mimeType: varchar("mime_type").notNull(),
+  thumbnailUrl: varchar("thumbnail_url"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  messageIdx: index("cdma_message_idx").on(table.messageId),
+  convIdx: index("cdma_conv_idx").on(table.conversationId),
+}));
+
+export const connectDmReactions = pgTable("connect_dm_reactions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  messageId: uuid("message_id").notNull().references(() => connectDirectMessages.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  emoji: varchar("emoji").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  uniqueReaction: uniqueIndex("cdmr_unique_idx").on(table.messageId, table.userId, table.emoji),
+}));
+
+export const connectUserPresence = pgTable("connect_user_presence", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").unique().notNull(),
+  workspaceId: integer("workspace_id"),
+  status: varchar("status", { length: 20 }).default("offline").notNull(),
+  customText: varchar("custom_text", { length: 100 }),
+  customEmoji: varchar("custom_emoji"),
+  lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
+  autoStatus: boolean("auto_status").default(true).notNull(),
+  dndUntil: timestamp("dnd_until"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const connectHuddles = pgTable("connect_huddles", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  channelId: uuid("channel_id").notNull(),
+  workspaceId: integer("workspace_id"),
+  startedBy: text("started_by").notNull(),
+  status: varchar("status", { length: 10 }).default("active").notNull(),
+  participantIds: text("participant_ids").array().default(sql`ARRAY[]::text[]`),
+  maxParticipants: integer("max_participants").default(50).notNull(),
+  isRecording: boolean("is_recording").default(false).notNull(),
+  recordingUrl: varchar("recording_url"),
+  liveCaption: boolean("live_caption").default(true).notNull(),
+  transcript: text("transcript"),
+  aiSummary: text("ai_summary"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  endedAt: timestamp("ended_at"),
+}, (table) => ({
+  channelStatusIdx: index("ch_status_idx").on(table.channelId, table.status),
+}));
+
+export const connectMessageBookmarks = pgTable("connect_message_bookmarks", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").notNull(),
+  messageId: uuid("message_id").notNull(),
+  messageType: varchar("message_type", { length: 10 }).default("channel").notNull(),
+  note: varchar("note", { length: 200 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userMessageUnique: uniqueIndex("cmb_user_msg_idx").on(table.userId, table.messageId),
+}));
+
+export const connectCustomEmoji = pgTable("connect_custom_emoji", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  workspaceId: integer("workspace_id"),
+  name: varchar("name").notNull(),
+  imageUrl: varchar("image_url").notNull(),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  wsNameUnique: uniqueIndex("cce_ws_name_idx").on(table.workspaceId, table.name),
+}));
+
+export const connectSlashCommands = pgTable("connect_slash_commands", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  workspaceId: integer("workspace_id"),
+  name: varchar("name").notNull(),
+  description: varchar("description").notNull(),
+  handler: varchar("handler").notNull(),
+  isBuiltIn: boolean("is_built_in").default(false).notNull(),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  wsNameUnique: uniqueIndex("csc_ws_name_idx").on(table.workspaceId, table.name),
+}));

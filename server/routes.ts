@@ -8,6 +8,20 @@ import crypto from "crypto";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { db } from "./db";
+import { eq, and, desc, isNull, lt, ne } from "drizzle-orm";
+import {
+  connectMessages,
+  connectChannels,
+  connectChannelMembers,
+  connectMessageReactions,
+  connectPinnedMessages,
+  connectMessageBookmarks,
+  connectConversations,
+  connectConversationMembers,
+  connectDirectMessages,
+  connectUserPresence,
+} from "../shared/schema";
 import { LEVELS, LEVEL_INDEX, INTERACTIVE_LEVELS, FUNDAMENTALS_LIST, DEFAULT_EXPENSE_CATEGORIES } from "@shared/schema";
 import { getCurrentLevelStatus, runMonthlyEvaluation, computeDailyMetrics } from "./level-engine";
 
@@ -3440,6 +3454,313 @@ For answer: just a message.`,
       await storage.markNotificationRead(parseInt(req.params.id));
       res.json({ success: true });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ============================================================
+  // CONNECT MESSAGING — REST ROUTES
+  // ============================================================
+
+  app.get("/api/messages/:channelId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { channelId } = req.params;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const cursor = req.query.cursor as string;
+      const threadParentId = req.query.threadParentId as string;
+
+      const [membership] = await db
+        .select()
+        .from(connectChannelMembers)
+        .where(and(eq(connectChannelMembers.channelId, channelId), eq(connectChannelMembers.userId, userId)));
+      if (!membership) {
+        return res.status(403).json({ error: "Not a member of this channel" });
+      }
+
+      const conditions: any[] = [
+        eq(connectMessages.channelId, channelId),
+        isNull(connectMessages.deletedAt),
+        threadParentId
+          ? eq(connectMessages.threadParentId, threadParentId)
+          : isNull(connectMessages.threadParentId),
+      ];
+
+      if (cursor) {
+        const [cursorMsg] = await db
+          .select({ createdAt: connectMessages.createdAt })
+          .from(connectMessages)
+          .where(eq(connectMessages.id, cursor));
+        if (cursorMsg) {
+          conditions.push(lt(connectMessages.createdAt, cursorMsg.createdAt));
+        }
+      }
+
+      const results = await db
+        .select()
+        .from(connectMessages)
+        .where(and(...conditions))
+        .orderBy(desc(connectMessages.createdAt))
+        .limit(limit + 1);
+
+      const hasMore = results.length > limit;
+      const items = results.slice(0, limit).reverse();
+      res.json({ messages: items, hasMore, nextCursor: hasMore ? items[0]?.id : undefined });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/messages/pin", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { messageId, channelId } = req.body;
+      await db.insert(connectPinnedMessages).values({ channelId, messageId, pinnedBy: userId });
+      await db
+        .update(connectMessages)
+        .set({ isPinned: true, pinnedAt: new Date(), pinnedBy: userId })
+        .where(eq(connectMessages.id, messageId));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/messages/pin/:messageId", isAuthenticated, async (req: any, res) => {
+    try {
+      const { messageId } = req.params;
+      const [msg] = await db.select({ channelId: connectMessages.channelId }).from(connectMessages).where(eq(connectMessages.id, messageId));
+      if (msg) {
+        await db.delete(connectPinnedMessages).where(and(eq(connectPinnedMessages.messageId, messageId), eq(connectPinnedMessages.channelId, msg.channelId)));
+        await db.update(connectMessages).set({ isPinned: false, pinnedAt: null, pinnedBy: null }).where(eq(connectMessages.id, messageId));
+      }
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/messages/pins/:channelId", isAuthenticated, async (req: any, res) => {
+    try {
+      const { channelId } = req.params;
+      const pinned = await db
+        .select()
+        .from(connectMessages)
+        .where(and(eq(connectMessages.channelId, channelId), eq(connectMessages.isPinned, true), isNull(connectMessages.deletedAt)))
+        .orderBy(desc(connectMessages.pinnedAt));
+      res.json(pinned);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/messages/bookmark", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { messageId, note } = req.body;
+      await db.insert(connectMessageBookmarks).values({ userId, messageId, note }).onConflictDoUpdate({
+        target: [connectMessageBookmarks.userId, connectMessageBookmarks.messageId],
+        set: { note },
+      });
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/messages/bookmark/:messageId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { messageId } = req.params;
+      await db.delete(connectMessageBookmarks).where(and(eq(connectMessageBookmarks.userId, userId), eq(connectMessageBookmarks.messageId, messageId)));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/messages/bookmarks", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const bookmarks = await db
+        .select()
+        .from(connectMessageBookmarks)
+        .where(eq(connectMessageBookmarks.userId, userId))
+        .orderBy(desc(connectMessageBookmarks.createdAt))
+        .limit(50);
+      res.json(bookmarks);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/connect/channels", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const workspaceId = req.query.workspaceId ? parseInt(req.query.workspaceId as string) : null;
+
+      const memberships = await db
+        .select({ channelId: connectChannelMembers.channelId })
+        .from(connectChannelMembers)
+        .where(eq(connectChannelMembers.userId, userId));
+      const channelIds = memberships.map(m => m.channelId);
+
+      if (channelIds.length === 0) return res.json([]);
+
+      const channels = await db
+        .select()
+        .from(connectChannels)
+        .where(and(
+          eq(connectChannels.isArchived, false),
+          isNull(connectChannels.deletedAt),
+          ...(workspaceId ? [eq(connectChannels.workspaceId, workspaceId)] : [])
+        ))
+        .orderBy(connectChannels.name);
+
+      res.json(channels.filter(c => channelIds.includes(c.id)));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/connect/channels", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { name, displayName, description, type, workspaceId, icon, color } = req.body;
+      if (!name || !displayName) return res.status(400).json({ error: "name and displayName are required" });
+
+      const slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+
+      if (workspaceId) {
+        const [existing] = await db
+          .select()
+          .from(connectChannels)
+          .where(and(eq(connectChannels.workspaceId, parseInt(workspaceId)), eq(connectChannels.name, name)));
+        if (existing) return res.status(400).json({ error: "Channel name already exists in this workspace" });
+      }
+
+      const [channel] = await db
+        .insert(connectChannels)
+        .values({ name, displayName, slug, description, type: type || "public", workspaceId: workspaceId ? parseInt(workspaceId) : null, icon, color, createdBy: userId, memberCount: 1 })
+        .returning();
+
+      await db.insert(connectChannelMembers).values({ channelId: channel.id, userId, role: "owner" });
+
+      res.json(channel);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/connect/channels/:channelId/join", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { channelId } = req.params;
+      await db.insert(connectChannelMembers).values({ channelId, userId, role: "member" }).onConflictDoNothing();
+      const members = await db.select().from(connectChannelMembers).where(eq(connectChannelMembers.channelId, channelId));
+      await db.update(connectChannels).set({ memberCount: members.length }).where(eq(connectChannels.id, channelId));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/connect/channels/:channelId/members", isAuthenticated, async (req: any, res) => {
+    try {
+      const { channelId } = req.params;
+      const members = await db.select().from(connectChannelMembers).where(eq(connectChannelMembers.channelId, channelId));
+      res.json(members);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/connect/unread", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { unreadService } = await import("./services/unread-service");
+      const counts = unreadService.getAllUnreadCounts(userId);
+      res.json(counts);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/connect/presence", isAuthenticated, async (req: any, res) => {
+    try {
+      const workspaceId = req.query.workspaceId ? parseInt(req.query.workspaceId as string) : null;
+      const presence = await db.select().from(connectUserPresence);
+      res.json(presence);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/connect/conversations", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const memberships = await db.select({ conversationId: connectConversationMembers.conversationId }).from(connectConversationMembers).where(eq(connectConversationMembers.userId, userId));
+      if (memberships.length === 0) return res.json([]);
+      const convIds = memberships.map(m => m.conversationId);
+      const convs = await db.select().from(connectConversations).orderBy(desc(connectConversations.lastMessageAt));
+      res.json(convs.filter(c => convIds.includes(c.id)));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/connect/conversations", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { participantIds, workspaceId } = req.body;
+      const allParticipants: string[] = Array.from(new Set([userId, ...(participantIds || [])])).sort() as string[];
+      const hash = allParticipants.join(":");
+      const wsId = workspaceId ? parseInt(workspaceId) : null;
+
+      const [existing] = await db.select().from(connectConversations).where(and(
+        eq(connectConversations.participantHash, hash),
+        ...(wsId ? [eq(connectConversations.workspaceId, wsId)] : [])
+      ));
+      if (existing) return res.json(existing);
+
+      const [conv] = await db.insert(connectConversations).values({
+        workspaceId: wsId,
+        participantIds: allParticipants,
+        participantHash: hash,
+        createdBy: userId,
+      }).returning();
+
+      for (const pid of allParticipants) {
+        await db.insert(connectConversationMembers).values({ conversationId: conv.id, userId: pid }).onConflictDoNothing();
+      }
+
+      res.json(conv);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/connect/dm/:conversationId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { conversationId } = req.params;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const cursor = req.query.cursor as string;
+
+      const [membership] = await db.select().from(connectConversationMembers).where(and(eq(connectConversationMembers.conversationId, conversationId), eq(connectConversationMembers.userId, userId)));
+      if (!membership) return res.status(403).json({ error: "Not a member of this conversation" });
+
+      const conditions: any[] = [eq(connectDirectMessages.conversationId, conversationId), isNull(connectDirectMessages.deletedAt)];
+      if (cursor) {
+        const [cursorMsg] = await db.select({ createdAt: connectDirectMessages.createdAt }).from(connectDirectMessages).where(eq(connectDirectMessages.id, cursor));
+        if (cursorMsg) conditions.push(lt(connectDirectMessages.createdAt, cursorMsg.createdAt));
+      }
+
+      const results = await db.select().from(connectDirectMessages).where(and(...conditions)).orderBy(desc(connectDirectMessages.createdAt)).limit(limit + 1);
+      const hasMore = results.length > limit;
+      const items = results.slice(0, limit).reverse();
+      res.json({ messages: items, hasMore, nextCursor: hasMore ? items[0]?.id : undefined });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
   });
 
   return httpServer;
