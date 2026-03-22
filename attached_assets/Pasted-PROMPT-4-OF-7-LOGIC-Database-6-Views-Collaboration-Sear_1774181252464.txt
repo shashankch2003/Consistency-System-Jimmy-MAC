@@ -1,0 +1,70 @@
+PROMPT 4 OF 7
+LOGIC: Database 6 Views + Collaboration + Search + Templates + AI
+Assistance
+■ REPLIT: AUTONOMOUS → ECONOMY | App Testing: OFF | Code Optimization: OFF
+■ FIX APPLIED: Fix 1 — Tech stack corrected
+■ FIX APPLIED: Fix 3 — File paths corrected
+■ FIX APPLIED: Fix 15 — PDF export approach specified (window.print() or jspdf)
+CONTEXT:
+App: AI-driven productivity platform with auth, teams, tasks
+Tech: React, TypeScript, Vite, Tailwind CSS, Shadcn/UI, PostgreSQL, Drizzle ORM,
+Express.js backend in server/routes.ts
+Building: Advanced note-taking system with block editor, 35+ block types, databases,
+AI coaching, focus mode, voice notes, sketching, and 25 unique features beyond
+competitors
+Feature: 6 database views, 20 property types, comments, reactions, sharing, version
+history, command palette, templates, import/export, AI text assistance
+Current state: Prompt 3 done. All blocks and unique features work.
+Layer: Layer 2+3
+Files to change: client/src/components/notes/DatabaseView.tsx,
+client/src/components/notes/CollaborationPanel.tsx,
+client/src/components/notes/SearchCommandPalette.tsx,
+client/src/components/notes/PageSettingsPanel.tsx
+1. DATABASE VIEWS (6 views sharing same data):
+TABLE: Editable cells. Click cell to edit. Column resize. Sort by column click. Add
+row button. Add property (column) button. Property types: Text, Number, Select
+(dropdown), Multi-select, Status, Date, Person, Checkbox, URL, Email, Phone, Files,
+Formula, Relation, Rollup, Created time, Last edited, Created by, Last edited by.
+BOARD: Cards in columns grouped by a Select/Status property. Drag cards between
+columns. Click card opens row detail.
+CALENDAR: Monthly grid. Items placed on Date property. Click day to add. Drag to
+reschedule. Month navigation.
+TIMELINE: Horizontal bars. Start/end from Date property. Drag to resize duration.
+Zoom levels.
+GALLERY: Card grid with cover image from Files property. Title + 2-3 visible
+properties.
+LIST: Simple row list with title + key properties inline. Compact.
+Filter: Add filter rows (property + operator + value). AND/OR logic. Sort:
+Multi-column sort. Group: Group rows by any Select/Status property.
+2. COMMENTS: Click comment icon on page header opens CollaborationPanel. Type +
+Enter posts comment with name + time. Reply to create thread. "Resolve" hides thread
+(show resolved toggle). Inline comments: Select text → toolbar "Comment" → adds
+highlight + comment.
+3. BLOCK REACTIONS: Show reaction counts per block. Click to toggle your reaction.
+4. SHARING: Share button opens modal. "Copy link" copies page URL. Permission
+dropdown: "Can edit" / "Can comment" / "Can view". Toggle "Public page" generates
+shareable link. "Invite" email input.
+5. VERSION HISTORY: Triggered from settings "History". Shows list of auto-saved
+versions (every 10 minutes of editing). Click version shows page at that state.
+"Restore" replaces current with that version. Page comparison between versions.
+6. COMMAND PALETTE: Ctrl+K. Search filters pages by title (case-insensitive).
+Actions execute. Recent tracks last opened. Quick Capture saves text to inbox.
+Results show matched pages with icon + title + snippet + path.
+7. TEMPLATES: "Templates" button in new page flow. Gallery of templates: "Meeting
+Notes" / "Project Brief" / "Weekly Review" / "Decision Log" / "Research Notes" /
+"Daily Journal". Click creates page from template. "Save as template" from page
+menu.
+8. IMPORT: Settings → Import. Accept .md files. Parse markdown to blocks. Drag-drop
+file onto page to import.
+9. EXPORT: Settings → Export. Generate Markdown from blocks. Download as .md file.
+Export as PDF option: use the browser's window.print() method with a print-friendly
+stylesheet, or install jspdf for programmatic PDF generation.
+10. AI ASSISTANCE (in BlockToolbar): Select text → sparkle button. Options: "Improve
+writing" / "Fix grammar" / "Make shorter" / "Make longer" / "Change tone
+(Professional/Casual/Friendly)" / "Summarize" / "Translate" / "Explain" / "Continue
+writing" / "Generate from prompt". Mock AI: return slightly modified text for now.
+BOUNDARIES — CRITICAL:
+- Do not add any database reads or writes
+- All data in React state only (lost on refresh — expected)
+- Do not change any visual design from Prompt 1
+- Do not add any features not described above
