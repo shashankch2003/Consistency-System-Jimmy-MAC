@@ -1,0 +1,150 @@
+PROMPT 6 OF 7
+DB: Connect Database + Collaboration + Search + Unique Features + AI +
+Templates
+■ REPLIT: AUTONOMOUS → ECONOMY | App Testing: OFF | Code Optimization: OFF
+■ FIX APPLIED: Fix 1 — Tech stack corrected
+■ FIX APPLIED: Fix 3 — File paths corrected
+■ FIX APPLIED: Fix 9 — userId instead of workspace_id
+■ FIX APPLIED: Fix 10 — API routes instruction added
+■ FIX APPLIED: Fix 12 — IStorage interface pattern added
+■ FIX APPLIED: Fix 18 — Content recycler handles NULL last_visited_at
+CONTEXT:
+App: AI-driven productivity platform with auth, teams, tasks
+Tech: React, TypeScript, Vite, Tailwind CSS, Shadcn/UI, PostgreSQL, Drizzle ORM,
+Express.js backend in server/routes.ts
+Building: Advanced note-taking system with block editor, 35+ block types, databases,
+AI coaching, focus mode, voice notes, sketching, and 25 unique features beyond
+competitors
+Feature: Connect databases, comments, reactions, sharing, search, snippets, journal,
+insights, templates, AI, content recycler, synced blocks, import/export — ALL
+remaining features
+Current state: Prompt 5 done. Pages + blocks persist. All tables exist.
+Layer: Layer 4
+Files to change: client/src/components/notes/DatabaseView.tsx,
+client/src/components/notes/CollaborationPanel.tsx,
+client/src/components/notes/SearchCommandPalette.tsx,
+client/src/components/notes/PageSettingsPanel.tsx,
+client/src/components/notes/FocusMode.tsx, client/src/components/notes/Sidebar.tsx,
+client/src/components/notes/BlockEditor.tsx, server/routes.ts, server/storage.ts
+IMPORTANT: For all database operations, add methods to the IStorage interface in
+server/storage.ts and implement them there, then call storage.* methods from routes.
+Add all necessary API routes to server/routes.ts following the same patterns as
+existing routes, using isAuthenticated middleware and req.user.claims.sub for user
+ID.
+=== PART A: DATABASE + COLLABORATION + SEARCH ===
+1. DATABASES: When database block created → Insert databases_meta + default
+properties (Name text, Status select). Add property → Insert database_properties.
+Add row → Insert database_rows. Edit cell → Update database_rows.values jsonb.
+Delete row → soft delete. Save view config → Insert/update database_views.
+2. COMMENTS: Post → Insert comments. Load → by page_id ordered created_at. Reply →
+Insert with parent_comment_id. Resolve → Update is_resolved. Inline comment → Set
+block_id + selection_text.
+3. BLOCK REACTIONS: Add → Insert block_reactions. Remove → Delete. Load → by
+block_id grouped by emoji with count.
+4. BLOCK BOOKMARKS: Save → Insert block_bookmarks. Load user's bookmarks → Join with
+blocks + pages for display.
+5. SHARING: Share → Insert page_shares. Update permission. Toggle public → Update
+is_public_link. Load shares for page.
+6. SEARCH: Full-text search across pages.title + blocks.content. Return matched
+pages with snippet of matching text. Filter by tag, date range, creator. Order by
+relevance (title match > content match).
+7. VERSION HISTORY: Load versions for page ordered desc. Click version → Render
+blocks_snapshot read-only. Restore → Replace current blocks with snapshot, create
+new version.
+=== PART B: UNIQUE FEATURES + AI + TEMPLATES ===
+8. SNIPPETS: Save snippet → Insert snippets with blocks_data jsonb. Load library →
+by user. Insert snippet → Create blocks from blocks_data at cursor position. Delete
+snippet → Delete row.
+9. JOURNAL: "Today's Journal" → Check if note_journal_entries exists for today. If yes:
+open linked page. If no: Create page from journal template, insert note_journal_entries
+row. Streak: Count consecutive days with entries. Display in sidebar.
+10. INSIGHTS: "Generate Insights" → Collect all block content for page. Send to AI
+(mock: generate summary from first 200 chars, extract nouns as topics, random
+sentiment). Insert/update page_insights. Display in settings.
+11. SMART TAGS: After page save with 100+ words → Extract common words (mock AI).
+Insert page_tags with is_ai_suggested=true. Show in settings for accept/reject.
+12. TEMPLATES: Save page as template → Snapshot blocks, insert page_templates. Load
+template gallery → by user + built-in. Create from template → Create page + blocks
+from blocks_data.
+13. CONTENT RECYCLER: Query pages WHERE (last_visited_at < 30 days ago OR
+last_visited_at IS NULL) AND deleted_at IS NULL AND word_count > 50. Show top 3 in
+sidebar "Rediscover" section. Dismiss → Update last_visited_at to now.
+14. SYNCED BLOCKS: On sync create → Set is_synced=true, synced_source_id to
+original. On source edit → Update all blocks where synced_source_id matches. Unsync
+→ Set is_synced=false, clear synced_source_id.
+15. IMPORT: Parse .md file to block array. Insert page + blocks.
+16. EXPORT: Load page blocks, convert to Markdown string, trigger download.
+17. AI TOOLBAR: Select text → Sparkle → Action. Mock AI processing: "Improve"
+returns slightly reworded text. "Summarize" returns first sentence. "Continue"
+appends lorem text. Save changed text to block content.
+18. FOCUS MODE STATS: Track focus sessions: start time, end time, words written.
+Store in localStorage (or user preferences). Display streak in focus mode UI.
+BOUNDARIES — CRITICAL:
+- Do not change any UI design or layout
+- Do not change any interaction behavior
+- Only add database operations, storage methods, and API routes
+- Do not add any features not described above
+PROMPT 7 OF 7
+DB: Verification + Seed Content (FINAL)
+■ REPLIT: AUTONOMOUS → ECONOMY | App Testing: OFF | Code Optimization: OFF
+■ FIX APPLIED: Fix 1 — Tech stack corrected
+CONTEXT:
+App: AI-driven productivity platform with auth, teams, tasks
+Tech: React, TypeScript, Vite, Tailwind CSS, Shadcn/UI, PostgreSQL, Drizzle ORM,
+Express.js backend in server/routes.ts
+Building: Advanced note-taking system with block editor, 35+ block types, databases,
+AI coaching, focus mode, voice notes, sketching, and 25 unique features beyond
+competitors
+Feature: Verify all connections + seed sample content for testing
+Current state: Prompt 6 done. All features connected.
+Layer: Layer 4 — Final prompt
+TASK:
+Verify every save/load works. Seed rich sample content so the platform looks
+populated.
+1. VERIFY ALL CONNECTIONS (test each one, fix if broken):
+- Create page → appears in sidebar after refresh
+- Edit title/icon/cover → persists
+- Add blocks of every type → all persist with correct content/properties
+- Drag reorder blocks → persists
+- Nest page under another → tree updates correctly
+- Star/unstar → favorites tab updates
+- Add/remove tags → tags tab updates
+- Create database → properties + rows persist
+- Switch database views → configs persist
+- Post comment → persists, reply threads work
+- Add block reaction → persists with count
+- Bookmark block → appears in bookmarks collection
+- Share page → permission saved
+- Version history shows auto-saved versions
+- Save snippet → insert snippet works
+- Journal creates daily page with streak (uses note_journal_entries table, Fix 23)
+- Search returns matching pages
+- Template gallery loads, create from template works
+- Export downloads .md, Import creates page from .md
+- Quick capture saves to inbox
+- Content recycler surfaces old pages (including pages with NULL last_visited_at)
+- Opening a page updates pages.last_visited_at (Fix 25 — required for recycler)
+2. SEED SAMPLE CONTENT (create all of this):
+- Page "Getting Started" with 8 varied blocks (text, heading, bullet, callout, code,
+image placeholder, divider, toggle with children)
+- Page "Project Notes" with 2 sub-pages "Sprint 1" (with task database inline) and
+"Sprint 2"
+- Page "Meeting Notes" with 3 sub-pages each using meeting template
+- Page "Ideas" with flashcard block + poll block + progress tracker
+- Page "Research" with reading list block + voice note placeholder + timeline block
+- 1 inline database "Task Tracker" with 3 properties (Name, Status, Priority) + 5
+sample rows + Table + Board views
+- 5 sample comments across different pages
+- 3 block reactions
+- 3 snippets ("Meeting Template", "Decision Log", "Quick Notes")
+- 6 page templates (Meeting Notes, Project Brief, Weekly Review, Decision Log,
+Research Notes, Daily Journal)
+- 5 tags (Work, Personal, Ideas, Research, Team)
+- 3 favorites
+- 2 quick captures in inbox
+- 1 journal entry for today
+BOUNDARIES — CRITICAL:
+- Do not change any UI design or layout
+- Do not change any interaction behavior
+- Only add database operations and seed data
+- Do not add any features not described above

@@ -7,9 +7,10 @@ import FocusMode from "@/components/notes/FocusMode";
 import SplitView from "@/components/notes/SplitView";
 import ContentMap from "@/components/notes/ContentMap";
 import PresentationMode from "@/components/notes/PresentationMode";
+import CollaborationPanel from "@/components/notes/CollaborationPanel";
 
 function NotesLayout() {
-  const { settingsPanelOpen, searchOpen, focusModeOpen, splitViewOpen, contentMapOpen, presentationModeOpen } = useNotes();
+  const { settingsPanelOpen, searchOpen, focusModeOpen, splitViewOpen, contentMapOpen, presentationModeOpen, collaborationPanelOpen, setCollaborationPanelOpen, selectedPage } = useNotes();
 
   return (
     <div className="flex h-full w-full overflow-hidden relative">
@@ -17,6 +18,9 @@ function NotesLayout() {
       <div className="flex flex-1 overflow-hidden">
         {splitViewOpen ? <SplitView /> : <PageView />}
       </div>
+      {collaborationPanelOpen && selectedPage && (
+        <CollaborationPanel onClose={() => setCollaborationPanelOpen(false)} />
+      )}
       {settingsPanelOpen && <PageSettingsPanel />}
       {searchOpen && <SearchCommandPalette />}
       {focusModeOpen && <FocusMode />}

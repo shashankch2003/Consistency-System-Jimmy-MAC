@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { ChevronRight, Settings, Lock, Unlock, Monitor } from "lucide-react";
+import { ChevronRight, Settings, Lock, Unlock, Monitor, MessageSquare } from "lucide-react";
 import { useNotes, Page, PageStatus, FontType } from "./NotesContext";
 import BlockEditor from "./BlockEditor";
 
@@ -66,7 +66,7 @@ function relativeTime(date: Date) {
 }
 
 export default function PageView() {
-  const { selectedPage, pages, updatePage, setSettingsPanelOpen, aiCoachEnabled, setPresentationModeOpen } = useNotes();
+  const { selectedPage, pages, updatePage, setSettingsPanelOpen, aiCoachEnabled, setPresentationModeOpen, collaborationPanelOpen, setCollaborationPanelOpen } = useNotes();
   const [showCoverPicker, setShowCoverPicker] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [showStatusDrop, setShowStatusDrop] = useState(false);
@@ -152,8 +152,11 @@ export default function PageView() {
             <button className="w-full text-left px-4 py-2 hover:bg-gray-50 text-sm text-gray-700 flex items-center gap-2" onClick={() => setPresentationModeOpen(true)}>
               <Monitor className="w-4 h-4 text-gray-400" /> Present
             </button>
-            <button className="w-full text-left px-4 py-2 hover:bg-gray-50 text-sm text-gray-700" onClick={() => setSettingsPanelOpen(true)}>
-              <Settings className="w-4 h-4 text-gray-400 inline mr-2" />Settings
+            <button className="w-full text-left px-4 py-2 hover:bg-gray-50 text-sm text-gray-700 flex items-center gap-2" onClick={() => setCollaborationPanelOpen(!collaborationPanelOpen)}>
+              <MessageSquare className="w-4 h-4 text-gray-400" /> {collaborationPanelOpen ? "Hide comments" : "Show comments"}
+            </button>
+            <button className="w-full text-left px-4 py-2 hover:bg-gray-50 text-sm text-gray-700 flex items-center gap-2" onClick={() => setSettingsPanelOpen(true)}>
+              <Settings className="w-4 h-4 text-gray-400" /> Settings
             </button>
           </div>
         )}

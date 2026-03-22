@@ -112,6 +112,25 @@ export interface PageInsights {
   readability: string;
 }
 
+export interface PageVersion {
+  id: string;
+  pageId: string;
+  versionNumber: number;
+  title: string;
+  blocksSnapshot: Block[];
+  createdAt: Date;
+  description?: string;
+}
+
+export interface NoteTemplate {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: string;
+  blocks: Block[];
+}
+
 export function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
@@ -143,6 +162,33 @@ export function makeBlock(type: BlockType = "text", content = "", extra: Partial
     ...extra,
   };
 }
+
+const INITIAL_TEMPLATES: NoteTemplate[] = [
+  {
+    id: "tmpl1", name: "Meeting Notes", description: "Structure your meeting with agenda, decisions, and action items.", icon: "📋", category: "Work",
+    blocks: [makeBlock("heading1", "Meeting Notes"), makeBlock("text", "Date: | Attendees:"), makeBlock("heading2", "Agenda"), makeBlock("bullet_list", ""), makeBlock("heading2", "Key Decisions"), makeBlock("bullet_list", ""), makeBlock("heading2", "Action Items"), makeBlock("todo", ""), makeBlock("todo", "")],
+  },
+  {
+    id: "tmpl2", name: "Project Brief", description: "Define project goals, scope, timeline, and stakeholders.", icon: "🎯", category: "Work",
+    blocks: [makeBlock("heading1", "Project Brief"), makeBlock("callout", "Summarize the project in one sentence.", { properties: { color: "blue", icon: "💡" } }), makeBlock("heading2", "Goals"), makeBlock("bullet_list", ""), makeBlock("heading2", "Scope"), makeBlock("text", "In scope:"), makeBlock("text", "Out of scope:"), makeBlock("heading2", "Timeline"), makeBlock("heading2", "Stakeholders"), makeBlock("bullet_list", "")],
+  },
+  {
+    id: "tmpl3", name: "Weekly Review", description: "Reflect on the past week and plan the next one.", icon: "📅", category: "Personal",
+    blocks: [makeBlock("heading1", "Weekly Review"), makeBlock("heading2", "✅ What went well"), makeBlock("bullet_list", ""), makeBlock("heading2", "⚠️ What could be better"), makeBlock("bullet_list", ""), makeBlock("heading2", "🎯 Next week priorities"), makeBlock("todo", ""), makeBlock("todo", ""), makeBlock("todo", ""), makeBlock("heading2", "💡 Key learnings"), makeBlock("text", "")],
+  },
+  {
+    id: "tmpl4", name: "Decision Log", description: "Document decisions with context, alternatives, and outcome.", icon: "⚖️", category: "Work",
+    blocks: [makeBlock("heading1", "Decision Log"), makeBlock("heading2", "Context"), makeBlock("text", ""), makeBlock("heading2", "Options Considered"), makeBlock("bullet_list", "Option A:"), makeBlock("bullet_list", "Option B:"), makeBlock("heading2", "Decision"), makeBlock("callout", "We decided to...", { properties: { color: "green", icon: "✅" } }), makeBlock("heading2", "Reasoning"), makeBlock("text", ""), makeBlock("heading2", "Expected Outcome"), makeBlock("text", "")],
+  },
+  {
+    id: "tmpl5", name: "Research Notes", description: "Organize your research with sources, key findings, and synthesis.", icon: "🔬", category: "Research",
+    blocks: [makeBlock("heading1", "Research Notes"), makeBlock("heading2", "Research Question"), makeBlock("callout", "What are we trying to answer?", { properties: { color: "yellow", icon: "❓" } }), makeBlock("heading2", "Key Sources"), makeBlock("bookmark", ""), makeBlock("bookmark", ""), makeBlock("heading2", "Key Findings"), makeBlock("bullet_list", ""), makeBlock("heading2", "Synthesis"), makeBlock("text", ""), makeBlock("heading2", "Next Steps"), makeBlock("todo", "")],
+  },
+  {
+    id: "tmpl6", name: "Daily Journal", description: "Capture your thoughts, mood, and daily highlights.", icon: "📔", category: "Personal",
+    blocks: [makeBlock("heading1", new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })), makeBlock("text", "Mood: 😊"), makeBlock("heading2", "Morning Intentions"), makeBlock("todo", ""), makeBlock("heading2", "Today's Highlights"), makeBlock("bullet_list", ""), makeBlock("heading2", "Gratitude"), makeBlock("bullet_list", "I'm grateful for..."), makeBlock("heading2", "Evening Reflection"), makeBlock("text", "")],
+  },
+];
 
 const SAMPLE_BLOCKS: Block[] = [
   makeBlock("text", "This sprint focuses on delivering the core authentication flow, dashboard layout, and the first set of productivity tracking features."),
@@ -283,6 +329,15 @@ interface NotesContextValue {
   acceptSmartTag: (pageId: string, tag: string) => void;
   dismissSmartTag: (pageId: string, tag: string) => void;
   createJournalPage: () => string;
+  collaborationPanelOpen: boolean;
+  setCollaborationPanelOpen: (open: boolean) => void;
+  templates: NoteTemplate[];
+  createFromTemplate: (templateId: string) => string;
+  saveAsTemplate: (pageId: string, name?: string) => void;
+  pageVersions: Record<string, PageVersion[]>;
+  saveVersion: (pageId: string, description?: string) => void;
+  restoreVersion: (pageId: string, versionId: string) => void;
+  scheduleVersionSave: (pageId: string) => void;
   makeBlock: typeof makeBlock;
   uid: typeof uid;
 }
@@ -348,6 +403,11 @@ export function NotesProvider({ children }: { children: React.ReactNode }) {
   const [bookmarkedBlocks, setBookmarkedBlocks] = useState<BookmarkedBlock[]>([]);
   const [pageInsights, setPageInsights] = useState<Record<string, PageInsights>>({});
   const [smartTagSuggestions, setSmartTagSuggestions] = useState<Record<string, string[]>>({});
+  const [collaborationPanelOpen, setCollaborationPanelOpen] = useState(false);
+  const [templates, setTemplates] = useState<NoteTemplate[]>(INITIAL_TEMPLATES);
+  const [pageVersions, setPageVersions] = useState<Record<string, PageVersion[]>>({});
+  const versionTimerRef = useRef<Record<string, number>>({});
+  const lastVersionSaveRef = useRef<Record<string, number>>({});
 
   const selectedPage = pages.find(p => p.id === selectedPageId) ?? null;
 
@@ -473,6 +533,70 @@ export function NotesProvider({ children }: { children: React.ReactNode }) {
     setSmartTagSuggestions(prev => ({ ...prev, [pageId]: (prev[pageId] ?? []).filter(t => t !== tag) }));
   }, []);
 
+  const createFromTemplate = useCallback((templateId: string): string => {
+    const tmpl = templates.find(t => t.id === templateId);
+    const id = uid();
+    const newPage: Page = {
+      id, title: tmpl?.name ?? "New Page", icon: tmpl?.icon ?? "📄",
+      cover: "from-blue-400 to-purple-500", parentId: null,
+      status: "draft", isFavorite: false, tags: [],
+      blocks: (tmpl?.blocks ?? [makeBlock("text", "")]).map(b => ({ ...b, id: uid() })),
+      font: "default", smallText: false, fullWidth: false, locked: false,
+      createdAt: new Date(), updatedAt: new Date(), lastVisitedAt: new Date(),
+    };
+    setPages(prev => [...prev, newPage]);
+    setSelectedPageId(id);
+    setRecentPageIds(prev => [id, ...prev].slice(0, 10));
+    setNewPageFocusTrigger(t => t + 1);
+    return id;
+  }, [templates]);
+
+  const saveAsTemplate = useCallback((pageId: string, name?: string) => {
+    const page = pages.find(p => p.id === pageId);
+    if (!page) return;
+    const tmpl: NoteTemplate = {
+      id: uid(), name: (name ?? page.title) || "Untitled Template",
+      description: `Saved from "${page.title}"`, icon: page.icon,
+      category: "My Templates",
+      blocks: page.blocks.map(b => ({ ...b, id: uid(), content: b.content })),
+    };
+    setTemplates(prev => [...prev, tmpl]);
+  }, [pages]);
+
+  const saveVersion = useCallback((pageId: string, description?: string) => {
+    const page = pages.find(p => p.id === pageId);
+    if (!page) return;
+    setPageVersions(prev => {
+      const existing = prev[pageId] ?? [];
+      const versionNumber = (existing[0]?.versionNumber ?? 0) + 1;
+      const version: PageVersion = {
+        id: uid(), pageId, versionNumber,
+        title: page.title, blocksSnapshot: page.blocks.map(b => ({ ...b })),
+        createdAt: new Date(), description,
+      };
+      const updated = [version, ...existing].slice(0, 50);
+      return { ...prev, [pageId]: updated };
+    });
+    lastVersionSaveRef.current[pageId] = Date.now();
+  }, [pages]);
+
+  const restoreVersion = useCallback((pageId: string, versionId: string) => {
+    const versions = pageVersions[pageId] ?? [];
+    const version = versions.find(v => v.id === versionId);
+    if (!version) return;
+    setPages(prev => prev.map(p => p.id === pageId ? { ...p, title: version.title, blocks: version.blocksSnapshot.map(b => ({ ...b })), updatedAt: new Date() } : p));
+  }, [pageVersions]);
+
+  const scheduleVersionSave = useCallback((pageId: string) => {
+    const TEN_MIN = 10 * 60 * 1000;
+    const last = lastVersionSaveRef.current[pageId] ?? 0;
+    if (Date.now() - last < TEN_MIN) return;
+    clearTimeout(versionTimerRef.current[pageId]);
+    versionTimerRef.current[pageId] = window.setTimeout(() => {
+      saveVersion(pageId, "Auto-save");
+    }, TEN_MIN);
+  }, [saveVersion]);
+
   const createJournalPage = useCallback((): string => {
     const today = new Date();
     const dateStr = today.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
@@ -520,6 +644,9 @@ export function NotesProvider({ children }: { children: React.ReactNode }) {
       bookmarkBlock, removeBookmark,
       generateInsights, generateSmartTags, acceptSmartTag, dismissSmartTag,
       createJournalPage,
+      collaborationPanelOpen, setCollaborationPanelOpen,
+      templates, createFromTemplate, saveAsTemplate,
+      pageVersions, saveVersion, restoreVersion, scheduleVersionSave,
       makeBlock, uid,
     }}>
       {children}

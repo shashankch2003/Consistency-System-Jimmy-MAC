@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { X } from "lucide-react";
-import { useNotes, FontType, PageStatus } from "./NotesContext";
+import { X, RotateCcw, Clock } from "lucide-react";
+import { useNotes, FontType, PageStatus, PageVersion } from "./NotesContext";
 import { useToast } from "@/hooks/use-toast";
 
 const STATUS_LIST: { value: PageStatus; label: string; cls: string }[] = [
@@ -40,12 +40,14 @@ export default function PageSettingsPanel() {
     aiCoachEnabled, toggleAiCoach,
     pageInsights, generateInsights,
     smartTagSuggestions, generateSmartTags, acceptSmartTag, dismissSmartTag,
+    pageVersions, saveVersion, restoreVersion, saveAsTemplate,
   } = useNotes();
   const { toast } = useToast();
   const [showShare, setShowShare] = useState(false);
   const [sharePermission, setSharePermission] = useState("view");
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [tagsLoading, setTagsLoading] = useState(false);
+  const [previewingVersion, setPreviewingVersion] = useState<PageVersion | null>(null);
 
   if (!selectedPage) return null;
 
@@ -274,12 +276,39 @@ export default function PageSettingsPanel() {
               { label: "Share", action: () => setShowShare(true) },
               { label: "Export as Markdown", action: handleExport },
               { label: "Import from Markdown", action: handleImport },
+              { label: "Save as template", action: () => { saveAsTemplate(selectedPage.id); toast({ title: "Saved as template", description: `"${selectedPage.title}" added to your templates` }); } },
+              { label: "Save version now", action: () => { saveVersion(selectedPage.id, "Manual save"); toast({ title: "Version saved" }); } },
             ].map(item => (
               <button key={item.label} className="w-full h-10 flex items-center hover:bg-gray-50 rounded px-2 text-sm cursor-pointer text-gray-700 text-left" onClick={item.action}>
                 {item.label}
               </button>
             ))}
           </div>
+        </section>
+
+        <section>
+          <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Clock className="w-3.5 h-3.5" />
+            Version History
+          </div>
+          {(pageVersions[selectedPage.id] ?? []).length === 0 ? (
+            <p className="text-xs text-gray-400">No versions saved yet. Versions auto-save every 10 minutes or manually via "Save version now".</p>
+          ) : (
+            <div className="space-y-1.5">
+              {(pageVersions[selectedPage.id] ?? []).map(v => (
+                <div key={v.id} className={`flex items-center gap-2 rounded-lg px-2.5 py-2 transition-colors cursor-pointer text-sm ${previewingVersion?.id === v.id ? "bg-blue-50 border border-blue-200" : "hover:bg-gray-50 border border-transparent"}`} onClick={() => setPreviewingVersion(previewingVersion?.id === v.id ? null : v)}>
+                  <RotateCcw className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-gray-700 truncate">v{v.versionNumber} — {v.title}</div>
+                    <div className="text-xs text-gray-400">{v.description ?? "Auto-save"} · {v.createdAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+                  </div>
+                  {previewingVersion?.id === v.id && (
+                    <button className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full hover:bg-blue-700 shrink-0" onClick={e => { e.stopPropagation(); restoreVersion(selectedPage.id, v.id); setPreviewingVersion(null); toast({ title: `Restored to v${v.versionNumber}` }); }}>Restore</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section>

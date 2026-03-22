@@ -62,7 +62,7 @@ Preferred communication style: Simple, everyday language.
     -   UI components: ChannelSidebar, MessageList, MessageComposer, ChannelView — all in `client/src/components/connect/`
     -   Route: /dashboard/connect → ConnectPage
 
--   **Notes System (Prompts 1–2 DONE)**:
+-   **Notes System (Prompts 1–4 DONE)**:
     -   12 UI shell components in `client/src/components/notes/`
     -   Central state via `NotesContext.tsx` (NotesProvider, useNotes hook): pages[], selectedPageId, UI state flags
     -   Sidebar: tab switching (Pages/Recent/Favorites/Tags), page tree with expand/collapse/drag-drop/right-click context menu, quick capture inbox, Ctrl+K global shortcut
@@ -72,6 +72,12 @@ Preferred communication style: Simple, everyday language.
     -   SlashCommandGrid: searchable, keyboard-navigable, all block types with categories
     -   BlockToolbar: floating on text selection, execCommand formatting (bold/italic/underline/strike/code/link), color picker, copy
     -   FocusMode + ContentMap + SplitView: context-connected overlays with Esc to close
+    -   DatabaseView: 6 views (Table/Board/Calendar/Timeline/Gallery/List) with filter/sort/group, inline cell editing, board drag-drop, row detail modal
+    -   CollaborationPanel: threaded comments with replies/resolve/unresolve/activity log, toggle via Page menu
+    -   BlockToolbar: AI assistance menu (12 actions: improve/grammar/tone/translate/etc.), Turn into dropdown
+    -   SearchCommandPalette: capture mode, template gallery, page content snippets, keyboard nav
+    -   NotesContext: templates (6 built-in), createFromTemplate, saveAsTemplate, collaborationPanelOpen, pageVersions (auto-save every 10 min, keep last 50), saveVersion, restoreVersion, scheduleVersionSave
+    -   PageSettingsPanel: version history section, save-as-template action, save-version-now action
     -   Page: `client/src/pages/dashboard/notes.tsx` — wraps everything in NotesProvider
 
 ### Shared Code
