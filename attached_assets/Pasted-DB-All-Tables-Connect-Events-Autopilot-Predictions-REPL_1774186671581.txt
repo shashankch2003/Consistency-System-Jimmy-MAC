@@ -1,0 +1,266 @@
+DB: All Tables + Connect Events + Autopilot + Predictions
+■ REPLIT: AUTONOMOUS → ECONOMY | App Testing: OFF | Code Optimization: OFF
+PROMPT 5 — Copy into Replit
+CONTEXT: App: AI-driven productivity platform with Replit Auth. Tech: React + Vite, TypeScript, Tailwind, Shadcn/UI, PostgreSQL, Drizzle ORM (shared/schema.ts),
+Express (server/routes.ts), OpenAI via Replit integration. Router: wouter (client/src/App.tsx). State: @tanstack/react-query. File paths: client/src/components/,
+client/src/pages/, client/src/lib/, client/src/hooks/, server/routes.ts, server/storage.ts (IStorage interface), shared/schema.ts. Auth: Replit Auth — user ID is text string
+from req.user.claims.sub, protected with isAuthenticated middleware from server/replit_integrations/auth/. PKs: serial integers. User IDs: text (not UUID). No
+workspaces. Existing tables: tasks (userId varchar, title text, description text, completionPercentage integer, date text, time text, priority text), notes (not
+pages), group_messages (not messages). No meetings table. No databaseId concept. No Redis, no BullMQ, no Socket.io, no tRPC, no centralized AI service, no
+Google Calendar. Background jobs: node-cron or setInterval (install node-cron before Prompt 5: npm install node-cron @types/node-cron). In-memory cache
+(Map). Rules: TypeScript strict, Zod validation, serial integer PKs, createdAt/updatedAt timestamps, responsive design.
+Feature: Create all 18 database tables in shared/schema.ts using Drizzle ORM + connect events API, autopilot CRUD, pattern detection,
+predictions. Current state: Prompts 1-4 done. Everything works with React state. Layer: Layer 4.
+CRITICAL INSTRUCTIONS FOR THIS PROMPT:
+• All tables go in shared/schema.ts using Drizzle ORM syntax (pgTable, serial, text, integer, boolean, timestamp, jsonb, real)
+• All primary keys: serial('id').primaryKey() — NOT UUID
+• All userId columns: text('user_id') — NOT UUID (Replit Auth gives text like 'user:12345678')
+• NO workspaceId on any table — app has no workspace system
+• All API routes: Express routes in server/routes.ts using app.get(), app.post(), app.put(), app.delete()
+• All routes protected with isAuthenticated middleware from server/replit_integrations/auth/
+• User ID in routes: const userId = req.user.claims.sub (NOT ctx.user.id)
+• DB operations through server/storage.ts IStorage interface — add new methods to IStorage + DatabaseStorage class
+• Background jobs: use node-cron (install with npm install node-cron @types/node-cron) — NOT BullMQ
+• In-memory Map for caching — NOT Redis
+• After creating tables: run npx drizzle-kit push (NOT prisma migrate dev)
+TASK: Create all 18 tables in shared/schema.ts. Then connect events, autopilot, and predictions to real database.
+PART A — CREATE ALL 18 TABLES (in shared/schema.ts using Drizzle ORM)
+Do NOT connect to UI yet in this part. Just add the table definitions.
+1. "autopilot_rules": id serial PK, userId text, name text, description text nullable, type text (learned/user_created/suggested/template), triggerType text, triggerConfig
+jsonb, actions jsonb, executionMode text default 'suggest' (auto/suggest/confirm), isActive boolean default true, confidence real nullable, timesTriggered integer
+default 0, timesExecuted integer default 0, timesDeclined integer default 0, lastTriggeredAt timestamp nullable, lastExecutedAt timestamp nullable, cooldownMinutes
+integer default 0, maxExecutionsPerDay integer default 50, tags text[] (use Drizzle text array), createdAt timestamp defaultNow, updatedAt timestamp defaultNow.
+INDEX on (userId, isActive, triggerType).
+2. "autopilot_executions": id serial PK, ruleId integer references autopilot_rules, userId text, triggerEvent jsonb, actions jsonb, status text
+(pending_approval/approved/executing/completed/failed/declined/expired), executionMode text, approvedAt timestamp nullable, declinedAt timestamp nullable,
+completedAt timestamp nullable, error text nullable, undoneAt timestamp nullable, undoData jsonb nullable, creditsUsed integer default 0, createdAt timestamp
+defaultNow.
+3. "autopilot_activity_log": id serial PK, userId text, eventType text, eventData jsonb, sessionId text nullable, timestamp timestamp defaultNow, dayOfWeek integer,
+hourOfDay integer. INDEX on (userId, timestamp) and (userId, eventType, timestamp).
+4. "autopilot_patterns": id serial PK, userId text, patternType text, description text, eventSequence jsonb, frequency integer, confidence real, suggestedRule jsonb
+nullable, status text (detected/suggested/accepted/dismissed/expired), detectedAt timestamp, lastOccurredAt timestamp, createdAt timestamp defaultNow, updatedAt
+timestamp defaultNow.
+5. "task_predictions": id serial PK, userId text, predictedTitle text, predictedDescription text nullable, predictedProperties jsonb, triggerTaskId integer nullable,
+triggerEvent text, confidence real, reasoning text, status text (predicted/accepted/modified_and_accepted/dismissed/expired/auto_created), acceptedTaskId integer
+nullable, expiresAt timestamp, createdAt timestamp defaultNow, updatedAt timestamp defaultNow.
+6. "task_sequences": id serial PK, userId text, precedingTaskPattern jsonb, followingTaskPattern jsonb, occurrences integer, confidence real, lastObservedAt
+timestamp, isActive boolean default true, createdAt timestamp defaultNow, updatedAt timestamp defaultNow.
+7. "project_templates_learned": id serial PK, userId text, name text, description text, taskSequence jsonb, sourceProjectNames text[] (text array), usageCount
+integer default 0, confidence real, isVerified boolean default false, createdAt timestamp defaultNow, updatedAt timestamp defaultNow.
+8. "work_sessions": id serial PK, userId text, date text, startTime timestamp, endTime timestamp nullable, totalActiveMinutes integer, totalIdleMinutes integer,
+activities jsonb, summary jsonb nullable, createdAt timestamp defaultNow, updatedAt timestamp defaultNow. UNIQUE on (userId, date). NOTE: Existing
+hourly_entries table also tracks daily data — work_sessions tracks AI-analyzed sessions separately.
+9. "work_patterns": id serial PK, userId text, patternType text, data jsonb, analysisDate timestamp, periodDays integer, createdAt timestamp defaultNow, updatedAt
+timestamp defaultNow.
+10. "ai_coaching_messages": id serial PK, userId text, type text, title text, content text, actionable boolean, actionData jsonb nullable, priority text, isRead boolean
+default false, isDismissed boolean default false, relatedPatternId integer nullable, createdAt timestamp defaultNow.
+11. "team_member_profiles": id serial PK, userId text, skills jsonb, domains text[], currentWorkload jsonb, availability jsonb, preferences jsonb, performanceMetrics
+jsonb, lastProfileUpdateAt timestamp, createdAt timestamp defaultNow, updatedAt timestamp defaultNow. UNIQUE on (userId).
+12. "delegation_suggestions": id serial PK, taskId integer, suggestedById text, candidates jsonb, selectedUserId text nullable, selectionSource text, autoAssigned
+boolean default false, createdAt timestamp defaultNow.
+13. "delegation_rules": id serial PK, userId text, name text, conditions jsonb, strategy text, candidatePool text[], isActive boolean default true, createdBy text,
+createdAt timestamp defaultNow, updatedAt timestamp defaultNow.
+14. "project_contexts": id serial PK, userId text, projectName text, linkedNoteIds integer[] (integer array), lastActiveAt timestamp, lastActiveDuration integer,
+openItems jsonb, aiCatchUpSummary jsonb nullable, isPinned boolean default false, color text nullable, icon text nullable, createdAt timestamp defaultNow, updatedAt
+timestamp defaultNow. INDEX on (userId, lastActiveAt). NOTE: Removed linkedDatabaseIds/linkedChannelIds/linkedPageIds/linkedMeetingIds — those systems
+don't exist. Uses linkedNoteIds (integer array referencing notes table).
+15. "recorded_workflows": id serial PK, userId text, name text, description text nullable, icon text nullable, recordedSteps jsonb, processedSteps jsonb,
+inputVariables jsonb, triggerType text default 'manual' (manual/scheduled/event), triggerConfig jsonb nullable, timesRun integer default 0, avgDurationSeconds real
+nullable, isActive boolean default true, isPublic boolean default false, createdAt timestamp defaultNow, updatedAt timestamp defaultNow.
+16. "daily_plans": id serial PK, userId text, date text, status text (draft/active/completed/skipped), generatedPlan jsonb, userModifications jsonb, completionRate real
+nullable, reviewNotes text nullable, createdAt timestamp defaultNow, updatedAt timestamp defaultNow. UNIQUE on (userId, date).
+17. "document_templates_ai": id serial PK, name text, description text, category text, structure jsonb, isBuiltIn boolean, usageCount integer default 0, createdBy
+text, createdAt timestamp defaultNow, updatedAt timestamp defaultNow.
+18. "generated_documents": id serial PK, templateId integer nullable, userId text, noteId integer (references notes table, NOT pageId), generationConfig jsonb,
+dataSources jsonb, status text (generating/completed/failed), generationTimeMs integer, createdAt timestamp defaultNow.
+After defining all tables: run npx drizzle-kit push to create them in the database.
+PART B — CONNECT EVENTS + AUTOPILOT + PREDICTIONS
+All API routes go in server/routes.ts. All use isAuthenticated middleware. All get userId from req.user.claims.sub.
+1. EVENTS API: Add POST /api/autopilot/events route in server/routes.ts. Zod validate request body {events: array}. Max 100 per request. Insert into
+autopilot_activity_log using db.insert(). Add server timestamps.
+2. AUTOPILOT RULES API: GET /api/autopilot/rules (filter by userId from req.user.claims.sub, filter isActive/type, order by timesTriggered desc). POST
+/api/autopilot/rules (create + Zod validate). PUT /api/autopilot/rules/:id (update, owner check). DELETE /api/autopilot/rules/:id (soft delete by setting isActive=false). On
+panel open: load rules+executions.
+3. EXECUTIONS API: GET /api/autopilot/executions (filter by userId, status, ruleId, date, paginate 20). POST /api/autopilot/executions (log execution with
+ruleId+triggerEvent+actions+results+undoData+credits). PUT /api/autopilot/executions/:id (approve/decline/undo).
+4. SETTINGS: Save autopilot settings as JSON. Add a user_preferences column (jsonb) to your users table if not exists, or create a new "user_settings" table: id
+serial PK, userId text UNIQUE, settings jsonb, createdAt, updatedAt.
+5. RATE LIMITING: Use in-memory Map with key "autopilot_daily:{userId}:{date}" and TTL check (24h). Clear expired entries periodically with setInterval. NO Redis.
+6. PATTERN DETECTION (node-cron every 6h): Load 14 days of autopilot_activity_log (min 50 events). Sequence detection (pairs occurring 5+ times at 70%+
+confidence). Time-based patterns (same day+hour 3+ times). Confidence>0.75: insert into autopilot_patterns with suggestedRule. Schedule: cron.schedule('0 */6 * *
+*', async () => {...}).
+7. FEEDBACK: "Enable" pattern = set status to accepted + create autopilot_rule from suggestedRule. "Not Useful" = set status to dismissed + lower confidence.
+8. SEED 10 TEMPLATES: Insert into autopilot_rules with type='template': Auto-Create Follow-Ups, Standup Summary, Overdue Escalator, EOD Report, Onboarding
+Tasks, PR Reminder, Weekly Summary, Auto-Assign Tasks, Sprint Notifier, Daily Review. NOTE: Removed "Meeting Notes" template (no meetings table). Replaced
+with "Daily Review".
+9. EDGE CASES: Circular rule chains (max depth 3). Rate limit exceeded (pause auto-execution). AI failure (retry once, then skip). Stale targets (deactivate rule +
+notify). Conflicts (oldest first). Offline (queue events, process when back).
+10. PREDICTIONS API: GET /api/predictions (filter by userId, status, confidence>0.75, max 5, exclude expired). POST /api/predictions (create). PUT
+/api/predictions/:id (accept/dismiss with acceptedTaskId).
+11. On task completion: run prediction inline (no BullMQ — call predictionEngine directly in the task completion handler). Load sequences from task_sequences,
+match on tasks.title patterns (NOT tasks.content), generate prediction with OpenAI, insert into task_predictions, set expiresAt = 7 days. Return prediction in
+response for immediate UI display (no Socket.io — client refetches via @tanstack/react-query invalidation).
+12. SEQUENCE LEARNING (node-cron nightly at 2AM UTC): Per user, load 30 days of completed tasks (where completionPercentage = 100), build frequency
+table of task title pairs (NOT task content), save to task_sequences, generate AI descriptions. cron.schedule('0 2 * * *', async () => {...}, {timezone: 'UTC'}).
+13. WEEKLY PREDICTIONS (node-cron Sunday 8PM UTC): Analyze patterns, generate next week predictions. cron.schedule('0 20 * * 0', async () => {...},
+{timezone: 'UTC'}).
+14. FEEDBACK LOOP: Accept prediction → confidence +0.05 on matching sequence. Dismiss → confidence -0.03. 3+ consecutive dismissals → pause predictions
+for that pattern 1 week. Daily cleanup of expired predictions (node-cron midnight).
+V2 FIX 3: Items 11 and 12 above now explicitly reference tasks.title (not tasks.content) and completionPercentage=100 (not isCompleted=true). These
+columns match the actual tasks table schema.
+IMPORTANT — REGISTER ROUTES:
+• Add all new routes to server/routes.ts inside the registerRoutes() function
+• Protect every route with isAuthenticated middleware
+• Use req.user.claims.sub for userId — NEVER use ctx.user.id or assume tRPC
+BOUNDARIES — CRITICAL:
+• Do not change any UI design or layout
+• Do not change any interaction behavior
+• Only add database tables, Express API routes, IStorage methods, and node-cron jobs
+• Do not add any features not described above
+• NO Prisma, NO BullMQ, NO Redis, NO Socket.io, NO tRPC
+PROMPT 6 OF 6
+DB: Time Machine + Delegation + Context + Workflows + Planner + DocGen + Verify + Seed
+■ REPLIT: AUTONOMOUS → ECONOMY | App Testing: OFF | Code Optimization: OFF
+PROMPT 6 — Copy into Replit
+CONTEXT: App: AI-driven productivity platform with Replit Auth. Tech: React + Vite, TypeScript, Tailwind, Shadcn/UI, PostgreSQL, Drizzle ORM (shared/schema.ts),
+Express (server/routes.ts), OpenAI via Replit integration. Router: wouter (client/src/App.tsx). State: @tanstack/react-query. File paths: client/src/components/,
+client/src/pages/, client/src/lib/, client/src/hooks/, server/routes.ts, server/storage.ts (IStorage interface), shared/schema.ts. Auth: Replit Auth — user ID is text string
+from req.user.claims.sub, protected with isAuthenticated middleware from server/replit_integrations/auth/. PKs: serial integers. User IDs: text (not UUID). No
+workspaces. Existing tables: tasks (userId varchar, title text, description text, completionPercentage integer, date text, time text, priority text), notes (not
+pages), group_messages (not messages). No meetings table. No databaseId concept. No Redis, no BullMQ, no Socket.io, no tRPC, no centralized AI service, no
+Google Calendar. Background jobs: node-cron or setInterval (install node-cron before Prompt 5: npm install node-cron @types/node-cron). In-memory cache
+(Map). Rules: TypeScript strict, Zod validation, serial integer PKs, createdAt/updatedAt timestamps, responsive design.
+Feature: Connect remaining 5 features to DB + verify all connections + seed sample data. Current state: Prompt 5 done. Tables exist.
+Events+Autopilot+Predictions connected. Layer: Layer 4 — Final prompt.
+CRITICAL INSTRUCTIONS (same as Prompt 5):
+• Express routes in server/routes.ts with isAuthenticated middleware
+• userId = req.user.claims.sub (text string, NOT UUID)
+• Drizzle ORM: db.select(), db.insert(), db.update(), db.delete() — NOT prisma.x.findMany()
+• node-cron for scheduled jobs — NOT BullMQ
+• OpenAI via Replit integration — NOT centralized AI service
+• Register new pages in client/src/App.tsx with wouter Route component
+• Add sidebar navigation links in AppSidebar for: Autopilot, Time Machine, Daily Planner
+TASK: Connect Time Machine, Delegation, Context, Workflows, Planner, and DocGen to real database. Then verify everything and seed
+sample data.
+PART A — TIME MACHINE DB
+1. SESSIONS: POST /api/timemachine/sessions — Save work_sessions on end-of-day. GET /api/timemachine/sessions?date=YYYY-MM-DD — Load for selected
+date. Protected with isAuthenticated. userId from req.user.claims.sub.
+2. END-OF-DAY JOB (node-cron at 6PM UTC): Collect autopilot_activity_log for the day, run sessionAnalyzer, calc focus score. Call OpenAI: "Analyze this day:
+{activities}. Provide narrative, 2-3 insights, 1-2 recommendations, score 0-100." Store in work_sessions.summary. cron.schedule('0 18 * * *', async () => {...},
+{timezone: 'UTC'}).
+3. WEEKLY JOB (node-cron Sunday 8PM UTC): Load 7 days of work_sessions, aggregate, detect patterns (peak hours, deep work blocks). Store in work_patterns.
+Generate AI coaching messages. Insert into ai_coaching_messages. cron.schedule('0 20 * * 0', async () => {...}, {timezone: 'UTC'}).
+4. MONTHLY (node-cron 1st of month): 30 days of sessions, update patterns, long-term trends. Store in work_patterns with periodDays=30.
+5. COACHING: GET /api/timemachine/coaching — Load ai_coaching_messages. POST /api/timemachine/coaching/:id/apply — "Apply" creates autopilot rules from
+actionData. PUT /api/timemachine/coaching/:id — Mark read/dismissed.
+6. SETTINGS: GET/PUT /api/timemachine/settings — Persist to user_settings (same table from Prompt 5).
+PART B — DELEGATION DB
+7. DELEGATION API: POST /api/delegation/suggest — Score all team_member_profiles using scoringAlgorithm, save to delegation_suggestions. PUT
+/api/delegation/assign — Update task (set content to include assignee info) + update delegation_suggestions with selectedUserId. NOTE: Tasks table has no
+assigneeId column — store delegation info in task content or in delegation_suggestions table.
+8. PROFILE UPDATE JOB (node-cron every 6h): Count tasks per user, overdue count, completion rate 30d. Update team_member_profiles. cron.schedule('0 */6 * *
+*', async () => {...}).
+9. SKILL DETECTION (node-cron weekly Sunday midnight): Analyze task title content for each user. Call OpenAI: "Based on these task titles, what skills does this
+person have? Return [{skill, level, confidence}]." Merge into team_member_profiles.skills.
+10. NO GOOGLE CALENDAR — skip calendar availability. Use simple available/unavailable toggle from team_member_profiles.availability instead.
+11. AUTO-DELEGATION RULES: CRUD for delegation_rules. On new task creation: check matching delegation_rules, auto-score candidates, auto-assign per
+strategy.
+PART C — CONTEXT DB
+12. CONTEXT CRUD: GET /api/contexts (userId, order by lastActiveAt desc). POST /api/contexts (create). PUT /api/contexts/:id (update openItems, isPinned, etc).
+Auto-save current context on switch.
+13. AUTO-DETECTION (node-cron weekly + on significant activity): Analyze notes and tasks. Group by naming patterns/content similarity. Create suggested
+project_contexts. Notify user for confirmation.
+14. AI CATCH-UP: On context switch (away>2h): Query new tasks (created/completed), new group_messages, new notes. Call OpenAI to summarize changes. Store
+in project_contexts.aiCatchUpSummary. Show CatchUpCard. NOTE: Uses tasks, notes, group_messages tables — NOT meetings or pages.
+15. STATE: Update openItems on context (debounced 2s). Update lastActiveAt + lastActiveDuration on switch.
+PART D — WORKFLOWS DB
+16. WORKFLOW CRUD: GET /api/workflows (userId + isPublic for shared). POST /api/workflows (create). PUT /api/workflows/:id (update). DELETE /api/workflows/:id
+(soft delete — set isActive=false).
+17. REAL EXECUTION: create_task via existing task creation in server/storage.ts (storage.createTask), create_note via existing note creation (storage.createNote).
+Capture real IDs for subsequent step references. NOTE: No messaging API. Workflow steps that would send messages should create a task or note instead as a
+workaround. No create_page — use create_note.
+18. TRACKING: After each workflow run, increment timesRun and recalculate avgDurationSeconds on recorded_workflows.
+19. TRIGGERS: scheduled = node-cron recurring job (parse triggerConfig for cron expression). event = register with autopilot trigger engine. manual = user clicks
+Run.
+PART E — PLANNER + DOCGEN DB
+20. PLAN PERSISTENCE: POST /api/planner/generate — Generate and save daily_plans. GET /api/planner/today — Load today's plan. PUT /api/planner/:id — Save
+modifications. One plan per user per day (UNIQUE constraint). Track userModifications as jsonb diff.
+21. AI OPTIMIZATION: After basic planGenerator produces a plan, send to OpenAI: "Optimize this schedule for energy patterns {peakHours} and task count
+{taskCount}. Return optimized block order with reasoning." Replace with optimized plan.
+22. NO GOOGLE CALENDAR — skip fetching calendar events. Plan uses only tasks from the tasks table.
+23. COMPLETION: [Done] updates task completionPercentage=100 in tasks table via db.update(tasks).set({ completionPercentage: 100
+}).where(eq(tasks.id, taskId)). Calculate completionRate at end of day (completedBlocks/totalBlocks).
+24. GENERATION TRIGGER (node-cron at 7AM UTC daily): Auto-generate plan for users who have auto-generation enabled in settings. Create notification "Plan
+ready!" cron.schedule('0 7 * * *', async () => {...}, {timezone: 'UTC'}).
+25. SEED 5 TEMPLATES: Insert into document_templates_ai (isBuiltIn=true): Weekly Status Report (8 sections), Sprint Retrospective (5 sections), Project Brief/PRD
+(8 sections), Onboarding Guide (5 sections), Handoff Document (7 sections).
+26. CUSTOM TEMPLATE CRUD: POST /api/templates (create custom). GET /api/templates (list built-in + custom). PUT /api/templates/:id. DELETE
+/api/templates/:id.
+27. REAL DATA QUERIES: Replace in-memory state with actual DB queries. Use Drizzle ORM: db.select().from(tasks).where(eq(tasks.userId, userId)) for tasks.
+db.select().from(notes) for notes. db.select().from(groupMessages) for group messages. NOTE: Use the actual table names from shared/schema.ts. NO
+prisma.tasks.findMany, NO prisma.messages.findMany, NO prisma.meetings.findMany, NO prisma.pages.findMany.
+28. REAL AI: Replace mock AI responses with OpenAI calls via Replit integration. Use aiHelpers.ts functions (generateWithContext for ai_generated sections,
+batchGenerate for parallel sections). NO centralized AI service.
+29. REAL NOTE CREATION: Create note via storage.createNote(). Save record to generated_documents with noteId (NOT pageId).
+30. USAGE: Increment template usageCount on document_templates_ai after each generation.
+31. SCHEDULED GENERATION: If a template has a schedule in structure.schedule: register node-cron job. On trigger, auto-generate document and notify user.
+V2 FIX 2: Item 23 above now correctly updates completionPercentage=100 (was isCompleted=true which does not exist in the tasks table). The
+Drizzle ORM call is: db.update(tasks).set({ completionPercentage: 100 }).where(eq(tasks.id, taskId)).
+PART F — REGISTER ROUTES + NAVIGATION (CRITICAL)
+Register ALL new pages in client/src/App.tsx using wouter:
+import { Route } from 'wouter';
+import AutopilotPanel from './pages/autopilot/AutopilotPanel';
+import TimeMachine from './pages/analytics/TimeMachine';
+import DailyPlanner from './pages/planner/DailyPlanner';
+<Route path="/autopilot" component={AutopilotPanel} />
+<Route path="/analytics" component={TimeMachine} />
+<Route path="/planner" component={DailyPlanner} />
+Add sidebar navigation links in the existing AppSidebar component:
+• Zap icon + "Autopilot" → /autopilot
+• BarChart icon + "Time Machine" → /analytics
+• Calendar icon + "Daily Planner" → /planner
+V2 FIX 4: Route declarations above are now complete with actual import statements and Route components. The original had truncated placeholders
+('• • •') instead of real code.
+PART G — VERIFY ALL CONNECTIONS
+• Create autopilot rule → persists after refresh
+• Trigger fires → execution logged in DB
+• Pattern detection cron runs → patterns saved
+• Task completion → prediction generated and shown
+• Accept prediction → task created in DB
+• Activity tracking → events in autopilot_activity_log
+• End-of-day cron → work_session with AI summary saved
+• Weekly analysis → patterns + coaching messages saved
+• Delegation suggestion → candidates scored and saved
+• Profile update cron → team_member_profiles updated
+• Context switch → state saved/restored from DB
+• AI catch-up → summary generated on return
+• Record workflow → saved to DB
+• Run workflow → real tasks/notes created
+• Generate daily plan → saved to daily_plans
+• Generate document → real note created with AI content
+• Template generation → document_templates_ai used
+PART H — SEED SAMPLE DATA
+IMPORTANT: All seed data must use text userId values (e.g., "seed_user_1", "seed_user_2") — NOT UUIDs. No workspaceId on any record. All
+IDs are serial integers auto-generated by the database.
+• 5 autopilot_rules (3 type='learned', 1 type='user_created', 1 type='template') with varied triggers
+• 10 autopilot_executions (mix of completed/declined/pending statuses)
+• 50 autopilot_activity_log events across 3 days
+• 3 autopilot_patterns with varying confidence
+• 5 task_predictions (3 status='predicted', 1 'accepted', 1 'dismissed')
+• 3 task_sequences
+• 3 work_sessions with full activity data and AI summaries (different dates — no UNIQUE conflict)
+• 2 work_patterns (patternType: 'peak_hours', 'context_switching')
+• 4 ai_coaching_messages
+• 5 team_member_profiles with skills jsonb and workload jsonb
+• 3 project_contexts (1 isPinned=true, 2 recent)
+• 2 recorded_workflows (1 triggerType='manual', 1 triggerType='scheduled')
+• 2 daily_plans (today status='active', yesterday status='completed' — different dates, no UNIQUE conflict)
+• 5 built-in document_templates_ai (already seeded above in step 25)
+• 1 generated_document
+Create a seed script at server/seed.ts that can be run with: npx tsx server/seed.ts
+BOUNDARIES — CRITICAL:
+• Do not change any UI design or layout
+• Do not change any interaction behavior from Prompts 3-4
+• Only add database operations, node-cron jobs, Express API routes, and navigation
+• Do not add any features not described above
+• NO Prisma, NO BullMQ, NO Redis, NO Socket.io, NO tRPC, NO Google Calendar

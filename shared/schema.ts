@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, varchar, uuid, jsonb, numeric, date, uniqueIndex, index, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, varchar, uuid, jsonb, numeric, date, uniqueIndex, index, pgEnum, real } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -1446,3 +1446,330 @@ export const connectSlashCommands = pgTable("connect_slash_commands", {
 }, (table) => ({
   wsNameUnique: uniqueIndex("csc_ws_name_idx").on(table.workspaceId, table.name),
 }));
+
+// ─── AI FEATURES: 18 NEW TABLES ───────────────────────────────────────────
+
+export const autopilotRules = pgTable("autopilot_rules", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  type: text("type").notNull(), // learned/user_created/suggested/template
+  triggerType: text("trigger_type").notNull(),
+  triggerConfig: jsonb("trigger_config").$defaultFn(() => ({})),
+  actions: jsonb("actions").$defaultFn(() => []),
+  executionMode: text("execution_mode").default("suggest"), // auto/suggest/confirm
+  isActive: boolean("is_active").default(true),
+  confidence: real("confidence"),
+  timesTriggered: integer("times_triggered").default(0),
+  timesExecuted: integer("times_executed").default(0),
+  timesDeclined: integer("times_declined").default(0),
+  lastTriggeredAt: timestamp("last_triggered_at"),
+  lastExecutedAt: timestamp("last_executed_at"),
+  cooldownMinutes: integer("cooldown_minutes").default(0),
+  maxExecutionsPerDay: integer("max_executions_per_day").default(50),
+  tags: text("tags").array(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  userActiveTypeIdx: index("ar_user_active_type_idx").on(t.userId, t.isActive, t.triggerType),
+}));
+
+export const autopilotExecutions = pgTable("autopilot_executions", {
+  id: serial("id").primaryKey(),
+  ruleId: integer("rule_id").references(() => autopilotRules.id),
+  userId: text("user_id").notNull(),
+  triggerEvent: jsonb("trigger_event").$defaultFn(() => ({})),
+  actions: jsonb("actions").$defaultFn(() => []),
+  status: text("status").notNull().default("pending_approval"), // pending_approval/approved/executing/completed/failed/declined/expired
+  executionMode: text("execution_mode").notNull().default("suggest"),
+  approvedAt: timestamp("approved_at"),
+  declinedAt: timestamp("declined_at"),
+  completedAt: timestamp("completed_at"),
+  error: text("error"),
+  undoneAt: timestamp("undone_at"),
+  undoData: jsonb("undo_data"),
+  creditsUsed: integer("credits_used").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const autopilotActivityLog = pgTable("autopilot_activity_log", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  eventType: text("event_type").notNull(),
+  eventData: jsonb("event_data").$defaultFn(() => ({})),
+  sessionId: text("session_id"),
+  timestamp: timestamp("timestamp").defaultNow(),
+  dayOfWeek: integer("day_of_week").notNull(),
+  hourOfDay: integer("hour_of_day").notNull(),
+}, (t) => ({
+  userTimestampIdx: index("aal_user_ts_idx").on(t.userId, t.timestamp),
+  userEventTimestampIdx: index("aal_user_event_ts_idx").on(t.userId, t.eventType, t.timestamp),
+}));
+
+export const autopilotPatterns = pgTable("autopilot_patterns", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  patternType: text("pattern_type").notNull(),
+  description: text("description").notNull(),
+  eventSequence: jsonb("event_sequence").$defaultFn(() => []),
+  frequency: integer("frequency").notNull(),
+  confidence: real("confidence").notNull(),
+  suggestedRule: jsonb("suggested_rule"),
+  status: text("status").notNull().default("detected"), // detected/suggested/accepted/dismissed/expired
+  detectedAt: timestamp("detected_at").notNull(),
+  lastOccurredAt: timestamp("last_occurred_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const taskPredictions = pgTable("task_predictions", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  predictedTitle: text("predicted_title").notNull(),
+  predictedDescription: text("predicted_description"),
+  predictedProperties: jsonb("predicted_properties").$defaultFn(() => ({})),
+  triggerTaskId: integer("trigger_task_id"),
+  triggerEvent: text("trigger_event").notNull(),
+  confidence: real("confidence").notNull(),
+  reasoning: text("reasoning").notNull(),
+  status: text("status").notNull().default("predicted"), // predicted/accepted/modified_and_accepted/dismissed/expired/auto_created
+  acceptedTaskId: integer("accepted_task_id"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const taskSequences = pgTable("task_sequences", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  precedingTaskPattern: jsonb("preceding_task_pattern").$defaultFn(() => ({})),
+  followingTaskPattern: jsonb("following_task_pattern").$defaultFn(() => ({})),
+  occurrences: integer("occurrences").notNull(),
+  confidence: real("confidence").notNull(),
+  lastObservedAt: timestamp("last_observed_at").notNull(),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const projectTemplatesLearned = pgTable("project_templates_learned", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  taskSequence: jsonb("task_sequence").$defaultFn(() => []),
+  sourceProjectNames: text("source_project_names").array(),
+  usageCount: integer("usage_count").default(0),
+  confidence: real("confidence").notNull(),
+  isVerified: boolean("is_verified").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const workSessions = pgTable("work_sessions", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  date: text("date").notNull(),
+  startTime: timestamp("start_time").notNull(),
+  endTime: timestamp("end_time"),
+  totalActiveMinutes: integer("total_active_minutes").notNull().default(0),
+  totalIdleMinutes: integer("total_idle_minutes").notNull().default(0),
+  activities: jsonb("activities").$defaultFn(() => []),
+  summary: jsonb("summary"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  userDateUnique: uniqueIndex("ws_user_date_unique").on(t.userId, t.date),
+}));
+
+export const workPatterns = pgTable("work_patterns", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  patternType: text("pattern_type").notNull(),
+  data: jsonb("data").$defaultFn(() => ({})),
+  analysisDate: timestamp("analysis_date").notNull(),
+  periodDays: integer("period_days").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const aiCoachingMessages = pgTable("ai_coaching_messages", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  actionable: boolean("actionable").notNull().default(false),
+  actionData: jsonb("action_data"),
+  priority: text("priority").notNull().default("medium"),
+  isRead: boolean("is_read").default(false),
+  isDismissed: boolean("is_dismissed").default(false),
+  relatedPatternId: integer("related_pattern_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const teamMemberProfiles = pgTable("team_member_profiles", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  skills: jsonb("skills").$defaultFn(() => []),
+  domains: text("domains").array(),
+  currentWorkload: jsonb("current_workload").$defaultFn(() => ({})),
+  availability: jsonb("availability").$defaultFn(() => ({})),
+  preferences: jsonb("preferences").$defaultFn(() => ({})),
+  performanceMetrics: jsonb("performance_metrics").$defaultFn(() => ({})),
+  lastProfileUpdateAt: timestamp("last_profile_update_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  userUnique: uniqueIndex("tmp_user_unique").on(t.userId),
+}));
+
+export const delegationSuggestions = pgTable("delegation_suggestions", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id").notNull(),
+  suggestedById: text("suggested_by_id").notNull(),
+  candidates: jsonb("candidates").$defaultFn(() => []),
+  selectedUserId: text("selected_user_id"),
+  selectionSource: text("selection_source").notNull().default("ai"),
+  autoAssigned: boolean("auto_assigned").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const delegationRules = pgTable("delegation_rules", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  name: text("name").notNull(),
+  conditions: jsonb("conditions").$defaultFn(() => ({})),
+  strategy: text("strategy").notNull().default("best_match"),
+  candidatePool: text("candidate_pool").array(),
+  isActive: boolean("is_active").default(true),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const projectContexts = pgTable("project_contexts", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  projectName: text("project_name").notNull(),
+  linkedNoteIds: integer("linked_note_ids").array(),
+  lastActiveAt: timestamp("last_active_at").notNull().defaultNow(),
+  lastActiveDuration: integer("last_active_duration").default(0),
+  openItems: jsonb("open_items").$defaultFn(() => ({})),
+  aiCatchUpSummary: jsonb("ai_catch_up_summary"),
+  isPinned: boolean("is_pinned").default(false),
+  color: text("color"),
+  icon: text("icon"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  userLastActiveIdx: index("pc_user_last_active_idx").on(t.userId, t.lastActiveAt),
+}));
+
+export const recordedWorkflows = pgTable("recorded_workflows", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  icon: text("icon"),
+  recordedSteps: jsonb("recorded_steps").$defaultFn(() => []),
+  processedSteps: jsonb("processed_steps").$defaultFn(() => []),
+  inputVariables: jsonb("input_variables").$defaultFn(() => []),
+  triggerType: text("trigger_type").notNull().default("manual"), // manual/scheduled/event
+  triggerConfig: jsonb("trigger_config"),
+  timesRun: integer("times_run").default(0),
+  avgDurationSeconds: real("avg_duration_seconds"),
+  isActive: boolean("is_active").default(true),
+  isPublic: boolean("is_public").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const dailyPlans = pgTable("daily_plans", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  date: text("date").notNull(),
+  status: text("status").notNull().default("draft"), // draft/active/completed/skipped
+  generatedPlan: jsonb("generated_plan").$defaultFn(() => ({})),
+  userModifications: jsonb("user_modifications").$defaultFn(() => ({})),
+  completionRate: real("completion_rate"),
+  reviewNotes: text("review_notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  userDateUnique: uniqueIndex("dp_user_date_unique").on(t.userId, t.date),
+}));
+
+export const documentTemplatesAi = pgTable("document_templates_ai", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  category: text("category").notNull(),
+  structure: jsonb("structure").$defaultFn(() => ({})),
+  isBuiltIn: boolean("is_built_in").default(false),
+  usageCount: integer("usage_count").default(0),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const generatedDocuments = pgTable("generated_documents", {
+  id: serial("id").primaryKey(),
+  templateId: integer("template_id"),
+  userId: text("user_id").notNull(),
+  noteId: integer("note_id").notNull(),
+  generationConfig: jsonb("generation_config").$defaultFn(() => ({})),
+  dataSources: jsonb("data_sources").$defaultFn(() => ({})),
+  status: text("status").notNull().default("generating"), // generating/completed/failed
+  generationTimeMs: integer("generation_time_ms"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const userAutopilotSettings = pgTable("user_autopilot_settings", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  settings: jsonb("settings").$defaultFn(() => ({})),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  userUnique: uniqueIndex("uas_user_unique").on(t.userId),
+}));
+
+// Insert schemas
+export const insertAutopilotRuleSchema = createInsertSchema(autopilotRules).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertAutopilotExecutionSchema = createInsertSchema(autopilotExecutions).omit({ id: true, createdAt: true });
+export const insertAutopilotActivityLogSchema = createInsertSchema(autopilotActivityLog).omit({ id: true, timestamp: true });
+export const insertAutopilotPatternSchema = createInsertSchema(autopilotPatterns).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertTaskPredictionSchema = createInsertSchema(taskPredictions).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertTaskSequenceSchema = createInsertSchema(taskSequences).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertWorkSessionSchema = createInsertSchema(workSessions).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertWorkPatternSchema = createInsertSchema(workPatterns).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertAiCoachingMessageSchema = createInsertSchema(aiCoachingMessages).omit({ id: true, createdAt: true });
+export const insertTeamMemberProfileSchema = createInsertSchema(teamMemberProfiles).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertDelegationSuggestionSchema = createInsertSchema(delegationSuggestions).omit({ id: true, createdAt: true });
+export const insertDelegationRuleSchema = createInsertSchema(delegationRules).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertProjectContextSchema = createInsertSchema(projectContexts).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertRecordedWorkflowSchema = createInsertSchema(recordedWorkflows).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertDailyPlanSchema = createInsertSchema(dailyPlans).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertDocumentTemplateAiSchema = createInsertSchema(documentTemplatesAi).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertGeneratedDocumentSchema = createInsertSchema(generatedDocuments).omit({ id: true, createdAt: true });
+
+// Types
+export type AutopilotRule = typeof autopilotRules.$inferSelect;
+export type AutopilotExecution = typeof autopilotExecutions.$inferSelect;
+export type AutopilotActivityLog = typeof autopilotActivityLog.$inferSelect;
+export type AutopilotPattern = typeof autopilotPatterns.$inferSelect;
+export type TaskPrediction = typeof taskPredictions.$inferSelect;
+export type TaskSequence = typeof taskSequences.$inferSelect;
+export type WorkSession = typeof workSessions.$inferSelect;
+export type WorkPattern = typeof workPatterns.$inferSelect;
+export type AiCoachingMessage = typeof aiCoachingMessages.$inferSelect;
+export type TeamMemberProfile = typeof teamMemberProfiles.$inferSelect;
+export type DelegationSuggestion = typeof delegationSuggestions.$inferSelect;
+export type DelegationRule = typeof delegationRules.$inferSelect;
+export type ProjectContext = typeof projectContexts.$inferSelect;
+export type RecordedWorkflow = typeof recordedWorkflows.$inferSelect;
+export type DailyPlan = typeof dailyPlans.$inferSelect;
+export type DocumentTemplateAi = typeof documentTemplatesAi.$inferSelect;
+export type GeneratedDocument = typeof generatedDocuments.$inferSelect;

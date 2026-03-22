@@ -38,7 +38,7 @@ Preferred communication style: Simple, everyday language.
 -   **Grow Together (Social)**: Friend connections, comparison of productivity metrics, group creation and chat (paid feature), and privacy controls.
 -   **Know More (Learning)**: Video learning center with YouTube embeds and in-app feedback system.
 -   **Team Productivity Intelligence**: Advanced module for team-level insights, scoring, pattern detection, and alerts.
--   **AI-Driven Platform (Prompts 1-5 Done)**:
+-   **AI-Driven Platform (Prompts 1-6 DONE)**:
     -   Workspaces, Teams, Members management
     -   Projects, Tasks, Subtasks, Dependencies
     -   6 Task Views: Board (drag-and-drop), List, Timeline, Calendar, Table, Dashboard
@@ -54,6 +54,10 @@ Preferred communication style: Simple, everyday language.
     -   AI Features: AICommandBar (Ctrl+K, real OpenAI gpt-4o-mini, action parsing), AICoach (slide-in 320px panel, today's plan, focus recs, insights, chat — all OpenAI), SmartSearch (Ctrl+Shift+F, category tabs, workspace-wide search)
     -   Notifications: NotificationCenter (bell in SidebarHeader, unread badge, mark-all-read, 30s polling); notifications table
     -   Keyboard shortcuts in layout.tsx; Command + Search + AI Coach buttons in SidebarFooter
+    -   **Prompt 6 — Full API Layer**: Autopilot events/rules/executions/patterns/settings; Predictions (with inline task-completion hook + confidence feedback loop on sequences); Time Machine sessions/coaching/settings; Delegation suggest/assign/rules; Project Contexts CRUD (AI catch-up on 2h+ away); Workflows CRUD (real task+note creation on run); Daily Planner generate/save; Document Templates CRUD + `/api/documents/generate` (real OpenAI for ai_generated sections)
+    -   **8 node-cron jobs**: pattern detection (6h), sequence learning (2AM), weekly coaching (Sunday 8PM), monthly summary (1st midnight), end-of-day summary (6PM), daily plan auto-gen (7AM), skill detection (Sunday midnight), expired predictions cleanup (midnight)
+    -   **In-memory rate-limit cache** for autopilot executions; module-level `callAI()` helper
+    -   **Seed file**: `server/seed.ts` — seeds autopilot rules/patterns/settings, task sequences, work patterns, coaching messages, team profiles, delegation rules, project contexts, workflows, daily plans, and 5 built-in document templates
 -   **Connect Messaging System (Sprints 1–2 DONE)**:
     -   REST-only messaging (React Query polling, 3s interval) — no Socket.IO
     -   15 messaging tables (connect_ prefix): connect_channels, connect_channel_members, connect_messages, connect_message_reactions, connect_message_attachments, connect_pinned_messages, connect_conversations, connect_conversation_members, connect_direct_messages, connect_dm_attachments, connect_dm_reactions, connect_user_presence, connect_huddles, connect_message_bookmarks, connect_custom_emoji, connect_slash_commands

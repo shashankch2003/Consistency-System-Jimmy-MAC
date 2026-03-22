@@ -17,6 +17,11 @@ import {
   timeEntries, timesheets, productivitySnapshots,
   memberAvailability, savedReports,
   okrGoals, goalTaskLinks, automations, automationLogs, notifications,
+  autopilotRules, autopilotExecutions, autopilotActivityLog, autopilotPatterns,
+  taskPredictions, taskSequences, workSessions, workPatterns,
+  aiCoachingMessages, teamMemberProfiles, delegationSuggestions, delegationRules,
+  projectContexts, recordedWorkflows, dailyPlans, documentTemplatesAi, generatedDocuments,
+  userAutopilotSettings,
 } from "@shared/schema";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
 import { or, sql, inArray } from "drizzle-orm";
@@ -391,6 +396,65 @@ export interface IStorage extends IAuthStorage {
   getSavedReport(id: number): Promise<typeof savedReports.$inferSelect | undefined>;
   createSavedReport(data: typeof savedReports.$inferInsert): Promise<typeof savedReports.$inferSelect>;
   getExecutiveSummary(workspaceId: number): Promise<any>;
+  // Autopilot
+  getAutopilotRules(userId: string, filters?: { isActive?: boolean; type?: string }): Promise<(typeof autopilotRules.$inferSelect)[]>;
+  createAutopilotRule(data: typeof autopilotRules.$inferInsert): Promise<typeof autopilotRules.$inferSelect>;
+  updateAutopilotRule(id: number, userId: string, data: Partial<typeof autopilotRules.$inferInsert>): Promise<typeof autopilotRules.$inferSelect | undefined>;
+  deleteAutopilotRule(id: number, userId: string): Promise<void>;
+  getAutopilotExecutions(userId: string, filters?: { status?: string; ruleId?: number; limit?: number }): Promise<(typeof autopilotExecutions.$inferSelect)[]>;
+  createAutopilotExecution(data: typeof autopilotExecutions.$inferInsert): Promise<typeof autopilotExecutions.$inferSelect>;
+  updateAutopilotExecution(id: number, userId: string, data: Partial<typeof autopilotExecutions.$inferInsert>): Promise<typeof autopilotExecutions.$inferSelect | undefined>;
+  logActivityEvents(events: (typeof autopilotActivityLog.$inferInsert)[]): Promise<void>;
+  getActivityLogs(userId: string, days: number): Promise<(typeof autopilotActivityLog.$inferSelect)[]>;
+  getAutopilotPatterns(userId: string): Promise<(typeof autopilotPatterns.$inferSelect)[]>;
+  createAutopilotPattern(data: typeof autopilotPatterns.$inferInsert): Promise<typeof autopilotPatterns.$inferSelect>;
+  updateAutopilotPattern(id: number, data: Partial<typeof autopilotPatterns.$inferInsert>): Promise<void>;
+  getAutopilotSettings(userId: string): Promise<any>;
+  saveAutopilotSettings(userId: string, settings: any): Promise<void>;
+  // Predictions
+  getTaskPredictions(userId: string): Promise<(typeof taskPredictions.$inferSelect)[]>;
+  createTaskPrediction(data: typeof taskPredictions.$inferInsert): Promise<typeof taskPredictions.$inferSelect>;
+  updateTaskPrediction(id: number, userId: string, data: Partial<typeof taskPredictions.$inferInsert>): Promise<typeof taskPredictions.$inferSelect | undefined>;
+  getTaskSequences(userId: string): Promise<(typeof taskSequences.$inferSelect)[]>;
+  upsertTaskSequence(data: typeof taskSequences.$inferInsert): Promise<typeof taskSequences.$inferSelect>;
+  // Time Machine
+  getWorkSession(userId: string, date: string): Promise<typeof workSessions.$inferSelect | undefined>;
+  saveWorkSession(data: typeof workSessions.$inferInsert): Promise<typeof workSessions.$inferSelect>;
+  getWorkSessions(userId: string, days: number): Promise<(typeof workSessions.$inferSelect)[]>;
+  getWorkPatterns(userId: string): Promise<(typeof workPatterns.$inferSelect)[]>;
+  createWorkPattern(data: typeof workPatterns.$inferInsert): Promise<typeof workPatterns.$inferSelect>;
+  getCoachingMessages(userId: string): Promise<(typeof aiCoachingMessages.$inferSelect)[]>;
+  createCoachingMessage(data: typeof aiCoachingMessages.$inferInsert): Promise<typeof aiCoachingMessages.$inferSelect>;
+  updateCoachingMessage(id: number, userId: string, data: Partial<typeof aiCoachingMessages.$inferInsert>): Promise<void>;
+  // Delegation
+  getTeamMemberProfile(userId: string): Promise<typeof teamMemberProfiles.$inferSelect | undefined>;
+  upsertTeamMemberProfile(data: typeof teamMemberProfiles.$inferInsert): Promise<typeof teamMemberProfiles.$inferSelect>;
+  getAllTeamMemberProfiles(): Promise<(typeof teamMemberProfiles.$inferSelect)[]>;
+  createDelegationSuggestion(data: typeof delegationSuggestions.$inferInsert): Promise<typeof delegationSuggestions.$inferSelect>;
+  updateDelegationSuggestion(id: number, data: Partial<typeof delegationSuggestions.$inferInsert>): Promise<void>;
+  getDelegationRules(userId: string): Promise<(typeof delegationRules.$inferSelect)[]>;
+  createDelegationRule(data: typeof delegationRules.$inferInsert): Promise<typeof delegationRules.$inferSelect>;
+  updateDelegationRule(id: number, userId: string, data: Partial<typeof delegationRules.$inferInsert>): Promise<void>;
+  // Contexts
+  getProjectContexts(userId: string): Promise<(typeof projectContexts.$inferSelect)[]>;
+  createProjectContext(data: typeof projectContexts.$inferInsert): Promise<typeof projectContexts.$inferSelect>;
+  updateProjectContext(id: number, userId: string, data: Partial<typeof projectContexts.$inferInsert>): Promise<typeof projectContexts.$inferSelect | undefined>;
+  // Workflows
+  getRecordedWorkflows(userId: string): Promise<(typeof recordedWorkflows.$inferSelect)[]>;
+  getPublicWorkflows(): Promise<(typeof recordedWorkflows.$inferSelect)[]>;
+  createRecordedWorkflow(data: typeof recordedWorkflows.$inferInsert): Promise<typeof recordedWorkflows.$inferSelect>;
+  updateRecordedWorkflow(id: number, userId: string, data: Partial<typeof recordedWorkflows.$inferInsert>): Promise<typeof recordedWorkflows.$inferSelect | undefined>;
+  deleteRecordedWorkflow(id: number, userId: string): Promise<void>;
+  // Daily Plans
+  getDailyPlan(userId: string, date: string): Promise<typeof dailyPlans.$inferSelect | undefined>;
+  createDailyPlan(data: typeof dailyPlans.$inferInsert): Promise<typeof dailyPlans.$inferSelect>;
+  updateDailyPlan(id: number, userId: string, data: Partial<typeof dailyPlans.$inferInsert>): Promise<typeof dailyPlans.$inferSelect | undefined>;
+  // Document Templates + Generated Docs
+  getDocumentTemplates(): Promise<(typeof documentTemplatesAi.$inferSelect)[]>;
+  createDocumentTemplate(data: typeof documentTemplatesAi.$inferInsert): Promise<typeof documentTemplatesAi.$inferSelect>;
+  updateDocumentTemplate(id: number, data: Partial<typeof documentTemplatesAi.$inferInsert>): Promise<void>;
+  deleteDocumentTemplate(id: number): Promise<void>;
+  createGeneratedDocument(data: typeof generatedDocuments.$inferInsert): Promise<typeof generatedDocuments.$inferSelect>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1758,6 +1822,204 @@ export class DatabaseStorage implements IStorage {
       projectsAtRisk,
       teamSize: allMembers.length,
     };
+  }
+
+  // ─── AUTOPILOT ────────────────────────────────────────────────────────────
+  async getAutopilotRules(userId: string, filters: { isActive?: boolean; type?: string } = {}) {
+    const conditions = [eq(autopilotRules.userId, userId)];
+    if (filters.isActive !== undefined) conditions.push(eq(autopilotRules.isActive, filters.isActive));
+    if (filters.type) conditions.push(eq(autopilotRules.type, filters.type));
+    return db.select().from(autopilotRules).where(and(...conditions)).orderBy(desc(autopilotRules.timesTriggered));
+  }
+  async createAutopilotRule(data: typeof autopilotRules.$inferInsert) {
+    const [row] = await db.insert(autopilotRules).values(data).returning();
+    return row;
+  }
+  async updateAutopilotRule(id: number, userId: string, data: Partial<typeof autopilotRules.$inferInsert>) {
+    const [row] = await db.update(autopilotRules).set({ ...data, updatedAt: new Date() }).where(and(eq(autopilotRules.id, id), eq(autopilotRules.userId, userId))).returning();
+    return row;
+  }
+  async deleteAutopilotRule(id: number, userId: string) {
+    await db.update(autopilotRules).set({ isActive: false, updatedAt: new Date() }).where(and(eq(autopilotRules.id, id), eq(autopilotRules.userId, userId)));
+  }
+  async getAutopilotExecutions(userId: string, filters: { status?: string; ruleId?: number; limit?: number } = {}) {
+    const conditions = [eq(autopilotExecutions.userId, userId)];
+    if (filters.status) conditions.push(eq(autopilotExecutions.status, filters.status));
+    if (filters.ruleId) conditions.push(eq(autopilotExecutions.ruleId, filters.ruleId));
+    return db.select().from(autopilotExecutions).where(and(...conditions)).orderBy(desc(autopilotExecutions.createdAt)).limit(filters.limit ?? 20);
+  }
+  async createAutopilotExecution(data: typeof autopilotExecutions.$inferInsert) {
+    const [row] = await db.insert(autopilotExecutions).values(data).returning();
+    return row;
+  }
+  async updateAutopilotExecution(id: number, userId: string, data: Partial<typeof autopilotExecutions.$inferInsert>) {
+    const [row] = await db.update(autopilotExecutions).set(data).where(and(eq(autopilotExecutions.id, id), eq(autopilotExecutions.userId, userId))).returning();
+    return row;
+  }
+  async logActivityEvents(events: (typeof autopilotActivityLog.$inferInsert)[]) {
+    if (events.length === 0) return;
+    await db.insert(autopilotActivityLog).values(events);
+  }
+  async getActivityLogs(userId: string, days: number) {
+    const since = new Date(Date.now() - days * 86400000);
+    return db.select().from(autopilotActivityLog).where(and(eq(autopilotActivityLog.userId, userId), gte(autopilotActivityLog.timestamp, since)));
+  }
+  async getAutopilotPatterns(userId: string) {
+    return db.select().from(autopilotPatterns).where(eq(autopilotPatterns.userId, userId)).orderBy(desc(autopilotPatterns.confidence));
+  }
+  async createAutopilotPattern(data: typeof autopilotPatterns.$inferInsert) {
+    const [row] = await db.insert(autopilotPatterns).values(data).returning();
+    return row;
+  }
+  async updateAutopilotPattern(id: number, data: Partial<typeof autopilotPatterns.$inferInsert>) {
+    await db.update(autopilotPatterns).set({ ...data, updatedAt: new Date() }).where(eq(autopilotPatterns.id, id));
+  }
+  async getAutopilotSettings(userId: string) {
+    const [row] = await db.select().from(userAutopilotSettings).where(eq(userAutopilotSettings.userId, userId));
+    return row?.settings ?? {};
+  }
+  async saveAutopilotSettings(userId: string, settings: any) {
+    await db.insert(userAutopilotSettings).values({ userId, settings }).onConflictDoUpdate({ target: userAutopilotSettings.userId, set: { settings, updatedAt: new Date() } });
+  }
+  // ─── PREDICTIONS ──────────────────────────────────────────────────────────
+  async getTaskPredictions(userId: string) {
+    const now = new Date();
+    return db.select().from(taskPredictions).where(and(eq(taskPredictions.userId, userId), eq(taskPredictions.status, "predicted"), gte(taskPredictions.expiresAt, now))).orderBy(desc(taskPredictions.confidence)).limit(5);
+  }
+  async createTaskPrediction(data: typeof taskPredictions.$inferInsert) {
+    const [row] = await db.insert(taskPredictions).values(data).returning();
+    return row;
+  }
+  async updateTaskPrediction(id: number, userId: string, data: Partial<typeof taskPredictions.$inferInsert>) {
+    const [row] = await db.update(taskPredictions).set({ ...data, updatedAt: new Date() }).where(and(eq(taskPredictions.id, id), eq(taskPredictions.userId, userId))).returning();
+    return row;
+  }
+  async getTaskSequences(userId: string) {
+    return db.select().from(taskSequences).where(and(eq(taskSequences.userId, userId), eq(taskSequences.isActive, true))).orderBy(desc(taskSequences.confidence));
+  }
+  async upsertTaskSequence(data: typeof taskSequences.$inferInsert) {
+    const [row] = await db.insert(taskSequences).values(data).returning();
+    return row;
+  }
+  // ─── TIME MACHINE ─────────────────────────────────────────────────────────
+  async getWorkSession(userId: string, date: string) {
+    const [row] = await db.select().from(workSessions).where(and(eq(workSessions.userId, userId), eq(workSessions.date, date)));
+    return row;
+  }
+  async saveWorkSession(data: typeof workSessions.$inferInsert) {
+    const [row] = await db.insert(workSessions).values(data).onConflictDoUpdate({ target: [workSessions.userId, workSessions.date], set: { ...data, updatedAt: new Date() } }).returning();
+    return row;
+  }
+  async getWorkSessions(userId: string, days: number) {
+    const since = new Date(Date.now() - days * 86400000);
+    return db.select().from(workSessions).where(and(eq(workSessions.userId, userId), gte(workSessions.startTime, since))).orderBy(desc(workSessions.startTime));
+  }
+  async getWorkPatterns(userId: string) {
+    return db.select().from(workPatterns).where(eq(workPatterns.userId, userId)).orderBy(desc(workPatterns.analysisDate));
+  }
+  async createWorkPattern(data: typeof workPatterns.$inferInsert) {
+    const [row] = await db.insert(workPatterns).values(data).returning();
+    return row;
+  }
+  async getCoachingMessages(userId: string) {
+    return db.select().from(aiCoachingMessages).where(and(eq(aiCoachingMessages.userId, userId), eq(aiCoachingMessages.isDismissed, false))).orderBy(desc(aiCoachingMessages.createdAt));
+  }
+  async createCoachingMessage(data: typeof aiCoachingMessages.$inferInsert) {
+    const [row] = await db.insert(aiCoachingMessages).values(data).returning();
+    return row;
+  }
+  async updateCoachingMessage(id: number, userId: string, data: Partial<typeof aiCoachingMessages.$inferInsert>) {
+    await db.update(aiCoachingMessages).set(data).where(and(eq(aiCoachingMessages.id, id), eq(aiCoachingMessages.userId, userId)));
+  }
+  // ─── DELEGATION ───────────────────────────────────────────────────────────
+  async getTeamMemberProfile(userId: string) {
+    const [row] = await db.select().from(teamMemberProfiles).where(eq(teamMemberProfiles.userId, userId));
+    return row;
+  }
+  async upsertTeamMemberProfile(data: typeof teamMemberProfiles.$inferInsert) {
+    const [row] = await db.insert(teamMemberProfiles).values(data).onConflictDoUpdate({ target: teamMemberProfiles.userId, set: { ...data, updatedAt: new Date() } }).returning();
+    return row;
+  }
+  async getAllTeamMemberProfiles() {
+    return db.select().from(teamMemberProfiles).orderBy(desc(teamMemberProfiles.lastProfileUpdateAt));
+  }
+  async createDelegationSuggestion(data: typeof delegationSuggestions.$inferInsert) {
+    const [row] = await db.insert(delegationSuggestions).values(data).returning();
+    return row;
+  }
+  async updateDelegationSuggestion(id: number, data: Partial<typeof delegationSuggestions.$inferInsert>) {
+    await db.update(delegationSuggestions).set(data).where(eq(delegationSuggestions.id, id));
+  }
+  async getDelegationRules(userId: string) {
+    return db.select().from(delegationRules).where(and(eq(delegationRules.userId, userId), eq(delegationRules.isActive, true))).orderBy(desc(delegationRules.createdAt));
+  }
+  async createDelegationRule(data: typeof delegationRules.$inferInsert) {
+    const [row] = await db.insert(delegationRules).values(data).returning();
+    return row;
+  }
+  async updateDelegationRule(id: number, userId: string, data: Partial<typeof delegationRules.$inferInsert>) {
+    await db.update(delegationRules).set({ ...data, updatedAt: new Date() }).where(and(eq(delegationRules.id, id), eq(delegationRules.userId, userId)));
+  }
+  // ─── PROJECT CONTEXTS ─────────────────────────────────────────────────────
+  async getProjectContexts(userId: string) {
+    return db.select().from(projectContexts).where(eq(projectContexts.userId, userId)).orderBy(desc(projectContexts.lastActiveAt));
+  }
+  async createProjectContext(data: typeof projectContexts.$inferInsert) {
+    const [row] = await db.insert(projectContexts).values(data).returning();
+    return row;
+  }
+  async updateProjectContext(id: number, userId: string, data: Partial<typeof projectContexts.$inferInsert>) {
+    const [row] = await db.update(projectContexts).set({ ...data, updatedAt: new Date() }).where(and(eq(projectContexts.id, id), eq(projectContexts.userId, userId))).returning();
+    return row;
+  }
+  // ─── WORKFLOWS ────────────────────────────────────────────────────────────
+  async getRecordedWorkflows(userId: string) {
+    return db.select().from(recordedWorkflows).where(and(eq(recordedWorkflows.userId, userId), eq(recordedWorkflows.isActive, true))).orderBy(desc(recordedWorkflows.createdAt));
+  }
+  async getPublicWorkflows() {
+    return db.select().from(recordedWorkflows).where(and(eq(recordedWorkflows.isPublic, true), eq(recordedWorkflows.isActive, true))).orderBy(desc(recordedWorkflows.timesRun));
+  }
+  async createRecordedWorkflow(data: typeof recordedWorkflows.$inferInsert) {
+    const [row] = await db.insert(recordedWorkflows).values(data).returning();
+    return row;
+  }
+  async updateRecordedWorkflow(id: number, userId: string, data: Partial<typeof recordedWorkflows.$inferInsert>) {
+    const [row] = await db.update(recordedWorkflows).set({ ...data, updatedAt: new Date() }).where(and(eq(recordedWorkflows.id, id), eq(recordedWorkflows.userId, userId))).returning();
+    return row;
+  }
+  async deleteRecordedWorkflow(id: number, userId: string) {
+    await db.update(recordedWorkflows).set({ isActive: false, updatedAt: new Date() }).where(and(eq(recordedWorkflows.id, id), eq(recordedWorkflows.userId, userId)));
+  }
+  // ─── DAILY PLANS ──────────────────────────────────────────────────────────
+  async getDailyPlan(userId: string, date: string) {
+    const [row] = await db.select().from(dailyPlans).where(and(eq(dailyPlans.userId, userId), eq(dailyPlans.date, date)));
+    return row;
+  }
+  async createDailyPlan(data: typeof dailyPlans.$inferInsert) {
+    const [row] = await db.insert(dailyPlans).values(data).onConflictDoUpdate({ target: [dailyPlans.userId, dailyPlans.date], set: { ...data, updatedAt: new Date() } }).returning();
+    return row;
+  }
+  async updateDailyPlan(id: number, userId: string, data: Partial<typeof dailyPlans.$inferInsert>) {
+    const [row] = await db.update(dailyPlans).set({ ...data, updatedAt: new Date() }).where(and(eq(dailyPlans.id, id), eq(dailyPlans.userId, userId))).returning();
+    return row;
+  }
+  // ─── DOCUMENT TEMPLATES ───────────────────────────────────────────────────
+  async getDocumentTemplates() {
+    return db.select().from(documentTemplatesAi).orderBy(asc(documentTemplatesAi.createdAt));
+  }
+  async createDocumentTemplate(data: typeof documentTemplatesAi.$inferInsert) {
+    const [row] = await db.insert(documentTemplatesAi).values(data).returning();
+    return row;
+  }
+  async updateDocumentTemplate(id: number, data: Partial<typeof documentTemplatesAi.$inferInsert>) {
+    await db.update(documentTemplatesAi).set({ ...data, updatedAt: new Date() }).where(eq(documentTemplatesAi.id, id));
+  }
+  async deleteDocumentTemplate(id: number) {
+    await db.delete(documentTemplatesAi).where(eq(documentTemplatesAi.id, id));
+  }
+  async createGeneratedDocument(data: typeof generatedDocuments.$inferInsert) {
+    const [row] = await db.insert(generatedDocuments).values(data).returning();
+    return row;
   }
 }
 

@@ -24,8 +24,45 @@ import {
 } from "../shared/schema";
 import { LEVELS, LEVEL_INDEX, INTERACTIVE_LEVELS, FUNDAMENTALS_LIST, DEFAULT_EXPENSE_CATEGORIES } from "@shared/schema";
 import { getCurrentLevelStatus, runMonthlyEvaluation, computeDailyMetrics } from "./level-engine";
+import cron from "node-cron";
+import {
+  autopilotRules, autopilotExecutions, autopilotActivityLog, autopilotPatterns,
+  taskPredictions, taskSequences, workSessions, workPatterns, tasks, notes,
+  aiCoachingMessages, teamMemberProfiles, delegationSuggestions, delegationRules,
+  projectContexts, recordedWorkflows, dailyPlans, documentTemplatesAi, generatedDocuments,
+} from "../shared/schema";
+import { gt, gte, lte, like, count } from "drizzle-orm";
 
 const ADMIN_USER_ID = process.env.ADMIN_USER_ID || "";
+
+// In-memory rate limit cache for autopilot (key: "autopilot_daily:{userId}:{date}")
+const autopilotRateCache = new Map<string, { count: number; resetAt: number }>();
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of autopilotRateCache.entries()) {
+    if (v.resetAt < now) autopilotRateCache.delete(k);
+  }
+}, 3_600_000); // clean hourly
+
+async function getOpenAI() {
+  const OpenAI = (await import("openai")).default;
+  return new OpenAI({ apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY, baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL });
+}
+
+async function callAI(prompt: string, systemPrompt?: string): Promise<string> {
+  try {
+    const openai = await getOpenAI();
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt ?? "You are a productivity AI assistant. Be concise and actionable." },
+        { role: "user", content: prompt },
+      ],
+      max_tokens: 500,
+    });
+    return response.choices[0]?.message?.content ?? "";
+  } catch { return ""; }
+}
 
 function isAdmin(req: any): boolean {
   return req.user?.claims?.sub === ADMIN_USER_ID && ADMIN_USER_ID !== "";
@@ -149,6 +186,27 @@ export async function registerRoutes(
     try {
       const input = api.tasks.update.input.parse(req.body);
       const task = await storage.updateTask(parseInt(req.params.id), input);
+      let prediction: any = null;
+      // Inline prediction when task is completed
+      if ((input as any).completionPercentage === 100 && task) {
+        try {
+          const userId = (req as any).user.claims.sub;
+          const seqs = await storage.getTaskSequences(userId);
+          const matchingSeq = seqs.find((s) => {
+            const pattern = s.precedingTaskPattern as any;
+            return pattern?.titlePattern && task.title?.toLowerCase().includes(pattern.titlePattern.toLowerCase());
+          });
+          if (matchingSeq) {
+            const followingPattern = (matchingSeq.followingTaskPattern as any)?.titlePattern ?? "";
+            const aiSuggestion = await callAI(`Task "${task.title}" just completed. What is the most likely next task to work on? Respond with just the task title (5-10 words max). Context hint: ${followingPattern}`);
+            const predictedTitle = aiSuggestion || followingPattern;
+            if (predictedTitle) {
+              const expiresAt = new Date(Date.now() + 7 * 86400000);
+              prediction = await storage.createTaskPrediction({ userId, triggerTaskId: task.id, predictedTitle, confidence: matchingSeq.confidence ?? 0.7, expiresAt, status: "predicted" });
+            }
+          }
+        } catch {}
+      }
       res.json(task);
     } catch (e: any) { res.status(400).json({ message: e.message }); }
   });
@@ -4040,6 +4098,716 @@ For answer: just a message.`,
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // AUTOPILOT EVENTS
+  // ══════════════════════════════════════════════════════════════════════════
+  app.post("/api/autopilot/events", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { events } = z.object({ events: z.array(z.any()).max(100) }).parse(req.body);
+      const now = new Date();
+      const enriched = events.map((e: any) => ({
+        userId,
+        eventType: String(e.type ?? e.eventType ?? "unknown"),
+        eventData: e.data ?? e.eventData ?? {},
+        sessionId: e.sessionId ?? null,
+        dayOfWeek: now.getDay(),
+        hourOfDay: now.getHours(),
+      }));
+      await storage.logActivityEvents(enriched);
+      res.json({ logged: enriched.length });
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // AUTOPILOT RULES
+  // ══════════════════════════════════════════════════════════════════════════
+  app.get("/api/autopilot/rules", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const isActive = req.query.isActive !== undefined ? req.query.isActive === "true" : undefined;
+      const type = req.query.type as string | undefined;
+      const rules = await storage.getAutopilotRules(userId, { isActive, type });
+      res.json(rules);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/autopilot/rules", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const schema = z.object({
+        name: z.string().min(1), description: z.string().optional(),
+        type: z.string(), triggerType: z.string(), triggerConfig: z.any().optional(),
+        actions: z.any().optional(), executionMode: z.string().optional(),
+        cooldownMinutes: z.number().optional(), maxExecutionsPerDay: z.number().optional(),
+        tags: z.array(z.string()).optional(),
+      });
+      const data = schema.parse(req.body);
+      const rule = await storage.createAutopilotRule({ ...data, userId });
+      res.status(201).json(rule);
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  app.put("/api/autopilot/rules/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const rule = await storage.updateAutopilotRule(id, userId, req.body);
+      if (!rule) return res.status(404).json({ error: "Not found" });
+      res.json(rule);
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  app.delete("/api/autopilot/rules/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      await storage.deleteAutopilotRule(parseInt(req.params.id), userId);
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // AUTOPILOT EXECUTIONS
+  // ══════════════════════════════════════════════════════════════════════════
+  app.get("/api/autopilot/executions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const status = req.query.status as string | undefined;
+      const ruleId = req.query.ruleId ? parseInt(req.query.ruleId as string) : undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
+      const executions = await storage.getAutopilotExecutions(userId, { status, ruleId, limit });
+      res.json(executions);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/autopilot/executions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const dateKey = new Date().toISOString().slice(0, 10);
+      const cacheKey = `autopilot_daily:${userId}:${dateKey}`;
+      const entry = autopilotRateCache.get(cacheKey) ?? { count: 0, resetAt: Date.now() + 86400000 };
+      const ruleId = req.body.ruleId;
+      if (ruleId) {
+        const [rule] = await db.select().from(autopilotRules).where(and(eq(autopilotRules.id, ruleId), eq(autopilotRules.userId, userId)));
+        if (rule && entry.count >= (rule.maxExecutionsPerDay ?? 50)) {
+          return res.status(429).json({ error: "Rate limit exceeded for this rule" });
+        }
+      }
+      const execution = await storage.createAutopilotExecution({ ...req.body, userId });
+      entry.count++;
+      autopilotRateCache.set(cacheKey, entry);
+      res.status(201).json(execution);
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  app.put("/api/autopilot/executions/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const { action, ...data } = req.body;
+      let updateData: any = data;
+      if (action === "approve") updateData = { ...data, status: "executing", approvedAt: new Date() };
+      else if (action === "decline") updateData = { ...data, status: "declined", declinedAt: new Date() };
+      else if (action === "undo") updateData = { ...data, status: "completed", undoneAt: new Date() };
+      const execution = await storage.updateAutopilotExecution(id, userId, updateData);
+      if (!execution) return res.status(404).json({ error: "Not found" });
+      res.json(execution);
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // AUTOPILOT PATTERNS + SETTINGS
+  // ══════════════════════════════════════════════════════════════════════════
+  app.get("/api/autopilot/patterns", isAuthenticated, async (req: any, res) => {
+    try {
+      const patterns = await storage.getAutopilotPatterns(req.user.claims.sub);
+      res.json(patterns);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/autopilot/patterns/:id/feedback", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const { action } = z.object({ action: z.enum(["enable", "dismiss"]) }).parse(req.body);
+      const [pattern] = await db.select().from(autopilotPatterns).where(and(eq(autopilotPatterns.id, id), eq(autopilotPatterns.userId, userId)));
+      if (!pattern) return res.status(404).json({ error: "Not found" });
+      if (action === "enable") {
+        await storage.updateAutopilotPattern(id, { status: "accepted", confidence: Math.min(1, (pattern.confidence ?? 0) + 0.05) });
+        if (pattern.suggestedRule) {
+          await storage.createAutopilotRule({ ...(pattern.suggestedRule as any), userId, type: "learned" });
+        }
+      } else {
+        await storage.updateAutopilotPattern(id, { status: "dismissed", confidence: Math.max(0, (pattern.confidence ?? 0) - 0.03) });
+      }
+      res.json({ success: true });
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/autopilot/settings", isAuthenticated, async (req: any, res) => {
+    try {
+      const settings = await storage.getAutopilotSettings(req.user.claims.sub);
+      res.json(settings);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.put("/api/autopilot/settings", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.saveAutopilotSettings(req.user.claims.sub, req.body);
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // PREDICTIONS
+  // ══════════════════════════════════════════════════════════════════════════
+  app.get("/api/predictions", isAuthenticated, async (req: any, res) => {
+    try {
+      const predictions = await storage.getTaskPredictions(req.user.claims.sub);
+      res.json(predictions);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/predictions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const expiresAt = new Date(Date.now() + 7 * 86400000);
+      const prediction = await storage.createTaskPrediction({ ...req.body, userId, expiresAt });
+      res.status(201).json(prediction);
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  app.put("/api/predictions/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const { action, acceptedTaskId, ...rest } = req.body;
+      let updateData: any = rest;
+      if (action === "accept") {
+        updateData = { ...rest, status: "accepted", acceptedTaskId };
+        // Boost confidence on matching sequences
+        const seqs = await storage.getTaskSequences(userId);
+        for (const seq of seqs) {
+          const pattern = seq.followingTaskPattern as any;
+          if (pattern?.titlePattern && rest.predictedTitle?.includes(pattern.titlePattern)) {
+            await db.update(taskSequences).set({ confidence: Math.min(1, (seq.confidence ?? 0) + 0.05) }).where(eq(taskSequences.id, seq.id));
+          }
+        }
+      } else if (action === "dismiss") {
+        updateData = { ...rest, status: "dismissed" };
+        // Lower confidence on matching sequences
+        const seqs = await storage.getTaskSequences(userId);
+        for (const seq of seqs) {
+          await db.update(taskSequences).set({ confidence: Math.max(0, (seq.confidence ?? 0) - 0.03) }).where(eq(taskSequences.id, seq.id));
+        }
+      }
+      const prediction = await storage.updateTaskPrediction(id, userId, updateData);
+      if (!prediction) return res.status(404).json({ error: "Not found" });
+      res.json(prediction);
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // TIME MACHINE
+  // ══════════════════════════════════════════════════════════════════════════
+  app.get("/api/timemachine/sessions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { date } = req.query;
+      if (date) {
+        const session = await storage.getWorkSession(userId, date as string);
+        return res.json(session ?? null);
+      }
+      const sessions = await storage.getWorkSessions(userId, 30);
+      res.json(sessions);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/timemachine/sessions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const session = await storage.saveWorkSession({ ...req.body, userId });
+      res.status(201).json(session);
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/timemachine/coaching", isAuthenticated, async (req: any, res) => {
+    try {
+      const messages = await storage.getCoachingMessages(req.user.claims.sub);
+      res.json(messages);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/timemachine/coaching/:id/apply", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const [msg] = await db.select().from(aiCoachingMessages).where(and(eq(aiCoachingMessages.id, id), eq(aiCoachingMessages.userId, userId)));
+      if (!msg) return res.status(404).json({ error: "Not found" });
+      if (msg.actionData) {
+        const actionData = msg.actionData as any;
+        if (actionData.ruleConfig) {
+          await storage.createAutopilotRule({ ...actionData.ruleConfig, userId, type: "suggested" });
+        }
+      }
+      await storage.updateCoachingMessage(id, userId, { isRead: true });
+      res.json({ success: true });
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  app.put("/api/timemachine/coaching/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const { isRead, isDismissed } = req.body;
+      await storage.updateCoachingMessage(id, userId, { isRead, isDismissed });
+      res.json({ success: true });
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/timemachine/settings", isAuthenticated, async (req: any, res) => {
+    try {
+      const settings = await storage.getAutopilotSettings(req.user.claims.sub);
+      res.json((settings as any)?.timemachine ?? {});
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.put("/api/timemachine/settings", isAuthenticated, async (req: any, res) => {
+    try {
+      const existing = await storage.getAutopilotSettings(req.user.claims.sub) as any ?? {};
+      await storage.saveAutopilotSettings(req.user.claims.sub, { ...existing, timemachine: req.body });
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // DELEGATION
+  // ══════════════════════════════════════════════════════════════════════════
+  app.post("/api/delegation/suggest", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { taskId } = z.object({ taskId: z.number() }).parse(req.body);
+      const profiles = await storage.getAllTeamMemberProfiles();
+      const candidates = profiles.map((p) => {
+        const workload = (p.currentWorkload as any) ?? {};
+        const score = Math.round(100 - (workload.capacityPercent ?? 50) * 0.5);
+        return { userId: p.userId, score, skills: p.skills, availability: p.availability };
+      }).sort((a, b) => b.score - a.score).slice(0, 5);
+      const suggestion = await storage.createDelegationSuggestion({ taskId, suggestedById: userId, candidates, selectionSource: "ai" });
+      res.json({ suggestion, candidates });
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  app.put("/api/delegation/assign", isAuthenticated, async (req: any, res) => {
+    try {
+      const { suggestionId, selectedUserId } = z.object({ suggestionId: z.number(), selectedUserId: z.string() }).parse(req.body);
+      await storage.updateDelegationSuggestion(suggestionId, { selectedUserId, selectionSource: "user" });
+      res.json({ success: true });
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/delegation/rules", isAuthenticated, async (req: any, res) => {
+    try {
+      const rules = await storage.getDelegationRules(req.user.claims.sub);
+      res.json(rules);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/delegation/rules", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const rule = await storage.createDelegationRule({ ...req.body, userId, createdBy: userId });
+      res.status(201).json(rule);
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  app.put("/api/delegation/rules/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      await storage.updateDelegationRule(parseInt(req.params.id), userId, req.body);
+      res.json({ success: true });
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // PROJECT CONTEXTS
+  // ══════════════════════════════════════════════════════════════════════════
+  app.get("/api/contexts", isAuthenticated, async (req: any, res) => {
+    try {
+      const contexts = await storage.getProjectContexts(req.user.claims.sub);
+      res.json(contexts);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/contexts", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const ctx = await storage.createProjectContext({ ...req.body, userId, lastActiveAt: new Date() });
+      res.status(201).json(ctx);
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  app.put("/api/contexts/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const { action, ...data } = req.body;
+      let updateData: any = data;
+      if (action === "switch") {
+        updateData = { ...data, lastActiveAt: new Date() };
+        // If away > 2h, generate AI catch-up summary
+        const [existing] = await db.select().from(projectContexts).where(and(eq(projectContexts.id, id), eq(projectContexts.userId, userId)));
+        if (existing) {
+          const awayMs = Date.now() - (existing.lastActiveAt?.getTime() ?? 0);
+          if (awayMs > 2 * 3_600_000) {
+            const recentTasks = await db.select().from(tasks).where(eq(tasks.userId, userId)).orderBy(desc(tasks.id)).limit(10);
+            const summary = await callAI(`Summarize what changed for project "${existing.projectName}": ${JSON.stringify(recentTasks.map(t => t.title))}`, "You are a productivity assistant. Provide a 2-3 sentence catch-up summary.");
+            updateData.aiCatchUpSummary = { summary, generatedAt: new Date().toISOString(), awayHours: Math.round(awayMs / 3_600_000) };
+          }
+        }
+      }
+      const ctx = await storage.updateProjectContext(id, userId, updateData);
+      if (!ctx) return res.status(404).json({ error: "Not found" });
+      res.json(ctx);
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // WORKFLOWS
+  // ══════════════════════════════════════════════════════════════════════════
+  app.get("/api/workflows", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const mine = await storage.getRecordedWorkflows(userId);
+      const shared = req.query.includePublic === "true" ? await storage.getPublicWorkflows() : [];
+      const all = [...mine, ...shared.filter(s => s.userId !== userId)];
+      res.json(all);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/workflows", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const wf = await storage.createRecordedWorkflow({ ...req.body, userId });
+      res.status(201).json(wf);
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  app.put("/api/workflows/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const { action, durationSeconds, ...data } = req.body;
+      let updateData: any = data;
+      if (action === "run_complete") {
+        const [wf] = await db.select().from(recordedWorkflows).where(and(eq(recordedWorkflows.id, id), eq(recordedWorkflows.userId, userId)));
+        if (wf) {
+          const newCount = (wf.timesRun ?? 0) + 1;
+          const prevAvg = wf.avgDurationSeconds ?? 0;
+          const newAvg = (prevAvg * (newCount - 1) + (durationSeconds ?? 0)) / newCount;
+          updateData = { ...data, timesRun: newCount, avgDurationSeconds: newAvg };
+          // Real task/note creation for create_task and create_note steps
+          const steps: any[] = (wf.processedSteps as any[]) ?? [];
+          for (const step of steps) {
+            if (step.type === "create_task") {
+              const today = new Date().toISOString().slice(0, 10);
+              await storage.createTask({ title: step.data?.title ?? "Workflow Task", userId, date: today, completionPercentage: 0 });
+            } else if (step.type === "create_note") {
+              await storage.createNote({ title: step.data?.title ?? "Workflow Note", content: "", userId });
+            }
+          }
+        }
+      }
+      const wf = await storage.updateRecordedWorkflow(id, userId, updateData);
+      if (!wf) return res.status(404).json({ error: "Not found" });
+      res.json(wf);
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  app.delete("/api/workflows/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      await storage.deleteRecordedWorkflow(parseInt(req.params.id), userId);
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // DAILY PLANNER
+  // ══════════════════════════════════════════════════════════════════════════
+  app.get("/api/planner/today", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const today = new Date().toISOString().slice(0, 10);
+      const plan = await storage.getDailyPlan(userId, today);
+      res.json(plan ?? null);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/planner/generate", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const today = new Date().toISOString().slice(0, 10);
+      const userTasks = await db.select().from(tasks).where(and(eq(tasks.userId, userId))).orderBy(desc(tasks.id)).limit(20);
+      const basePlan = { blocks: userTasks.slice(0, 8).map((t, i) => ({ id: `t${t.id}`, startTime: `${9 + i}:00`, durationMinutes: 45, title: t.title, type: "task", priority: t.priority ?? "Should Do", linkedTaskId: t.id })), reasoning: "AI-generated based on your tasks" };
+      const aiOptimized = await callAI(`Optimize this daily schedule: ${JSON.stringify(basePlan.blocks.map(b => b.title))}. Return a brief reason for the order.`);
+      const generatedPlan = { ...basePlan, reasoning: aiOptimized || basePlan.reasoning };
+      const plan = await storage.createDailyPlan({ userId, date: today, status: "active", generatedPlan, userModifications: {} });
+      res.status(201).json(plan);
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  app.put("/api/planner/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const { action, completedBlockId, ...data } = req.body;
+      let updateData: any = data;
+      if (action === "block_done" && completedBlockId) {
+        const taskIdMatch = String(completedBlockId).match(/^t(\d+)$/);
+        if (taskIdMatch) {
+          await db.update(tasks).set({ completionPercentage: 100 }).where(eq(tasks.id, parseInt(taskIdMatch[1])));
+        }
+      }
+      const plan = await storage.updateDailyPlan(id, userId, updateData);
+      if (!plan) return res.status(404).json({ error: "Not found" });
+      res.json(plan);
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // DOCUMENT TEMPLATES + GENERATION
+  // ══════════════════════════════════════════════════════════════════════════
+  app.get("/api/templates", isAuthenticated, async (_req: any, res) => {
+    try {
+      const templates = await storage.getDocumentTemplates();
+      res.json(templates);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/templates", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const tmpl = await storage.createDocumentTemplate({ ...req.body, createdBy: userId, isBuiltIn: false });
+      res.status(201).json(tmpl);
+    } catch (e: any) { res.status(400).json({ error: e.message }); }
+  });
+
+  app.put("/api/templates/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.updateDocumentTemplate(parseInt(req.params.id), req.body);
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete("/api/templates/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteDocumentTemplate(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/documents/generate", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { templateId, config, sections } = req.body;
+      const startMs = Date.now();
+      const generatedSections: any[] = [];
+      const userTasks = await db.select().from(tasks).where(eq(tasks.userId, userId)).limit(20);
+      const userNotes = await db.select().from(notes).where(eq(notes.userId, userId)).limit(10);
+      for (const section of (sections ?? [])) {
+        let content = "";
+        if (section.type === "ai_generated") {
+          content = await callAI(`${section.aiPrompt ?? section.title}. Context: ${JSON.stringify({ tasks: userTasks.map((t: any) => t.title), notes: userNotes.map((n: any) => n.content?.slice(0, 100)) })}`);
+        } else if (section.type === "data_query") {
+          if (section.dataQuery === "tasks") content = userTasks.map((t: any) => `- ${t.title} (${t.completionPercentage ?? 0}% done)`).join("\n");
+          else if (section.dataQuery === "notes") content = userNotes.map((n: any) => n.content?.slice(0, 200)).filter(Boolean).join("\n\n");
+          else content = "No data available.";
+        } else if (section.type === "static_text") {
+          content = section.content ?? "";
+        } else {
+          content = "";
+        }
+        generatedSections.push({ title: section.title, content });
+      }
+      const markdownContent = generatedSections.map(s => `## ${s.title}\n\n${s.content}`).join("\n\n---\n\n");
+      const note = await storage.createNote({ title: `Generated Document – ${new Date().toLocaleDateString()}`, content: markdownContent, userId });
+      const genDoc = await storage.createGeneratedDocument({ templateId: templateId ?? null, userId, noteId: note.id, generationConfig: config ?? {}, dataSources: {}, status: "completed", generationTimeMs: Date.now() - startMs });
+      if (templateId) await storage.updateDocumentTemplate(templateId, { usageCount: undefined });
+      res.json({ document: genDoc, note, sections: generatedSections });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // BACKGROUND CRON JOBS
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // Pattern detection — every 6 hours
+  cron.schedule("0 */6 * * *", async () => {
+    try {
+      const allUsers = await db.selectDistinct({ userId: autopilotActivityLog.userId }).from(autopilotActivityLog);
+      for (const { userId } of allUsers) {
+        const logs = await storage.getActivityLogs(userId, 14);
+        if (logs.length < 50) continue;
+        const eventCounts = new Map<string, number>();
+        for (const log of logs) {
+          const key = `${log.dayOfWeek}:${log.hourOfDay}:${log.eventType}`;
+          eventCounts.set(key, (eventCounts.get(key) ?? 0) + 1);
+        }
+        for (const [key, freq] of eventCounts.entries()) {
+          if (freq >= 3) {
+            const [dayOfWeek, hourOfDay, eventType] = key.split(":");
+            const confidence = Math.min(0.95, 0.5 + freq * 0.05);
+            if (confidence > 0.75) {
+              await storage.createAutopilotPattern({
+                userId, patternType: "time_based", description: `Recurring "${eventType}" on day ${dayOfWeek} at hour ${hourOfDay}`,
+                eventSequence: [{ dayOfWeek, hourOfDay, eventType }], frequency: freq, confidence,
+                suggestedRule: { name: `Auto: ${eventType}`, triggerType: "time", triggerConfig: { dayOfWeek, hourOfDay }, actions: [], executionMode: "suggest" },
+                status: "detected", detectedAt: new Date(), lastOccurredAt: new Date(),
+              });
+            }
+          }
+        }
+      }
+    } catch {}
+  }, { timezone: "UTC" });
+
+  // Sequence learning — nightly 2AM UTC
+  cron.schedule("0 2 * * *", async () => {
+    try {
+      const allUsers = await db.selectDistinct({ userId: tasks.userId }).from(tasks);
+      for (const { userId } of allUsers) {
+        const completed = await db.select().from(tasks).where(and(eq(tasks.userId, userId), eq(tasks.completionPercentage, 100))).orderBy(asc(tasks.id)).limit(200);
+        if (completed.length < 5) continue;
+        const pairCounts = new Map<string, number>();
+        for (let i = 0; i < completed.length - 1; i++) {
+          const key = `${completed[i].title}|||${completed[i + 1].title}`;
+          pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
+        }
+        for (const [pair, count] of pairCounts.entries()) {
+          if (count >= 2) {
+            const [preceding, following] = pair.split("|||");
+            const confidence = Math.min(0.95, 0.4 + count * 0.1);
+            await storage.upsertTaskSequence({ userId, precedingTaskPattern: { titlePattern: preceding }, followingTaskPattern: { titlePattern: following }, occurrences: count, confidence, lastObservedAt: new Date(), isActive: true });
+          }
+        }
+      }
+    } catch {}
+  }, { timezone: "UTC" });
+
+  // Weekly analysis + coaching — Sunday 8PM UTC
+  cron.schedule("0 20 * * 0", async () => {
+    try {
+      const allUsers = await db.selectDistinct({ userId: workSessions.userId }).from(workSessions);
+      for (const { userId } of allUsers) {
+        const sessions = await storage.getWorkSessions(userId, 7);
+        if (sessions.length === 0) continue;
+        const totalActive = sessions.reduce((s, sess) => s + (sess.totalActiveMinutes ?? 0), 0);
+        await storage.createWorkPattern({ userId, patternType: "weekly_summary", data: { totalActiveMins: totalActive, sessionCount: sessions.length }, analysisDate: new Date(), periodDays: 7 });
+        const coaching = await callAI(`Based on ${totalActive} active minutes across ${sessions.length} sessions, give one actionable productivity tip in 1-2 sentences.`);
+        if (coaching) {
+          await storage.createCoachingMessage({ userId, type: "weekly_insight", title: "Weekly Productivity Insight", content: coaching, actionable: false, priority: "medium" });
+        }
+      }
+    } catch {}
+  }, { timezone: "UTC" });
+
+  // Monthly analysis — 1st of month at midnight UTC
+  cron.schedule("0 0 1 * *", async () => {
+    try {
+      const allUsers = await db.selectDistinct({ userId: workSessions.userId }).from(workSessions);
+      for (const { userId } of allUsers) {
+        const sessions = await storage.getWorkSessions(userId, 30);
+        if (sessions.length === 0) continue;
+        const totalActive = sessions.reduce((s, sess) => s + (sess.totalActiveMinutes ?? 0), 0);
+        await storage.createWorkPattern({ userId, patternType: "monthly_summary", data: { totalActiveMins: totalActive, sessionCount: sessions.length }, analysisDate: new Date(), periodDays: 30 });
+      }
+    } catch {}
+  }, { timezone: "UTC" });
+
+  // End-of-day work session summary — 6PM UTC
+  cron.schedule("0 18 * * *", async () => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const allUsers = await db.selectDistinct({ userId: autopilotActivityLog.userId }).from(autopilotActivityLog);
+      for (const { userId } of allUsers) {
+        const logs = await storage.getActivityLogs(userId, 1);
+        if (logs.length === 0) continue;
+        const activeMinutes = Math.round(logs.length * 2);
+        const summary = await callAI(`Analyze this work day summary: ${logs.length} logged activities. Provide: 1 sentence narrative, 2 insights, 1 recommendation. Be brief.`);
+        await storage.saveWorkSession({ userId, date: today, startTime: new Date(new Date().setHours(9, 0, 0, 0)), totalActiveMinutes: activeMinutes, totalIdleMinutes: Math.max(0, 480 - activeMinutes), activities: logs.slice(0, 20), summary: { narrative: summary, insights: [], recommendations: [], score: Math.min(100, Math.round(activeMinutes / 4.8)) } });
+      }
+    } catch {}
+  }, { timezone: "UTC" });
+
+  // Daily plan auto-generation — 7AM UTC
+  cron.schedule("0 7 * * *", async () => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const allUsers = await db.selectDistinct({ userId: tasks.userId }).from(tasks);
+      for (const { userId } of allUsers) {
+        const existing = await storage.getDailyPlan(userId, today);
+        if (existing) continue;
+        const settings = await storage.getAutopilotSettings(userId) as any;
+        if (!settings?.autoGeneratePlan) continue;
+        const userTasks = await db.select().from(tasks).where(eq(tasks.userId, userId)).limit(10);
+        const blocks = userTasks.map((t, i) => ({ id: `t${t.id}`, startTime: `${9 + i}:00`, durationMinutes: 45, title: t.title, type: "task", linkedTaskId: t.id }));
+        await storage.createDailyPlan({ userId, date: today, status: "active", generatedPlan: { blocks, reasoning: "Auto-generated" }, userModifications: {} });
+      }
+    } catch {}
+  }, { timezone: "UTC" });
+
+  // Skill detection — Sunday midnight UTC
+  cron.schedule("0 0 * * 0", async () => {
+    try {
+      const allUsers = await db.selectDistinct({ userId: tasks.userId }).from(tasks);
+      const SKILL_KEYWORDS: Record<string, string[]> = {
+        "JavaScript": ["javascript", "js", "react", "vue", "angular", "node"],
+        "TypeScript": ["typescript", "ts", "type"],
+        "Python": ["python", "django", "flask", "fastapi"],
+        "Database": ["sql", "database", "postgres", "mysql", "query", "schema"],
+        "Design": ["design", "ui", "ux", "figma", "mockup", "wireframe"],
+        "Writing": ["write", "blog", "article", "content", "copy", "email"],
+        "Planning": ["plan", "strategy", "roadmap", "goals", "okr"],
+        "Research": ["research", "analyze", "investigate", "study", "review"],
+        "Management": ["manage", "delegate", "coordinate", "lead", "meeting"],
+        "Marketing": ["marketing", "seo", "ads", "campaign", "growth"],
+      };
+      for (const { userId } of allUsers) {
+        const userTasks = await db.select().from(tasks).where(and(eq(tasks.userId, userId), eq(tasks.completionPercentage, 100))).limit(100);
+        const detectedSkills: string[] = [];
+        for (const [skill, keywords] of Object.entries(SKILL_KEYWORDS)) {
+          const matchCount = userTasks.filter(t => keywords.some(kw => t.title?.toLowerCase().includes(kw))).length;
+          if (matchCount >= 3) detectedSkills.push(skill);
+        }
+        if (detectedSkills.length > 0) {
+          await storage.upsertTeamMemberProfile({ userId, skills: detectedSkills, domains: detectedSkills.slice(0, 3), currentWorkload: {}, availability: { available: true }, preferences: {}, performanceMetrics: {}, lastProfileUpdateAt: new Date() });
+        }
+      }
+    } catch {}
+  }, { timezone: "UTC" });
+
+  // Cleanup expired predictions — midnight
+  cron.schedule("0 0 * * *", async () => {
+    try {
+      await db.update(taskPredictions).set({ status: "expired" }).where(and(eq(taskPredictions.status, "predicted"), lte(taskPredictions.expiresAt, new Date())));
+    } catch {}
+  }, { timezone: "UTC" });
+
+  // Profile update — every 6 hours
+  cron.schedule("0 */6 * * *", async () => {
+    try {
+      const allUsers = await db.selectDistinct({ userId: tasks.userId }).from(tasks);
+      for (const { userId } of allUsers) {
+        const userTasks = await db.select().from(tasks).where(eq(tasks.userId, userId));
+        const completed = userTasks.filter(t => (t.completionPercentage ?? 0) >= 100);
+        const overdue = userTasks.filter(t => (t.completionPercentage ?? 0) < 100 && t.date && new Date(t.date) < new Date());
+        const completionRate = userTasks.length > 0 ? completed.length / userTasks.length : 0;
+        await storage.upsertTeamMemberProfile({ userId, skills: [], domains: [], currentWorkload: { total: userTasks.length, overdue: overdue.length }, availability: { available: true }, preferences: {}, performanceMetrics: { completionRate, totalCompleted: completed.length }, lastProfileUpdateAt: new Date() });
+      }
+    } catch {}
   });
 
   return httpServer;
