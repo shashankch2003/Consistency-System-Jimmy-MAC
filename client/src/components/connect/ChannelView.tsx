@@ -1,13 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Hash, Lock, Settings, Users, Search, Bell, Pin, Bookmark } from "lucide-react";
+import { Hash, Lock, Settings, Users, Search, Bell, Pin } from "lucide-react";
 import MessageList from "./MessageList";
 import MessageComposer from "./MessageComposer";
-import { useSocket } from "@/hooks/use-socket";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { cn } from "@/lib/utils";
-import { nanoid } from "nanoid";
 
 interface Channel {
   id: string;
@@ -26,53 +23,60 @@ interface ChannelViewProps {
   workspaceId?: number;
 }
 
-const channelTypeIcon = (type: string) => {
-  if (type === "private") return <Lock className="w-4 h-4" />;
-  return <Hash className="w-4 h-4" />;
-};
+const channelTypeIcon = (type: string) =>
+  type === "private" ? <Lock className="w-4 h-4" /> : <Hash className="w-4 h-4" />;
 
 export default function ChannelView({ channelId, currentUserId, currentUserName, workspaceId }: ChannelViewProps) {
   const { toast } = useToast();
-  const [typingUsers, setTypingUsers] = useState<{ userId: string; userName: string }[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
 
-  const { data: channel } = useQuery<Channel>({
-    queryKey: ["/api/connect/channels", channelId],
+  const { data: channelData } = useQuery<{ channel: Channel }[]>({
+    queryKey: ["/api/channels/my"],
     queryFn: async () => {
-      const res = await fetch(`/api/connect/channels?workspaceId=${workspaceId || ""}`, { credentials: "include" });
-      if (!res.ok) return null;
-      const channels = await res.json();
-      return channels.find((c: Channel) => c.id === channelId) || null;
+      const res = await fetch("/api/channels/my", { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
     },
-    enabled: !!channelId,
+  });
+  const channel = channelData?.find(m => m.channel.id === channelId)?.channel;
+
+  const { data: typingUsers = [] } = useQuery<{ userId: string; userName: string }[]>({
+    queryKey: ["/api/typing", channelId],
+    queryFn: async () => {
+      const res = await fetch(`/api/typing/${channelId}`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    refetchInterval: 2000,
   });
 
-  const { sendMessage, editMessage, deleteMessage, startTyping, stopTyping, markRead, addReaction, getSocket } = useSocket(
-    currentUserId,
-    currentUserName,
-    workspaceId ? String(workspaceId) : undefined
-  );
+  const sendMutation = useMutation({
+    mutationFn: (content: string) =>
+      apiRequest("POST", "/api/messages", { channelId, content }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/messages", channelId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/channels/my"] });
+    },
+    onError: (e: any) => toast({ title: "Error sending message", description: e.message, variant: "destructive" }),
+  });
 
-  useEffect(() => {
-    const socket = getSocket();
-    if (!socket) return;
+  const editMutation = useMutation({
+    mutationFn: ({ messageId, content }: { messageId: string; content: string }) =>
+      apiRequest("PATCH", `/api/messages/${messageId}`, { content }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/messages", channelId] });
+      setEditingId(null);
+      setEditContent("");
+    },
+    onError: (e: any) => toast({ title: "Error editing message", description: e.message, variant: "destructive" }),
+  });
 
-    const handleTyping = (data: any) => {
-      if (data.channelId !== channelId || data.userId === currentUserId) return;
-      if (data.isTyping) {
-        setTypingUsers(prev => {
-          if (prev.find(u => u.userId === data.userId)) return prev;
-          return [...prev, { userId: data.userId, userName: data.userName || data.userId }];
-        });
-      } else {
-        setTypingUsers(prev => prev.filter(u => u.userId !== data.userId));
-      }
-    };
-
-    socket.on("typing", handleTyping);
-    return () => {
-      socket.off("typing", handleTyping);
-    };
-  }, [channelId, currentUserId, getSocket]);
+  const deleteMutation = useMutation({
+    mutationFn: (messageId: string) => apiRequest("DELETE", `/api/messages/${messageId}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/messages", channelId] }),
+    onError: (e: any) => toast({ title: "Error deleting message", description: e.message, variant: "destructive" }),
+  });
 
   const pinMutation = useMutation({
     mutationFn: (messageId: string) => apiRequest("POST", "/api/messages/pin", { messageId, channelId }),
@@ -87,32 +91,46 @@ export default function ChannelView({ channelId, currentUserId, currentUserName,
     onSuccess: () => toast({ title: "Message bookmarked" }),
   });
 
-  const handleSend = (content: string) => {
-    sendMessage({
-      channelId,
-      content,
-      tempId: nanoid(),
-    });
+  const handleTypingStart = async () => {
+    try {
+      await fetch("/api/typing/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ channelId, userName: currentUserName }),
+      });
+    } catch {}
   };
 
-  const handleTypingStart = () => startTyping(channelId);
-  const handleTypingStop = () => stopTyping(channelId);
-
-  const handleEditMessage = (messageId: string, content: string) => {
-    const newContent = window.prompt("Edit message:", content);
-    if (newContent && newContent !== content) {
-      editMessage({ messageId, content: newContent });
-    }
+  const handleTypingStop = async () => {
+    try {
+      await fetch("/api/typing/stop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ channelId }),
+      });
+    } catch {}
   };
 
-  const handleDeleteMessage = (messageId: string) => {
+  const handleEditStart = (messageId: string, content: string) => {
+    setEditingId(messageId);
+    setEditContent(content);
+  };
+
+  const handleEditSubmit = (messageId: string, content: string) => {
+    editMutation.mutate({ messageId, content });
+  };
+
+  const handleEditCancel = () => {
+    setEditingId(null);
+    setEditContent("");
+  };
+
+  const handleDelete = (messageId: string) => {
     if (window.confirm("Delete this message?")) {
-      deleteMessage({ messageId });
+      deleteMutation.mutate(messageId);
     }
-  };
-
-  const handleAddReaction = (messageId: string, emoji: string) => {
-    addReaction(messageId, emoji, channelId);
   };
 
   return (
@@ -151,20 +169,25 @@ export default function ChannelView({ channelId, currentUserId, currentUserName,
       <MessageList
         channelId={channelId}
         currentUserId={currentUserId}
-        onEditMessage={handleEditMessage}
-        onDeleteMessage={handleDeleteMessage}
-        onPinMessage={id => pinMutation.mutate(id)}
-        onBookmarkMessage={id => bookmarkMutation.mutate(id)}
-        onAddReaction={handleAddReaction}
+        editingId={editingId}
+        editContent={editContent}
+        onEditContentChange={setEditContent}
+        onEditStart={handleEditStart}
+        onEditSubmit={handleEditSubmit}
+        onEditCancel={handleEditCancel}
+        onDelete={handleDelete}
+        onPin={id => pinMutation.mutate(id)}
+        onBookmark={id => bookmarkMutation.mutate(id)}
         typingUsers={typingUsers}
       />
 
       <div className="px-4 pb-4 shrink-0">
         <MessageComposer
-          onSend={handleSend}
+          onSend={content => sendMutation.mutate(content)}
           onTypingStart={handleTypingStart}
           onTypingStop={handleTypingStop}
           placeholder={`Message #${channel?.displayName || "channel"}`}
+          disabled={sendMutation.isPending}
         />
       </div>
     </div>

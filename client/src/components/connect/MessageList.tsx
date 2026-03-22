@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, isToday, isYesterday, differenceInMinutes } from "date-fns";
-import { MoreHorizontal, Smile, Reply, Bookmark, Pin, Edit2, Trash2 } from "lucide-react";
+import { Smile, Reply, Bookmark, Pin, Edit2, Trash2, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface Message {
@@ -12,6 +11,7 @@ interface Message {
   authorId: string;
   content: string;
   contentHtml?: string;
+  type: string;
   isEdited: boolean;
   isPinned: boolean;
   threadReplyCount: number;
@@ -20,16 +20,20 @@ interface Message {
   createdAt: string;
   updatedAt: string;
   deletedAt?: string;
-  authorName?: string;
 }
 
 interface MessageListProps {
   channelId: string;
   currentUserId: string;
-  onEditMessage?: (messageId: string, content: string) => void;
-  onDeleteMessage?: (messageId: string) => void;
-  onPinMessage?: (messageId: string) => void;
-  onBookmarkMessage?: (messageId: string) => void;
+  editingId?: string | null;
+  editContent?: string;
+  onEditContentChange?: (val: string) => void;
+  onEditStart?: (messageId: string, content: string) => void;
+  onEditSubmit?: (messageId: string, content: string) => void;
+  onEditCancel?: () => void;
+  onDelete?: (messageId: string) => void;
+  onPin?: (messageId: string) => void;
+  onBookmark?: (messageId: string) => void;
   onAddReaction?: (messageId: string, emoji: string) => void;
   onOpenThread?: (messageId: string) => void;
   typingUsers?: { userId: string; userName: string }[];
@@ -48,8 +52,8 @@ function formatTime(dateStr: string): string {
 
 function shouldGroupMessage(prev: Message, curr: Message): boolean {
   if (prev.authorId !== curr.authorId) return false;
-  const diff = differenceInMinutes(new Date(curr.createdAt), new Date(prev.createdAt));
-  return diff < 5;
+  if (prev.type === "system" || curr.type === "system") return false;
+  return differenceInMinutes(new Date(curr.createdAt), new Date(prev.createdAt)) < 5;
 }
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "🎉", "🙌", "👀"];
@@ -58,6 +62,11 @@ function MessageItem({
   message,
   isGrouped,
   currentUserId,
+  isEditing,
+  editContent,
+  onEditContentChange,
+  onEditSubmit,
+  onEditCancel,
   onEdit,
   onDelete,
   onPin,
@@ -68,6 +77,11 @@ function MessageItem({
   message: Message;
   isGrouped: boolean;
   currentUserId: string;
+  isEditing: boolean;
+  editContent: string;
+  onEditContentChange: (v: string) => void;
+  onEditSubmit: (id: string, c: string) => void;
+  onEditCancel: () => void;
   onEdit?: (id: string, c: string) => void;
   onDelete?: (id: string) => void;
   onPin?: (id: string) => void;
@@ -78,15 +92,34 @@ function MessageItem({
   const [hovered, setHovered] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const isOwn = message.authorId === currentUserId;
-  const displayName = message.authorName || message.authorId.slice(0, 8);
-  const initials = displayName.slice(0, 2).toUpperCase();
+  const isSystem = message.type === "system";
+  const displayName = message.authorId.slice(0, 8);
+
+  if (message.deletedAt) {
+    return (
+      <div className={cn("flex gap-3 px-4", isGrouped ? "py-0.5" : "pt-3 pb-0.5")}>
+        <div className="w-9 shrink-0" />
+        <span className="text-xs text-white/20 italic">This message was deleted</span>
+      </div>
+    );
+  }
+
+  if (isSystem) {
+    return (
+      <div className="flex items-center gap-3 px-4 py-1.5">
+        <div className="flex-1 h-px bg-white/[0.04]" />
+        <span className="text-xs text-white/25">{message.content}</span>
+        <div className="flex-1 h-px bg-white/[0.04]" />
+      </div>
+    );
+  }
 
   return (
     <div
       className={cn(
         "group relative flex gap-3 px-4 rounded-lg transition-colors",
         isGrouped ? "py-0.5" : "pt-3 pb-0.5",
-        hovered && "bg-white/[0.025]"
+        hovered && !isEditing && "bg-white/[0.025]"
       )}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => { setHovered(false); setShowEmoji(false); }}
@@ -94,7 +127,7 @@ function MessageItem({
     >
       {!isGrouped ? (
         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-500 to-blue-500 flex items-center justify-center text-xs font-bold text-white shrink-0 mt-0.5">
-          {initials}
+          {displayName.slice(0, 2).toUpperCase()}
         </div>
       ) : (
         <div className="w-9 shrink-0" />
@@ -105,32 +138,57 @@ function MessageItem({
           <div className="flex items-baseline gap-2 mb-0.5">
             <span className="text-sm font-semibold text-white">{displayName}</span>
             <span className="text-xs text-white/30">{formatTime(message.createdAt)}</span>
-            {message.isPinned && <span className="text-xs text-yellow-400/70">📌 pinned</span>}
+            {message.isPinned && <span className="text-xs text-yellow-400/70">📌</span>}
           </div>
         )}
-        <div className={cn("text-sm text-white/80 leading-relaxed break-words", isGrouped && "relative")}>
-          {message.content}
-          {message.isEdited && (
-            <span className="text-xs text-white/30 ml-1">(edited)</span>
-          )}
-        </div>
 
-        {message.threadReplyCount > 0 && (
-          <button
-            onClick={() => onThread?.(message.id)}
-            className="mt-1 flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 transition-colors"
-            data-testid={`button-open-thread-${message.id}`}
-          >
-            <Reply className="w-3 h-3" />
-            {message.threadReplyCount} {message.threadReplyCount === 1 ? "reply" : "replies"}
-            {message.threadLastReplyAt && (
-              <span className="text-white/30">· Last reply {formatTime(message.threadLastReplyAt)}</span>
+        {isEditing ? (
+          <div className="space-y-2">
+            <textarea
+              value={editContent}
+              onChange={e => onEditContentChange(e.target.value)}
+              className="w-full bg-white/[0.06] border border-violet-500/30 rounded-lg px-3 py-2 text-sm text-white resize-none outline-none focus:border-violet-500/60"
+              rows={3}
+              onKeyDown={e => {
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onEditSubmit(message.id, editContent); }
+                if (e.key === "Escape") onEditCancel();
+              }}
+              autoFocus
+              data-testid={`input-edit-message-${message.id}`}
+            />
+            <div className="flex items-center gap-2 text-xs">
+              <button onClick={() => onEditSubmit(message.id, editContent)} className="flex items-center gap-1 px-2 py-1 bg-violet-600 text-white rounded hover:bg-violet-700 transition-colors" data-testid={`button-save-edit-${message.id}`}>
+                <Check className="w-3 h-3" /> Save
+              </button>
+              <button onClick={onEditCancel} className="flex items-center gap-1 px-2 py-1 text-white/50 hover:text-white transition-colors" data-testid={`button-cancel-edit-${message.id}`}>
+                <X className="w-3 h-3" /> Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="text-sm text-white/80 leading-relaxed break-words whitespace-pre-wrap">
+              {message.content}
+              {message.isEdited && <span className="text-xs text-white/30 ml-1">(edited)</span>}
+            </div>
+            {message.threadReplyCount > 0 && (
+              <button
+                onClick={() => onThread?.(message.id)}
+                className="mt-1 flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 transition-colors"
+                data-testid={`button-open-thread-${message.id}`}
+              >
+                <Reply className="w-3 h-3" />
+                {message.threadReplyCount} {message.threadReplyCount === 1 ? "reply" : "replies"}
+                {message.threadLastReplyAt && (
+                  <span className="text-white/30">· Last reply {formatTime(message.threadLastReplyAt)}</span>
+                )}
+              </button>
             )}
-          </button>
+          </>
         )}
       </div>
 
-      {hovered && (
+      {hovered && !isEditing && (
         <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-[#1e2230] border border-white/10 rounded-lg shadow-xl px-1 py-0.5 z-10">
           {showEmoji ? (
             <div className="flex items-center gap-0.5">
@@ -147,62 +205,60 @@ function MessageItem({
               <button onClick={() => setShowEmoji(false)} className="w-5 h-5 flex items-center justify-center text-white/30 hover:text-white transition-colors text-xs">✕</button>
             </div>
           ) : (
-            <>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button onClick={() => setShowEmoji(true)} className="p-1.5 rounded text-white/40 hover:text-white hover:bg-white/[0.08] transition-colors" data-testid={`button-add-reaction-${message.id}`}>
-                      <Smile className="w-4 h-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs">React</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button onClick={() => onThread?.(message.id)} className="p-1.5 rounded text-white/40 hover:text-white hover:bg-white/[0.08] transition-colors" data-testid={`button-reply-thread-${message.id}`}>
-                      <Reply className="w-4 h-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs">Reply in thread</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button onClick={() => onBookmark?.(message.id)} className="p-1.5 rounded text-white/40 hover:text-white hover:bg-white/[0.08] transition-colors" data-testid={`button-bookmark-${message.id}`}>
-                      <Bookmark className="w-4 h-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs">Bookmark</TooltipContent>
-                </Tooltip>
-                {isOwn && (
-                  <>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button onClick={() => onEdit?.(message.id, message.content)} className="p-1.5 rounded text-white/40 hover:text-white hover:bg-white/[0.08] transition-colors" data-testid={`button-edit-${message.id}`}>
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="text-xs">Edit</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button onClick={() => onDelete?.(message.id)} className="p-1.5 rounded text-white/40 hover:text-red-400 hover:bg-red-500/[0.08] transition-colors" data-testid={`button-delete-${message.id}`}>
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="text-xs">Delete</TooltipContent>
-                    </Tooltip>
-                  </>
-                )}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button onClick={() => onPin?.(message.id)} className="p-1.5 rounded text-white/40 hover:text-white hover:bg-white/[0.08] transition-colors" data-testid={`button-pin-${message.id}`}>
-                      <Pin className="w-4 h-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs">Pin message</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button onClick={() => setShowEmoji(true)} className="p-1.5 rounded text-white/40 hover:text-white hover:bg-white/[0.08] transition-colors" data-testid={`button-add-reaction-${message.id}`}>
+                    <Smile className="w-4 h-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">React</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button onClick={() => onThread?.(message.id)} className="p-1.5 rounded text-white/40 hover:text-white hover:bg-white/[0.08] transition-colors" data-testid={`button-reply-thread-${message.id}`}>
+                    <Reply className="w-4 h-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">Reply in thread</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button onClick={() => onBookmark?.(message.id)} className="p-1.5 rounded text-white/40 hover:text-white hover:bg-white/[0.08] transition-colors" data-testid={`button-bookmark-${message.id}`}>
+                    <Bookmark className="w-4 h-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">Bookmark</TooltipContent>
+              </Tooltip>
+              {isOwn && (
+                <>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button onClick={() => onEdit?.(message.id, message.content)} className="p-1.5 rounded text-white/40 hover:text-white hover:bg-white/[0.08] transition-colors" data-testid={`button-edit-${message.id}`}>
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">Edit</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button onClick={() => onDelete?.(message.id)} className="p-1.5 rounded text-white/40 hover:text-red-400 hover:bg-red-500/[0.08] transition-colors" data-testid={`button-delete-${message.id}`}>
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">Delete</TooltipContent>
+                  </Tooltip>
+                </>
+              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button onClick={() => onPin?.(message.id)} className="p-1.5 rounded text-white/40 hover:text-white hover:bg-white/[0.08] transition-colors" data-testid={`button-pin-${message.id}`}>
+                    <Pin className="w-4 h-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">Pin message</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
       )}
@@ -213,10 +269,15 @@ function MessageItem({
 export default function MessageList({
   channelId,
   currentUserId,
-  onEditMessage,
-  onDeleteMessage,
-  onPinMessage,
-  onBookmarkMessage,
+  editingId,
+  editContent = "",
+  onEditContentChange,
+  onEditStart,
+  onEditSubmit,
+  onEditCancel,
+  onDelete,
+  onPin,
+  onBookmark,
   onAddReaction,
   onOpenThread,
   typingUsers = [],
@@ -224,6 +285,7 @@ export default function MessageList({
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const prevLengthRef = useRef(0);
 
   const { data, isLoading } = useQuery<{ messages: Message[]; hasMore: boolean }>({
     queryKey: ["/api/messages", channelId],
@@ -233,23 +295,27 @@ export default function MessageList({
       return res.json();
     },
     enabled: !!channelId,
-    refetchInterval: false,
+    refetchInterval: 3000,
     staleTime: 0,
   });
 
   const messages = data?.messages || [];
 
   useEffect(() => {
-    if (isAtBottom) {
+    if (messages.length > prevLengthRef.current && isAtBottom) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
+    prevLengthRef.current = messages.length;
   }, [messages.length, isAtBottom]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "instant" });
+  }, [channelId]);
 
   const handleScroll = () => {
     const el = containerRef.current;
     if (!el) return;
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
-    setIsAtBottom(atBottom);
+    setIsAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 80);
   };
 
   if (isLoading) {
@@ -260,17 +326,17 @@ export default function MessageList({
     );
   }
 
-  const groupedMessages: { message: Message; isGrouped: boolean; showDivider?: string }[] = [];
+  const grouped: { message: Message; isGrouped: boolean; showDivider?: string }[] = [];
   let lastDate = "";
-  let lastMessage: Message | null = null;
+  let lastMsg: Message | null = null;
 
   for (const msg of messages) {
     const dateKey = format(new Date(msg.createdAt), "yyyy-MM-dd");
     const showDivider = dateKey !== lastDate ? formatDateDivider(msg.createdAt) : undefined;
-    const isGrouped = !showDivider && !!lastMessage && shouldGroupMessage(lastMessage, msg);
-    groupedMessages.push({ message: msg, isGrouped, showDivider });
+    const isGrouped = !showDivider && !!lastMsg && shouldGroupMessage(lastMsg, msg);
+    grouped.push({ message: msg, isGrouped, showDivider });
     lastDate = dateKey;
-    lastMessage = msg;
+    lastMsg = msg;
   }
 
   return (
@@ -291,7 +357,7 @@ export default function MessageList({
         </div>
       )}
 
-      {groupedMessages.map(({ message, isGrouped, showDivider }) => (
+      {grouped.map(({ message, isGrouped, showDivider }) => (
         <div key={message.id}>
           {showDivider && (
             <div className="flex items-center gap-3 px-4 my-4">
@@ -304,10 +370,15 @@ export default function MessageList({
             message={message}
             isGrouped={isGrouped}
             currentUserId={currentUserId}
-            onEdit={onEditMessage}
-            onDelete={onDeleteMessage}
-            onPin={onPinMessage}
-            onBookmark={onBookmarkMessage}
+            isEditing={editingId === message.id}
+            editContent={editContent}
+            onEditContentChange={onEditContentChange || (() => {})}
+            onEditSubmit={onEditSubmit || (() => {})}
+            onEditCancel={onEditCancel || (() => {})}
+            onEdit={onEditStart}
+            onDelete={onDelete}
+            onPin={onPin}
+            onBookmark={onBookmark}
             onReaction={onAddReaction}
             onThread={onOpenThread}
           />

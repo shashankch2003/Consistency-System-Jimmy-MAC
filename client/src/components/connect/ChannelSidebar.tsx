@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Hash, Lock, Megaphone, Users, MessageSquare, Plus, ChevronDown, ChevronRight, Search, Settings } from "lucide-react";
+import { Hash, Lock, Megaphone, Users, MessageSquare, Plus, ChevronDown, ChevronRight, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -8,15 +8,31 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 
-interface Channel {
-  id: string;
-  name: string;
-  displayName: string;
-  type: string;
-  icon?: string;
-  isDefault: boolean;
-  lastMessagePreview?: string;
-  lastMessageAt?: string;
+interface ChannelMembership {
+  channel: {
+    id: string;
+    name: string;
+    displayName: string;
+    type: string;
+    icon?: string;
+    lastMessageAt?: string;
+    lastMessagePreview?: string;
+  };
+  isStarred: boolean;
+  isMuted: boolean;
+  role: string;
+}
+
+interface ConversationMembership {
+  conversation: {
+    id: string;
+    type: string;
+    name?: string;
+    participantIds: string[];
+    lastMessageAt?: string;
+    lastMessagePreview?: string;
+  };
+  isMuted: boolean;
 }
 
 interface ChannelSidebarProps {
@@ -44,29 +60,30 @@ export default function ChannelSidebar({ workspaceId, activeChannelId, activeDmI
   const [newChannelName, setNewChannelName] = useState("");
   const [newChannelDesc, setNewChannelDesc] = useState("");
 
-  const { data: channels = [] } = useQuery<Channel[]>({
-    queryKey: ["/api/connect/channels", workspaceId],
+  const { data: memberships = [] } = useQuery<ChannelMembership[]>({
+    queryKey: ["/api/channels/my"],
     queryFn: async () => {
-      const url = workspaceId ? `/api/connect/channels?workspaceId=${workspaceId}` : "/api/connect/channels";
-      const res = await fetch(url, { credentials: "include" });
+      const res = await fetch("/api/channels/my", { credentials: "include" });
       if (!res.ok) return [];
       return res.json();
     },
+    refetchInterval: 10000,
   });
 
-  const { data: conversations = [] } = useQuery<any[]>({
-    queryKey: ["/api/connect/conversations"],
+  const { data: conversationMemberships = [] } = useQuery<ConversationMembership[]>({
+    queryKey: ["/api/conversations"],
     queryFn: async () => {
-      const res = await fetch("/api/connect/conversations", { credentials: "include" });
+      const res = await fetch("/api/conversations", { credentials: "include" });
       if (!res.ok) return [];
       return res.json();
     },
+    refetchInterval: 10000,
   });
 
   const createChannelMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/connect/channels", data),
+    mutationFn: (data: any) => apiRequest("POST", "/api/channels", data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/connect/channels"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/channels/my"] });
       setNewChannelOpen(false);
       setNewChannelName("");
       setNewChannelDesc("");
@@ -78,7 +95,7 @@ export default function ChannelSidebar({ workspaceId, activeChannelId, activeDmI
   const handleCreateChannel = () => {
     if (!newChannelName.trim()) return;
     createChannelMutation.mutate({
-      name: newChannelName.toLowerCase().replace(/\s+/g, "-"),
+      name: newChannelName.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-"),
       displayName: newChannelName,
       description: newChannelDesc,
       type: "public",
@@ -86,10 +103,14 @@ export default function ChannelSidebar({ workspaceId, activeChannelId, activeDmI
     });
   };
 
-  const filteredChannels = channels.filter(c =>
-    c.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const starred = memberships.filter(m => m.isStarred);
+  const regular = memberships.filter(m => !m.isStarred);
+  const displayed = searchQuery
+    ? memberships.filter(m =>
+        m.channel.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        m.channel.name.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : regular;
 
   return (
     <div className="flex flex-col h-full bg-[#1a1d23] border-r border-white/[0.06] w-64 min-w-[240px] overflow-hidden">
@@ -107,6 +128,17 @@ export default function ChannelSidebar({ workspaceId, activeChannelId, activeDmI
       </div>
 
       <div className="flex-1 overflow-y-auto py-2 space-y-1 px-2">
+        {starred.length > 0 && !searchQuery && (
+          <div className="mb-2">
+            <div className="px-2 py-1 text-xs font-semibold text-white/40 uppercase tracking-wider">Starred</div>
+            <div className="space-y-0.5">
+              {starred.map(m => (
+                <ChannelButton key={m.channel.id} membership={m} isActive={activeChannelId === m.channel.id} onClick={() => onSelectChannel(m.channel.id)} />
+              ))}
+            </div>
+          </div>
+        )}
+
         <div>
           <button
             className="flex items-center gap-1 w-full px-2 py-1 text-xs font-semibold text-white/40 uppercase tracking-wider hover:text-white/60 transition-colors"
@@ -119,22 +151,13 @@ export default function ChannelSidebar({ workspaceId, activeChannelId, activeDmI
 
           {channelsOpen && (
             <div className="mt-0.5 space-y-0.5">
-              {filteredChannels.map(channel => (
-                <button
-                  key={channel.id}
-                  onClick={() => onSelectChannel(channel.id)}
-                  data-testid={`channel-item-${channel.id}`}
-                  className={cn(
-                    "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm transition-colors group",
-                    activeChannelId === channel.id
-                      ? "bg-white/10 text-white"
-                      : "text-white/50 hover:bg-white/[0.05] hover:text-white/80"
-                  )}
-                >
-                  <span className="shrink-0 opacity-70">{channelIcon(channel.type)}</span>
-                  <span className="truncate">{channel.displayName}</span>
-                </button>
+              {displayed.map(m => (
+                <ChannelButton key={m.channel.id} membership={m} isActive={activeChannelId === m.channel.id} onClick={() => onSelectChannel(m.channel.id)} />
               ))}
+
+              {displayed.length === 0 && (
+                <p className="px-2 py-2 text-xs text-white/30">No channels yet</p>
+              )}
 
               <Dialog open={newChannelOpen} onOpenChange={setNewChannelOpen}>
                 <DialogTrigger asChild>
@@ -159,6 +182,7 @@ export default function ChannelSidebar({ workspaceId, activeChannelId, activeDmI
                         placeholder="e.g. project-updates"
                         className="bg-white/[0.06] border-white/10 text-white placeholder:text-white/30"
                         data-testid="input-channel-name"
+                        onKeyDown={e => e.key === "Enter" && handleCreateChannel()}
                       />
                     </div>
                     <div>
@@ -198,19 +222,18 @@ export default function ChannelSidebar({ workspaceId, activeChannelId, activeDmI
 
           {dmsOpen && (
             <div className="mt-0.5 space-y-0.5">
-              {conversations.map(conv => {
-                const otherIds = (conv.participantIds || []).filter((id: string) => id !== userId);
-                const label = conv.name || `DM (${otherIds.length + 1})`;
+              {conversationMemberships.map(m => {
+                const otherIds = (m.conversation.participantIds || []).filter(id => id !== userId);
+                const label = m.conversation.name || `DM (${otherIds.length + 1} people)`;
+                const isActive = activeDmId === m.conversation.id;
                 return (
                   <button
-                    key={conv.id}
-                    onClick={() => onSelectDm(conv.id)}
-                    data-testid={`dm-item-${conv.id}`}
+                    key={m.conversation.id}
+                    onClick={() => onSelectDm(m.conversation.id)}
+                    data-testid={`dm-item-${m.conversation.id}`}
                     className={cn(
                       "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm transition-colors",
-                      activeDmId === conv.id
-                        ? "bg-white/10 text-white"
-                        : "text-white/50 hover:bg-white/[0.05] hover:text-white/80"
+                      isActive ? "bg-white/10 text-white" : "text-white/50 hover:bg-white/[0.05] hover:text-white/80"
                     )}
                   >
                     <MessageSquare className="w-3.5 h-3.5 shrink-0 opacity-70" />
@@ -218,8 +241,7 @@ export default function ChannelSidebar({ workspaceId, activeChannelId, activeDmI
                   </button>
                 );
               })}
-
-              {conversations.length === 0 && (
+              {conversationMemberships.length === 0 && (
                 <p className="px-2 py-2 text-xs text-white/30">No direct messages yet</p>
               )}
             </div>
@@ -227,5 +249,21 @@ export default function ChannelSidebar({ workspaceId, activeChannelId, activeDmI
         </div>
       </div>
     </div>
+  );
+}
+
+function ChannelButton({ membership, isActive, onClick }: { membership: ChannelMembership; isActive: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      data-testid={`channel-item-${membership.channel.id}`}
+      className={cn(
+        "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm transition-colors group",
+        isActive ? "bg-white/10 text-white" : "text-white/50 hover:bg-white/[0.05] hover:text-white/80"
+      )}
+    >
+      <span className="shrink-0 opacity-70">{channelIcon(membership.channel.type)}</span>
+      <span className="truncate flex-1">{membership.channel.displayName}</span>
+    </button>
   );
 }

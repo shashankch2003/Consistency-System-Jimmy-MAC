@@ -1,0 +1,148 @@
+CORRECTED SPRINT 2
+Channels + DMs + Composer
+All tRPC routers from the original Sprint 2 must be rewritten as Express route handlers. Here are the corrected
+patterns:
+CHANNEL ROUTES (Express)
+Add to server/routes.ts:
+// GET /api/channels/my — list user's channels
+app.get("/api/channels/my", isAuthenticated, async (req, res) => {
+const userId = req.user.claims.sub;
+const memberships = await db.select({
+channel: connectChannels,
+isStarred: connectChannelMembers.isStarred,
+isMuted: connectChannelMembers.isMuted,
+notificationPref: connectChannelMembers.notificationPref,
+role: connectChannelMembers.role,
+})
+.from(connectChannelMembers)
+.innerJoin(connectChannels, eq(connectChannelMembers.channelId, connectChannels.id))
+.where(and(
+eq(connectChannelMembers.userId, userId),
+eq(connectChannels.isArchived, false),
+))
+.orderBy(desc(connectChannels.lastMessageAt));
+res.json(memberships);
+});
+POST /api/channels — create channel (FIX H: workspaceId in duplicate check)
+app.post("/api/channels", isAuthenticated, async (req, res) => {
+const userId = req.user.claims.sub;
+const { name, displayName, description, type, icon, color, workspaceId } = req.body;
+// FIX H: Check duplicate WITH workspaceId (matches the unique index)
+const conditions = [eq(connectChannels.name, name)];
+if (workspaceId) {
+conditions.push(eq(connectChannels.workspaceId, workspaceId));
+}
+const [existing] = await db.select().from(connectChannels)
+.where(and(...conditions));
+if (existing) {
+return res.status(400).json({ error: `Channel #${name} already exists` });
+}
+const [channel] = await db.insert(connectChannels).values({
+name, displayName, slug: name, description,
+type: type || "public", icon, color,
+workspaceId,
+createdBy: userId, memberCount: 1,
+}).returning();
+// Add creator as owner
+await db.insert(connectChannelMembers).values({
+channelId: channel.id, userId, role: "owner",
+});
+// System message
+await db.insert(connectMessages).values({
+channelId: channel.id, authorId: userId,
+content: `created the channel #${displayName}`,
+type: "system",
+});
+res.json(channel);
+});
+POST /api/channels/:channelId/join
+app.post("/api/channels/:channelId/join", isAuthenticated, async (req, res) => {
+const userId = req.user.claims.sub;
+const { channelId } = req.params;
+const [channel] = await db.select().from(connectChannels)
+.where(eq(connectChannels.id, channelId));
+if (!channel) return res.status(404).json({ error: "Channel not found" });
+if (channel.type === "private") {
+return res.status(403).json({ error: "Cannot join private channel" });
+}
+await db.insert(connectChannelMembers).values({
+channelId, userId,
+}).onConflictDoNothing();
+await db.update(connectChannels).set({
+memberCount: sql`${connectChannels.memberCount} + 1`,
+}).where(eq(connectChannels.id, channelId));
+res.json({ success: true });
+});
+POST /api/channels/:channelId/leave
+app.post("/api/channels/:channelId/leave", isAuthenticated, async (req, res) => {
+const userId = req.user.claims.sub;
+const { channelId } = req.params;
+await db.delete(connectChannelMembers)
+.where(and(
+eq(connectChannelMembers.channelId, channelId),
+eq(connectChannelMembers.userId, userId)
+));
+await db.update(connectChannels).set({
+memberCount: sql`${connectChannels.memberCount} - 1`,
+}).where(eq(connectChannels.id, channelId));
+res.json({ success: true });
+});
+DM/CONVERSATION ROUTES (Express)
+// POST /api/conversations — create or get DM
+app.post("/api/conversations", isAuthenticated, async (req, res) => {
+const userId = req.user.claims.sub;
+const { participantIds } = req.body;
+const crypto = await import("crypto");
+const allParticipants = [...new Set([userId, ...participantIds])];
+if (allParticipants.length < 2) {
+return res.status(400).json({ error: "Need at least 2 participants" });
+}
+const sorted = [...allParticipants].sort();
+const hash = crypto.createHash("sha256").update(sorted.join(",")).digest("hex");
+const type = allParticipants.length === 2 ? "dm" : "group";
+// Check existing
+const [existing] = await db.select().from(connectConversations)
+.where(eq(connectConversations.participantHash, hash));
+if (existing) return res.json(existing);
+// Create new
+const [conversation] = await db.insert(connectConversations).values({
+type, participantIds: allParticipants, participantHash: hash,
+createdBy: userId,
+}).returning();
+// Add members
+for (const pid of allParticipants) {
+await db.insert(connectConversationMembers).values({
+conversationId: conversation.id, userId: pid,
+});
+}
+res.json(conversation);
+});
+// GET /api/conversations — list user's conversations
+app.get("/api/conversations", isAuthenticated, async (req, res) => {
+const userId = req.user.claims.sub;
+const convos = await db.select({
+conversation: connectConversations,
+isMuted: connectConversationMembers.isMuted,
+})
+.from(connectConversationMembers)
+.innerJoin(connectConversations,
+eq(connectConversationMembers.conversationId, connectConversations.id))
+.where(eq(connectConversationMembers.userId, userId))
+.orderBy(desc(connectConversations.lastMessageAt));
+res.json(convos);
+});
+MESSAGING PAGE (wouter route)
+Create file: client/src/pages/messaging.tsx
+FIX #7: Replaced Next.js App Router page with wouter route
+// client/src/pages/messaging.tsx
+import { MessagingLayout } from "../components/messaging/messaging-layout";
+export default function MessagingPage() {
+return <MessagingLayout />;
+}
+// In client/src/App.tsx, add:
+// import { Route } from "wouter";
+// import MessagingPage from "./pages/messaging";
+// <Route path="/messaging" component={MessagingPage} />
+All UI components (sidebar, composer, message-item, etc.) remain the same in structure but should be placed in
+client/src/components/messaging/ and use React Query hooks instead of tRPC hooks for data fetching.
+SPRINT 2 VERIFICATION: Same checklist as original but using Express endpoints and wouter routing.

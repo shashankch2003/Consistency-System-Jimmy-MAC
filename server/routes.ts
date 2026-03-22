@@ -9,7 +9,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { db } from "./db";
-import { eq, and, desc, isNull, lt, ne } from "drizzle-orm";
+import { eq, and, desc, isNull, lt, ne, sql as drizzleSql } from "drizzle-orm";
 import {
   connectMessages,
   connectChannels,
@@ -3758,6 +3758,285 @@ For answer: just a message.`,
       const hasMore = results.length > limit;
       const items = results.slice(0, limit).reverse();
       res.json({ messages: items, hasMore, nextCursor: hasMore ? items[0]?.id : undefined });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================================
+  // CORRECTED SPRINT 2 — CHANNEL, CONVERSATION, MESSAGE REST ROUTES
+  // ============================================================
+
+  app.get("/api/channels/my", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const memberships = await db
+        .select({
+          channel: connectChannels,
+          isStarred: connectChannelMembers.isStarred,
+          isMuted: connectChannelMembers.isMuted,
+          notificationPref: connectChannelMembers.notificationPref,
+          role: connectChannelMembers.role,
+        })
+        .from(connectChannelMembers)
+        .innerJoin(connectChannels, eq(connectChannelMembers.channelId, connectChannels.id))
+        .where(and(
+          eq(connectChannelMembers.userId, userId),
+          eq(connectChannels.isArchived, false),
+        ))
+        .orderBy(desc(connectChannels.lastMessageAt));
+      res.json(memberships);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/channels", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { name, displayName, description, type, icon, color, workspaceId } = req.body;
+      if (!name || !displayName) return res.status(400).json({ error: "name and displayName are required" });
+
+      const conditions: any[] = [eq(connectChannels.name, name)];
+      if (workspaceId) {
+        conditions.push(eq(connectChannels.workspaceId, parseInt(workspaceId)));
+      }
+      const [existing] = await db.select().from(connectChannels).where(and(...conditions));
+      if (existing) return res.status(400).json({ error: `Channel #${name} already exists` });
+
+      const [channel] = await db.insert(connectChannels).values({
+        name,
+        displayName,
+        slug: name,
+        description,
+        type: type || "public",
+        icon,
+        color,
+        workspaceId: workspaceId ? parseInt(workspaceId) : null,
+        createdBy: userId,
+        memberCount: 1,
+      }).returning();
+
+      await db.insert(connectChannelMembers).values({ channelId: channel.id, userId, role: "owner" });
+
+      await db.insert(connectMessages).values({
+        channelId: channel.id,
+        authorId: userId,
+        content: `created the channel #${displayName}`,
+        type: "system",
+      });
+
+      res.json(channel);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/channels/:channelId/join", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { channelId } = req.params;
+      const [channel] = await db.select().from(connectChannels).where(eq(connectChannels.id, channelId));
+      if (!channel) return res.status(404).json({ error: "Channel not found" });
+      if (channel.type === "private") return res.status(403).json({ error: "Cannot join private channel" });
+
+      await db.insert(connectChannelMembers).values({ channelId, userId }).onConflictDoNothing();
+      await db.update(connectChannels).set({
+        memberCount: drizzleSql`${connectChannels.memberCount} + 1`,
+      }).where(eq(connectChannels.id, channelId));
+
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/channels/:channelId/leave", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { channelId } = req.params;
+      await db.delete(connectChannelMembers).where(and(
+        eq(connectChannelMembers.channelId, channelId),
+        eq(connectChannelMembers.userId, userId),
+      ));
+      await db.update(connectChannels).set({
+        memberCount: drizzleSql`GREATEST(${connectChannels.memberCount} - 1, 0)`,
+      }).where(eq(connectChannels.id, channelId));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/conversations", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const convos = await db
+        .select({
+          conversation: connectConversations,
+          isMuted: connectConversationMembers.isMuted,
+        })
+        .from(connectConversationMembers)
+        .innerJoin(connectConversations, eq(connectConversationMembers.conversationId, connectConversations.id))
+        .where(eq(connectConversationMembers.userId, userId))
+        .orderBy(desc(connectConversations.lastMessageAt));
+      res.json(convos);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/conversations", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { participantIds } = req.body;
+      const cryptoMod = await import("crypto");
+      const allParticipants: string[] = Array.from(new Set([userId, ...(participantIds || [])]));
+      if (allParticipants.length < 2) return res.status(400).json({ error: "Need at least 2 participants" });
+
+      const sorted = [...allParticipants].sort();
+      const hash = cryptoMod.createHash("sha256").update(sorted.join(",")).digest("hex");
+      const type = allParticipants.length === 2 ? "dm" : "group";
+
+      const [existing] = await db.select().from(connectConversations).where(eq(connectConversations.participantHash, hash));
+      if (existing) return res.json(existing);
+
+      const [conversation] = await db.insert(connectConversations).values({
+        type,
+        participantIds: allParticipants,
+        participantHash: hash,
+        createdBy: userId,
+      }).returning();
+
+      for (const pid of allParticipants) {
+        await db.insert(connectConversationMembers).values({ conversationId: conversation.id, userId: pid }).onConflictDoNothing();
+      }
+
+      res.json(conversation);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/messages", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { channelId, content, contentHtml, threadParentId, mentionedUserIds } = req.body;
+      if (!channelId || !content?.trim()) return res.status(400).json({ error: "channelId and content are required" });
+
+      const [membership] = await db.select().from(connectChannelMembers).where(and(
+        eq(connectChannelMembers.channelId, channelId),
+        eq(connectChannelMembers.userId, userId),
+      ));
+      if (!membership) return res.status(403).json({ error: "Not a member of this channel" });
+
+      const [message] = await db.insert(connectMessages).values({
+        channelId,
+        authorId: userId,
+        content: content.trim(),
+        contentHtml,
+        threadParentId,
+        mentionedUserIds: mentionedUserIds || [],
+      }).returning();
+
+      await db.update(connectChannels).set({
+        messageCount: drizzleSql`${connectChannels.messageCount} + 1`,
+        lastMessageAt: new Date(),
+        lastMessagePreview: content.trim().slice(0, 200),
+        updatedAt: new Date(),
+      }).where(eq(connectChannels.id, channelId));
+
+      if (threadParentId) {
+        await db.update(connectMessages).set({
+          threadReplyCount: drizzleSql`${connectMessages.threadReplyCount} + 1`,
+          threadLastReplyAt: new Date(),
+        }).where(eq(connectMessages.id, threadParentId));
+      }
+
+      res.json(message);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/messages/:messageId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { messageId } = req.params;
+      const { content, contentHtml } = req.body;
+
+      const [msg] = await db.select().from(connectMessages).where(eq(connectMessages.id, messageId));
+      if (!msg) return res.status(404).json({ error: "Message not found" });
+      if (msg.authorId !== userId) return res.status(403).json({ error: "Cannot edit this message" });
+
+      const [updated] = await db.update(connectMessages).set({
+        content: content.trim(),
+        contentHtml,
+        isEdited: true,
+        editedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(connectMessages.id, messageId)).returning();
+
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/messages/:messageId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { messageId } = req.params;
+
+      const [msg] = await db.select().from(connectMessages).where(eq(connectMessages.id, messageId));
+      if (!msg) return res.status(404).json({ error: "Message not found" });
+
+      const [membership] = await db.select().from(connectChannelMembers).where(and(
+        eq(connectChannelMembers.channelId, msg.channelId),
+        eq(connectChannelMembers.userId, userId),
+      ));
+      if (msg.authorId !== userId && !["owner", "admin"].includes(membership?.role || "")) {
+        return res.status(403).json({ error: "Cannot delete this message" });
+      }
+
+      await db.update(connectMessages).set({ deletedAt: new Date() }).where(eq(connectMessages.id, messageId));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/typing/start", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { channelId, userName } = req.body;
+      const { typingService } = await import("./services/typing-service");
+      typingService.setTyping(userId, userName || userId, channelId);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/typing/stop", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { channelId } = req.body;
+      const { typingService } = await import("./services/typing-service");
+      typingService.clearTyping(userId, channelId);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/typing/:channelId", isAuthenticated, async (req: any, res) => {
+    try {
+      const { channelId } = req.params;
+      const currentUserId = req.user.claims.sub;
+      const { typingService } = await import("./services/typing-service");
+      const users = typingService.getTypingUsers(channelId).filter(u => u.userId !== currentUserId);
+      res.json(users);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

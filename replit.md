@@ -55,10 +55,10 @@ Preferred communication style: Simple, everyday language.
     -   Notifications: NotificationCenter (bell in SidebarHeader, unread badge, mark-all-read, 30s polling); notifications table
     -   Keyboard shortcuts in layout.tsx; Command + Search + AI Coach buttons in SidebarFooter
 -   **Connect Messaging System (Sprints 1–2 DONE)**:
-    -   Real-time Socket.IO messaging via `server/services/socket-server.ts` + `socket-handlers.ts`
+    -   REST-only messaging (React Query polling, 3s interval) — no Socket.IO
     -   15 messaging tables (connect_ prefix): connect_channels, connect_channel_members, connect_messages, connect_message_reactions, connect_message_attachments, connect_pinned_messages, connect_conversations, connect_conversation_members, connect_direct_messages, connect_dm_attachments, connect_dm_reactions, connect_user_presence, connect_huddles, connect_message_bookmarks, connect_custom_emoji, connect_slash_commands
-    -   Presence service, typing service, unread service in `server/services/`
-    -   REST routes: GET/POST /api/connect/channels, GET /api/messages/:channelId (cursor paginated), POST /api/messages/pin, POST /api/messages/bookmark, GET /api/connect/conversations, GET /api/connect/dm/:conversationId
+    -   Presence service, typing service (in-memory) in `server/services/`
+    -   REST routes: GET /api/channels/my, POST /api/channels, POST /api/channels/:id/join, POST /api/channels/:id/leave, GET/POST /api/conversations, GET /api/messages/:channelId, POST /api/messages, PATCH /api/messages/:id, DELETE /api/messages/:id, POST /api/messages/pin, POST /api/messages/bookmark, GET /api/typing/:channelId
     -   UI components: ChannelSidebar, MessageList, MessageComposer, ChannelView — all in `client/src/components/connect/`
     -   Route: /dashboard/connect → ConnectPage
 
