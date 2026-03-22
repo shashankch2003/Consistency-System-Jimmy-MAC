@@ -1,0 +1,137 @@
+PROMPT 2 OF 6 — PROJECTS & TASKS CORE
+■ REPLIT SETTINGS: AUTONOMOUS MODE → ECONOMY | App Testing: OFF | Code Optimization: OFF
+(Copy everything below this line into Replit)
+CONTEXT
+App: AI-driven team and workplace productivity platform. Feature being built: Complete project system and task system
+with all properties, subtasks, and dependencies. Current state: Workspaces, Teams, Members, and Permissions fully
+working from Prompt 1. Goal: Build complete UI + interactions + database for projects and tasks in one pass.
+CRITICAL: TABLE NAMING — Your app already has a 'tasks' table (line 63 of schema.ts) with completely
+different columns. Do NOT create another table called 'tasks'. Instead, name the new table team_tasks and use
+teamTasks for the Drizzle variable. Update every reference throughout. (Fix 2)
+WORKSPACE ID: Use const { workspaceId } = useWorkspace() from @/context/WorkspaceContext to get the
+current workspace ID in all components. (Fix 19)
+Follow the same critical instructions from Prompt 1 for: serial() PKs (Fix 8), text/varchar user FKs (Fix 4), .$defaultFn() for
+jsonb (Fix 9), IStorage pattern (Fix 12), imports (Fix 5), and req.user.claims.sub for auth.
+FILES TO CREATE
+(Fix 18: Page path uses client/src/pages/dashboard/ with kebab-case)
+• client/src/pages/dashboard/projects.tsx
+• client/src/components/projects/CreateProjectModal.tsx
+• client/src/components/projects/ProjectSettings.tsx
+• client/src/components/projects/ProjectHeader.tsx
+• client/src/components/tasks/TaskList.tsx
+• client/src/components/tasks/TaskDetailPanel.tsx
+• client/src/components/tasks/CreateTaskModal.tsx
+• client/src/components/tasks/SubtaskList.tsx
+• client/src/components/tasks/TaskProperties.tsx
+PART A: PROJECTS
+1. PROJECT LIST PAGE (projects.tsx)
+Page header 'Projects' with subtitle 'Manage all your team projects'. Row: search input (filters by name, case-insensitive,
+real-time), filter dropdown (All statuses/Active/Planning/On Hold/Completed), 'New Project' button (solid blue). Table
+columns: Project Name, Status, Team, Progress, Due Date, Owner. Sortable headers. Clickable rows navigate to project
+view. Status as colored pill badge: Active=green, Planning=blue, On Hold=orange, Completed=gray. Progress as
+percentage with 4px bar. Empty: 'No projects yet. Create your first project to get started.'
+2. CREATE PROJECT MODAL (CreateProjectModal.tsx)
+Modal (max-width 560px), 'Create New Project'. Fields: Project Name (required), Description, Team dropdown (from
+teams DB), Start Date, Due Date, Priority (Urgent/High/Medium/Low), Template (Start from scratch/Software
+Sprint/Marketing Campaign/Product Launch/Client Project). On submit: Insert into projects table. Refresh list + sidebar.
+Toast.
+3. PROJECT SETTINGS (ProjectSettings.tsx)
+Right slide-out panel (400px, 200ms ease). Sections: General (name, desc), Timeline (dates), Team (assigned team,
+lead), Status dropdown, Visibility toggle. Pre-fill with current values. 'Save Changes' updates DB. Toast.
+4. PROJECT HEADER (ProjectHeader.tsx)
+Horizontal bar: project name (bold, 20px), status badge (clickable dropdown to change), priority indicator. Right: team
+avatars, due date, settings gear, three-dot menu, 'Create Task' button.
+5. PROJECT SIDEBAR LINKS
+Below team list in TeamList.tsx, add 'Projects' section with '+' icon. Load from DB. Colored dot for status.
+6. DATABASE — PROJECTS TABLE
+• id: serial().primaryKey()
+• workspaceId: integer('workspace_id').references(() => workspaces.id)
+• name: text('name').notNull()
+• description: text('description')
+• teamId: integer('team_id') — nullable, references teams
+• status: text('status').default('Planning')
+• priority: text('priority').default('Medium')
+• startDate: date('start_date') — nullable
+• dueDate: date('due_date') — nullable
+• ownerId: text('owner_id') — varchar user ID
+• template: text('template') — nullable
+• visibility: text('visibility').default('public')
+• progress: integer('progress').default(0)
+• createdAt: timestamp('created_at').defaultNow()
+• updatedAt: timestamp('updated_at').defaultNow()
+PART B: TASKS
+7. TASK LIST (TaskList.tsx)
+Vertical list of task rows inside a project view. Load from team_tasks table where project_id matches, order by sort_order.
+Each row: Checkbox (sets status 'Completed' in DB), title, priority dot (Urgent=red, High=orange, Medium=yellow,
+Low=green, 8px circles), assignee avatar, due date, status badge. 'Add task' row at bottom: text input, Enter creates task
+with defaults. Clicking row opens TaskDetailPanel.
+8. TASK DETAIL PANEL (TaskDetailPanel.tsx)
+Right slide-out (520px, 250ms ease). Header: editable title (click to edit, blur saves), close icon. Description textarea
+(placeholder, click activates, blur saves). Property rows (label 140px, value right, 40px height): Status dropdown,
+Assignee dropdown (from workspace_members), Priority dropdown, Due Date picker, Start Date picker, Estimated Time
+(hours/minutes input, saves as total minutes), Actual Time (same), Tags (jsonb array, type + Enter adds pill),
+Dependencies (multi-select other tasks, saves to task_dependencies table). Below: Subtasks section. Below that: Activity
+section.
+9. CREATE TASK MODAL (CreateTaskModal.tsx)
+Modal (max-width 520px). Fields: Task Name (required), Description, Assignee, Priority, Due Date, Estimated Time, Tags.
+On submit: Insert into team_tasks table. Show in list. Toast.
+10. SUBTASK LIST (SubtaskList.tsx)
+Inside TaskDetailPanel. Progress: '2 of 4 complete'. Checkbox rows (strikethrough on complete). 'Add subtask' input.
+Delete icon on hover.
+11. TASK PROPERTIES (TaskProperties.tsx) — Fix 23
+Fix 23: TaskProperties.tsx — Reusable component for a single property row used inside TaskDetailPanel. Props:
+label (string), children (ReactNode). Renders label on left (140px width, muted text), content on right, 40px row
+height, subtle bottom border. Used for Status, Assignee, Priority, Due Date, and all other property rows in
+TaskDetailPanel.
+12. DATABASE — TEAM_TASKS TABLE
+(Fix 2: Named team_tasks, NOT tasks, to avoid conflict with existing tasks table.)
+• id: serial().primaryKey()
+• projectId: integer('project_id').references(() => projects.id)
+• title: text('title').notNull()
+• description: text('description')
+• status: text('status').default('Not Started')
+• priority: text('priority').default('Medium')
+• assigneeId: text('assignee_id') — varchar user ID, nullable
+• startDate: date('start_date') — nullable
+• dueDate: date('due_date') — nullable
+• estimatedMinutes: integer('estimated_minutes') — nullable
+• actualMinutes: integer('actual_minutes').default(0)
+• tags: jsonb('tags').$defaultFn(() => [])
+• sortOrder: integer('sort_order').default(0)
+• createdBy: text('created_by') — varchar user ID
+• createdAt: timestamp('created_at').defaultNow()
+• updatedAt: timestamp('updated_at').defaultNow()
+• completedAt: timestamp('completed_at') — nullable
+13. DATABASE — SUBTASKS TABLE
+• id: serial().primaryKey()
+• taskId: integer('task_id').references(() => teamTasks.id)
+• title: text('title').notNull()
+• isCompleted: boolean('is_completed').default(false)
+• sortOrder: integer('sort_order').default(0)
+• createdAt: timestamp('created_at').defaultNow()
+14. DATABASE — TASK_DEPENDENCIES TABLE
+• id: serial().primaryKey()
+• taskId: integer('task_id').references(() => teamTasks.id)
+• dependsOnTaskId: integer('depends_on_task_id').references(() => teamTasks.id)
+• createdAt: timestamp('created_at').defaultNow()
+Fix 30 — UNIQUE CONSTRAINT SYNTAX: Add a unique index using the table's third argument: (table) => ({
+uniqueDep: uniqueIndex('unique_task_dep').on(table.taskId, table.dependsOnTaskId) }). Note: uniqueIndex is
+already imported in shared/schema.ts.
+API ROUTES
+Add all required routes to server/routes.ts. Use isAuthenticated middleware, req.user.claims.sub for user ID. Add IStorage
+methods for all DB operations.
+• CRUD for projects: GET /api/projects?workspaceId=X, POST /api/projects, GET /api/projects/:id, PATCH
+/api/projects/:id, DELETE /api/projects/:id
+• CRUD for team_tasks: GET /api/team-tasks?projectId=X, POST /api/team-tasks, GET /api/team-tasks/:id, PATCH
+/api/team-tasks/:id, DELETE /api/team-tasks/:id
+• Subtasks: GET/POST/PATCH/DELETE under /api/subtasks
+• Dependencies: GET/POST/DELETE under /api/task-dependencies
+PAGE REGISTRATION
+Fix 25 — EXPLICIT ROUTE: Register at route /dashboard/projects → Projects page in client/src/App.tsx.
+Fix 24 — SIDEBAR: Add 'Projects' to menuItems in AppSidebar.tsx with FolderKanban icon.
+AFTER ALL CODE CHANGES: Run npx drizzle-kit push
+BOUNDARIES
+✖ Build everything described: UI + interactions + database + API routes + page registration + sidebar
+✖ Do not modify any files or tables from Prompt 1 except adding Projects sidebar section to TeamList.tsx
+✖ Do not add features from future prompts
+✖ Use team_tasks (not tasks) for ALL task references throughout

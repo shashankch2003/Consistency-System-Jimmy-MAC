@@ -34,7 +34,9 @@ import {
   Wallet,
   PlayCircle,
   HeartHandshake,
-  BarChart3
+  BarChart3,
+  Building2,
+  UsersRound
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -53,6 +55,9 @@ const menuItems = [
   { title: "Know More", icon: PlayCircle, url: "/dashboard/know-more" },
   { title: "Grow Together", icon: HeartHandshake, url: "/dashboard/grow-together" },
   { title: "Team Intelligence", icon: BarChart3, url: "/dashboard/team-intelligence" },
+  { title: "Workspace Setup", icon: Building2, url: "/dashboard/workspace-setup" },
+  { title: "Team Management", icon: UsersRound, url: "/dashboard/team-management" },
+  { title: "Members", icon: Users, url: "/dashboard/members" },
   { title: "Community", icon: Users, url: "/dashboard/community" },
   { title: "Settings", icon: Settings, url: "/dashboard/settings" },
 ];

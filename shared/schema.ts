@@ -861,6 +861,45 @@ export const teamAlerts = pgTable("team_alerts", {
   index("team_alerts_target_user_idx").on(t.targetUserId),
 ]);
 
+// ─── Workspace Platform Tables ───────────────────────────────────────────────
+
+export const workspaces = pgTable("workspaces", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  industry: text("industry"),
+  companySize: text("company_size"),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const teams = pgTable("teams", {
+  id: serial("id").primaryKey(),
+  workspaceId: integer("workspace_id").references(() => workspaces.id),
+  name: text("name").notNull(),
+  teamType: text("team_type").notNull(),
+  department: text("department"),
+  description: text("description"),
+  parentTeamId: integer("parent_team_id"),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+  memberCount: integer("member_count").default(0),
+});
+
+export const workspaceMembers = pgTable("workspace_members", {
+  id: serial("id").primaryKey(),
+  workspaceId: integer("workspace_id").references(() => workspaces.id),
+  userId: text("user_id"),
+  email: text("email").notNull(),
+  displayName: text("display_name"),
+  role: text("role").notNull().default("Member"),
+  teamId: integer("team_id").references(() => teams.id),
+  status: text("status").default("invited"),
+  invitedBy: text("invited_by"),
+  invitedAt: timestamp("invited_at").defaultNow(),
+  joinedAt: timestamp("joined_at"),
+});
+
 export const teamOrgSettings = pgTable("team_org_settings", {
   id: uuid("id").defaultRandom().primaryKey(),
   workspaceId: text("workspace_id").unique().notNull(),

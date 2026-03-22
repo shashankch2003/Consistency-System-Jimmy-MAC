@@ -2628,5 +2628,129 @@ export async function registerRoutes(
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  // ─── Workspace Platform Routes ────────────────────────────────────────────
+
+  // Workspaces
+  app.get("/api/workspaces", isAuthenticated, async (req: any, res) => {
+    try {
+      const list = await storage.getWorkspaces(req.user.claims.sub);
+      res.json(list);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/workspaces/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const ws = await storage.getWorkspace(parseInt(req.params.id));
+      if (!ws) return res.status(404).json({ message: "Workspace not found" });
+      res.json(ws);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/workspaces", isAuthenticated, async (req: any, res) => {
+    try {
+      const { name, industry, companySize } = req.body;
+      if (!name) return res.status(400).json({ message: "Workspace name is required" });
+      const userId = req.user.claims.sub;
+      const ws = await storage.createWorkspace({ name, industry, companySize, createdBy: userId });
+
+      // Auto-add creator as Owner member
+      const { db } = await import("./db");
+      const { users } = await import("@shared/schema");
+      const { eq } = await import("drizzle-orm");
+      const [creator] = await db.select().from(users).where(eq(users.id, userId));
+      const displayName = creator
+        ? [creator.firstName, creator.lastName].filter(Boolean).join(" ") || creator.email || userId
+        : userId;
+      await storage.createWorkspaceMember({
+        workspaceId: ws.id,
+        userId,
+        email: creator?.email || "",
+        displayName,
+        role: "Owner",
+        status: "active",
+        joinedAt: new Date(),
+      });
+
+      res.status(201).json(ws);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Teams
+  app.get("/api/teams", isAuthenticated, async (req: any, res) => {
+    try {
+      const workspaceId = parseInt(req.query.workspaceId as string);
+      if (!workspaceId) return res.status(400).json({ message: "workspaceId required" });
+      const list = await storage.getTeams(workspaceId);
+      res.json(list);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/teams/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const team = await storage.getTeam(parseInt(req.params.id));
+      if (!team) return res.status(404).json({ message: "Team not found" });
+      res.json(team);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/teams", isAuthenticated, async (req: any, res) => {
+    try {
+      const { workspaceId, name, teamType, department, description, parentTeamId } = req.body;
+      if (!name || !workspaceId || !teamType) return res.status(400).json({ message: "name, workspaceId, teamType required" });
+      const team = await storage.createTeam({
+        workspaceId,
+        name,
+        teamType,
+        department,
+        description,
+        parentTeamId: parentTeamId || null,
+        createdBy: req.user.claims.sub,
+      });
+      res.status(201).json(team);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Workspace Members
+  app.get("/api/workspace-members", isAuthenticated, async (req: any, res) => {
+    try {
+      const workspaceId = parseInt(req.query.workspaceId as string);
+      if (!workspaceId) return res.status(400).json({ message: "workspaceId required" });
+      const list = await storage.getWorkspaceMembers(workspaceId);
+      res.json(list);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/workspace-members", isAuthenticated, async (req: any, res) => {
+    try {
+      const { workspaceId, email, role, teamId } = req.body;
+      if (!workspaceId || !email) return res.status(400).json({ message: "workspaceId and email required" });
+      const member = await storage.createWorkspaceMember({
+        workspaceId,
+        email,
+        role: role || "Member",
+        teamId: teamId || null,
+        invitedBy: req.user.claims.sub,
+        status: "invited",
+      });
+      res.status(201).json(member);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/workspace-members/:id/role", isAuthenticated, async (req: any, res) => {
+    try {
+      const { role } = req.body;
+      if (!role) return res.status(400).json({ message: "role required" });
+      const updated = await storage.updateWorkspaceMemberRole(parseInt(req.params.id), role);
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/workspace-members/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteWorkspaceMember(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   return httpServer;
 }

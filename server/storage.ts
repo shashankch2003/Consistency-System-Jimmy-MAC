@@ -11,6 +11,7 @@ import {
   friends, friendInvites, comparisonPrivacy, dailyStatsCache,
   growGroups, growGroupMembers, growGroupMessages,
   teamDailySnapshots, teamAiInsights, teamAiSettings, teamManagerAssignments, teamAlerts, teamOrgSettings,
+  workspaces, teams, workspaceMembers,
 } from "@shared/schema";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
 import { or, sql, inArray } from "drizzle-orm";
@@ -275,6 +276,18 @@ export interface IStorage extends IAuthStorage {
   getManagerAssignments(workspaceId: string, managerUserId?: string): Promise<(typeof teamManagerAssignments.$inferSelect)[]>;
   createManagerAssignment(data: InsertTeamManagerAssignment): Promise<typeof teamManagerAssignments.$inferSelect>;
   softDeleteManagerAssignment(id: string): Promise<typeof teamManagerAssignments.$inferSelect>;
+
+  // Workspace Platform
+  getWorkspaces(userId: string): Promise<(typeof workspaces.$inferSelect)[]>;
+  getWorkspace(id: number): Promise<(typeof workspaces.$inferSelect) | undefined>;
+  createWorkspace(data: typeof workspaces.$inferInsert): Promise<typeof workspaces.$inferSelect>;
+  getTeams(workspaceId: number): Promise<(typeof teams.$inferSelect)[]>;
+  getTeam(id: number): Promise<(typeof teams.$inferSelect) | undefined>;
+  createTeam(data: typeof teams.$inferInsert): Promise<typeof teams.$inferSelect>;
+  getWorkspaceMembers(workspaceId: number): Promise<(typeof workspaceMembers.$inferSelect)[]>;
+  createWorkspaceMember(data: typeof workspaceMembers.$inferInsert): Promise<typeof workspaceMembers.$inferSelect>;
+  updateWorkspaceMemberRole(id: number, role: string): Promise<typeof workspaceMembers.$inferSelect>;
+  deleteWorkspaceMember(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1222,6 +1235,44 @@ export class DatabaseStorage implements IStorage {
       .where(eq(teamManagerAssignments.id, id))
       .returning();
     return updated;
+  }
+
+  // Workspace Platform
+  async getWorkspaces(userId: string) {
+    return await db.select().from(workspaces).where(eq(workspaces.createdBy, userId)).orderBy(desc(workspaces.createdAt));
+  }
+  async getWorkspace(id: number) {
+    const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, id));
+    return ws;
+  }
+  async createWorkspace(data: typeof workspaces.$inferInsert) {
+    const [created] = await db.insert(workspaces).values(data).returning();
+    return created;
+  }
+  async getTeams(workspaceId: number) {
+    return await db.select().from(teams).where(eq(teams.workspaceId, workspaceId)).orderBy(asc(teams.createdAt));
+  }
+  async getTeam(id: number) {
+    const [team] = await db.select().from(teams).where(eq(teams.id, id));
+    return team;
+  }
+  async createTeam(data: typeof teams.$inferInsert) {
+    const [created] = await db.insert(teams).values(data).returning();
+    return created;
+  }
+  async getWorkspaceMembers(workspaceId: number) {
+    return await db.select().from(workspaceMembers).where(eq(workspaceMembers.workspaceId, workspaceId)).orderBy(asc(workspaceMembers.displayName));
+  }
+  async createWorkspaceMember(data: typeof workspaceMembers.$inferInsert) {
+    const [created] = await db.insert(workspaceMembers).values(data).returning();
+    return created;
+  }
+  async updateWorkspaceMemberRole(id: number, role: string) {
+    const [updated] = await db.update(workspaceMembers).set({ role }).where(eq(workspaceMembers.id, id)).returning();
+    return updated;
+  }
+  async deleteWorkspaceMember(id: number) {
+    await db.delete(workspaceMembers).where(eq(workspaceMembers.id, id));
   }
 }
 

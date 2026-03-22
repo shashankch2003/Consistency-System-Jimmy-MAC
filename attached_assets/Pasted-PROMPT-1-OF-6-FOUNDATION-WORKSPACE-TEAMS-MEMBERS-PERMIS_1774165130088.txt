@@ -1,0 +1,160 @@
+PROMPT 1 OF 6 — FOUNDATION: WORKSPACE, TEAMS, MEMBERS &
+PERMISSIONS
+■ REPLIT SETTINGS: AUTONOMOUS MODE → ECONOMY | App Testing: OFF | Code Optimization: OFF
+(Copy everything below this line into Replit)
+CONTEXT
+App: AI-driven team and workplace productivity platform. Feature being built: Workspace creation, team management, org
+chart, member invites, roles, and permissions. Current state: App has individual productivity features. No team features
+exist yet. Goal: Build complete UI + interactions + database for workspaces, teams, members, and role-based access in
+one pass.
+CRITICAL INSTRUCTIONS FOR ALL DATABASE WORK
+• IMPORTS: First, add uuid, jsonb, date, decimal to the existing import from drizzle-orm/pg-core in
+shared/schema.ts. Inspect the current import line and append any that are missing. (Fix 5)
+• PRIMARY KEYS: Use serial().primaryKey() for all new tables to match the existing app convention. Do NOT use
+uuid().defaultRandom().primaryKey(). (Fix 8)
+• USER FK COLUMNS: All columns that reference user IDs (created_by, owner_id, user_id, invited_by, sender_id,
+author_id, etc.) must be text or varchar, NOT uuid. Your Replit Auth stores user IDs as varchar text strings. (Fix 4)
+• JSONB DEFAULTS: For all jsonb columns, use .$defaultFn(() => []) or .$defaultFn(() => ({})) instead of
+.default('[]') or .default({}). (Fix 9)
+• AUTH PATTERN: Get user ID from req.user.claims.sub and use isAuthenticated middleware on all routes.
+• STORAGE PATTERN: For all database operations, add methods to the IStorage interface in server/storage.ts
+and implement them in the class, then call storage methods from routes — this is the existing pattern. (Fix 12)
+FILES TO CREATE
+(Fix 18: All page paths use client/src/pages/dashboard/ with kebab-case to match existing convention)
+• client/src/pages/dashboard/workspace-setup.tsx
+• client/src/pages/dashboard/team-management.tsx
+• client/src/components/teams/TeamList.tsx
+• client/src/components/teams/CreateTeamModal.tsx
+• client/src/components/teams/OrgChart.tsx
+• client/src/components/teams/TeamDetailPage.tsx
+• client/src/pages/dashboard/members.tsx
+• client/src/components/members/InviteMemberModal.tsx
+• client/src/components/members/MemberCard.tsx
+• client/src/components/members/RoleSelector.tsx
+• client/src/context/WorkspaceContext.tsx (Fix 19: NEW — workspace context provider)
+TASK
+Build the complete workspace, teams, members, and permissions system — UI, all interactions, form validation, and
+database persistence — in one pass. Every component must be fully functional and save/load data from the database.
+PART A: WORKSPACE SETUP
+1. WORKSPACE SETUP PAGE (workspace-setup.tsx)
+Full page with centered card (max-width 600px). Text input 'Workspace Name' with placeholder 'e.g. Acme Corp'. Text
+input 'Industry' with placeholder 'e.g. Technology'. Dropdown 'Company Size' with options: '1-10', '11-50', '51-200',
+'201-500', '500+'. Button 'Create Workspace' (solid blue #2563EB, full width).
+Form logic: All inputs store values in React state. On submit, validate all fields — red border (#DC2626) on empty fields
+with 'This field is required'. On valid: insert row into workspaces table, call setWorkspaceId(newWorkspace.id) from
+useWorkspace() context and store in localStorage, show green toast 'Workspace created' (top-right, auto-dismiss 3s).
+On error: Red toast 'Failed to create workspace. Please try again.'
+2. DATABASE — WORKSPACES TABLE
+• id: serial().primaryKey()
+• name: text('name').notNull()
+• industry: text('industry')
+• companySize: text('company_size')
+• createdBy: text('created_by') — varchar user ID
+• createdAt: timestamp('created_at').defaultNow()
+• updatedAt: timestamp('updated_at').defaultNow()
+Fix 21 — AUTO-ADD CREATOR TO MEMBERS: In the POST /api/workspaces route, after inserting the
+workspace, also insert the creator into workspace_members with: userId=req.user.claims.sub, role='Owner',
+status='active', email from the users table, displayName from the users table, workspaceId=new workspace id,
+joinedAt=now(). Without this, the creator won't appear on the Members page and can't be assigned tasks.
+WORKSPACE CONTEXT (NEW — Fix 19)
+Fix 19 — WORKSPACE CONTEXT PROVIDER: Create client/src/context/WorkspaceContext.tsx with: (1) A
+WorkspaceContext React context storing { workspaceId: number | null, setWorkspaceId: (id: number) => void
+}. (2) A WorkspaceProvider component that wraps children and persists workspaceId to localStorage. (3) A
+useWorkspace() hook that returns the context value. Wrap the DashboardLayout in
+client/src/pages/dashboard/layout.tsx (or wherever the dashboard shell is) with <WorkspaceProvider>. On mount,
+read from localStorage key 'workspace_id' to restore the session. All subsequent prompts use const {
+workspaceId } = useWorkspace() for API calls.
+PART B: TEAMS
+3. TEAM LIST SIDEBAR (TeamList.tsx)
+Fix 24 — CLARIFICATION: TeamList.tsx is a component rendered INSIDE team-management.tsx, not a
+replacement for AppSidebar. The 'left sidebar' it refers to is a secondary sidebar within the page layout, NOT the
+app-wide AppSidebar.
+Vertical list section in the page's left panel. Section header 'Teams' with '+' icon button on right. On mount: load all teams
+where workspace_id matches current workspace (from useWorkspace()), order by created_at asc. Display each team
+name on left, member_count badge on right. Clicking '+' opens CreateTeamModal. Clicking a team row highlights it with
+blue left border. One team selected at a time. Empty state: 'No teams yet. Click + to create your first team.'
+4. CREATE TEAM MODAL (CreateTeamModal.tsx)
+Centered modal (max-width 480px), title 'Create New Team'. Fields: Team Name (required), Team Type dropdown
+('Permanent Department', 'Project Team', 'Cross-Functional Squad', 'Virtual Team'), Department dropdown ('Engineering',
+'Design', 'Marketing', 'Sales', 'Operations', 'HR', 'Finance', 'Custom'), Description textarea. Validate: Team Name required.
+On submit: Insert into teams table. Refresh team list. Close modal. Toast.
+5. ORG CHART (OrgChart.tsx)
+Tree-style layout. Load teams with parent_team_id relationships. Root = workspace name. Children = top-level teams.
+Nested children from parent_team_id. Each node: rounded rect card, name bold, role below, connecting gray lines.
+Clicking toggles children visibility (200ms animation). Root expanded by default.
+6. TEAM DETAIL PAGE (TeamDetailPage.tsx)
+Header: team name (large, bold), type badge, member count, description. 3 tabs: 'Members' (default), 'Projects',
+'Analytics' — blue underline on active. Members tab: 'No members added yet' | Projects: 'No projects linked yet' |
+Analytics: 'Analytics will appear once the team has activity'
+7. DATABASE — TEAMS TABLE
+• id: serial().primaryKey()
+• workspaceId: integer('workspace_id').references(() => workspaces.id)
+• name: text('name').notNull()
+• teamType: text('team_type').notNull()
+• department: text('department')
+• description: text('description')
+• parentTeamId: integer('parent_team_id') — self-referencing, nullable
+• createdBy: text('created_by') — varchar user ID
+• createdAt: timestamp('created_at').defaultNow()
+• memberCount: integer('member_count').default(0)
+PART C: MEMBERS & PERMISSIONS
+8. MEMBERS PAGE (members.tsx)
+Page header 'Team Members' with member count. Search input + 'Invite Member' button. Grid of member cards (3 col
+desktop, 2 tablet, 1 mobile). Load from workspace_members, order by display_name asc. Search filters real-time by
+name/email. Empty: 'No team members yet.'
+9. INVITE MEMBER MODAL (InviteMemberModal.tsx)
+Modal (max-width 480px), 'Invite Team Member'. Email input (validate format), Role dropdown (RoleSelector), Team
+dropdown (from teams DB). On submit: Insert into workspace_members with email, role, team_id, workspace_id,
+invited_by=current user (req.user.claims.sub), status='invited'. Toast.
+10. MEMBER CARD (MemberCard.tsx)
+Card with avatar initials (48px), name (bold), email, role badge (Admin=blue, Manager=purple, Member=green,
+Guest=gray, Observer=orange), team name. Three-dot menu: Change Role, Move to Team, Remove Member. Actions
+update DB.
+11. ROLE SELECTOR (RoleSelector.tsx)
+Dropdown: Owner, Admin, Manager, Member, Guest, Observer — each with one-line description.
+12. DATABASE — WORKSPACE_MEMBERS TABLE
+• id: serial().primaryKey()
+• workspaceId: integer('workspace_id').references(() => workspaces.id)
+• userId: text('user_id') — nullable, varchar (null until invite accepted)
+• email: text('email').notNull()
+• displayName: text('display_name')
+• role: text('role').notNull().default('Member')
+• teamId: integer('team_id').references(() => teams.id) — nullable
+• status: text('status').default('invited')
+• invitedBy: text('invited_by') — varchar user ID
+• invitedAt: timestamp('invited_at').defaultNow()
+• joinedAt: timestamp('joined_at') — nullable
+API ROUTES
+Add all required API routes to server/routes.ts following the exact same patterns as existing routes. Use
+isAuthenticated middleware. Get user ID from req.user.claims.sub. Add methods to the IStorage interface in
+server/storage.ts and implement them in the class.
+• POST /api/workspaces — create workspace. After insert, also insert creator into workspace_members (Fix 21)
+• GET /api/workspaces — returns all workspaces where created_by matches req.user.claims.sub (Fix 20: NEW —
+needed for session rehydration on refresh)
+• GET /api/workspaces/:id — get workspace
+• GET /api/teams?workspaceId=X — list teams
+• POST /api/teams — create team
+• GET /api/teams/:id — get team detail
+• GET /api/workspace-members?workspaceId=X — list members
+• POST /api/workspace-members — invite member
+• PATCH /api/workspace-members/:id/role — change role
+• DELETE /api/workspace-members/:id — remove member
+PAGE REGISTRATION
+Register all new pages in client/src/App.tsx using wouter's <Route> component, following the exact same pattern as
+existing routes like /dashboard/goals.
+Fix 25 — EXPLICIT ROUTES:
+• Route /dashboard/workspace-setup → WorkspaceSetup
+• Route /dashboard/team-management → TeamManagement
+• Route /dashboard/members → Members
+Fix 24 — SIDEBAR: Also add the new page(s) to the menuItems array in client/src/components/AppSidebar.tsx
+following the existing pattern. Use appropriate lucide-react icons (Building2 for Workspace, Users for
+Teams/Members). Do not replace or restructure the existing sidebar.
+AFTER ALL CODE CHANGES: Run npx drizzle-kit push
+DESIGN REQUIREMENTS
+Cards: rounded 8px, shadow 0 1px 3px rgba(0,0,0,0.1). Modal overlay: rgba(0,0,0,0.4). Inputs: 40px height, 6px
+border-radius, #CBD5E1 border. Primary buttons: solid blue #2563EB. Toast: top-right, green success, red error, 3s
+auto-dismiss. All transitions: 200ms ease.
+BOUNDARIES
+✖ Build everything described: UI + interactions + database + API routes + page registration + sidebar items
+✖ Do not modify any existing files or features not mentioned here
+✖ Do not add features not described above or from future prompts

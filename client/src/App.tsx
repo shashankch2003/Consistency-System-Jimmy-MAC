@@ -24,6 +24,9 @@ import KnowMorePage from "@/pages/dashboard/know-more";
 import GrowTogetherPage from "@/pages/dashboard/grow-together";
 import TeamIntelligencePage from "@/pages/dashboard/team-intelligence";
 import TeamIntelligenceSettingsPage from "@/pages/dashboard/team-intelligence-settings";
+import WorkspaceSetupPage from "@/pages/dashboard/workspace-setup";
+import TeamManagementPage from "@/pages/dashboard/team-management";
+import MembersPage from "@/pages/dashboard/members";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -125,6 +128,21 @@ function Router() {
       <Route path="/dashboard/team-intelligence">
         <DashboardLayout>
           <TeamIntelligencePage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/workspace-setup">
+        <DashboardLayout>
+          <WorkspaceSetupPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/team-management">
+        <DashboardLayout>
+          <TeamManagementPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/members">
+        <DashboardLayout>
+          <MembersPage />
         </DashboardLayout>
       </Route>
 

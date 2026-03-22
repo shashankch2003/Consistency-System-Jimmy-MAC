@@ -3,6 +3,7 @@ import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sid
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect } from "react";
 import { useLocation } from "wouter";
+import { WorkspaceProvider } from "@/context/WorkspaceContext";
 
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const { state } = useSidebar();
@@ -38,11 +39,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <SidebarProvider>
-      <div className="flex min-h-screen w-full bg-background">
-        <AppSidebar />
-        <DashboardContent>{children}</DashboardContent>
-      </div>
-    </SidebarProvider>
+    <WorkspaceProvider>
+      <SidebarProvider>
+        <div className="flex min-h-screen w-full bg-background">
+          <AppSidebar />
+          <DashboardContent>{children}</DashboardContent>
+        </div>
+      </SidebarProvider>
+    </WorkspaceProvider>
   );
 }

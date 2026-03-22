@@ -85,6 +85,9 @@ The frontend lives in `client/src/` with pages under `client/src/pages/`, reusab
   - `team_manager_assignments` — Manager-to-employee assignments per workspace
   - `team_alerts` — Role-based alerts with severity, acknowledge, snooze support
   - `team_org_settings` — Org-level privacy and scoring configuration
+  - `workspaces` — Organizational workspaces with name, industry, company size
+  - `teams` — Teams within a workspace (type, department, parent team hierarchy)
+  - `workspace_members` — Members of a workspace with role (Owner/Admin/Manager/Member/Guest/Observer), invite flow (userId intentionally nullable for invited-not-yet-joined users)
 
 ### Team Productivity Intelligence
 - **Route**: `/dashboard/team-intelligence` (frontend not yet built — Prompts 3-6)
