@@ -1,0 +1,181 @@
+UI: Time Machine 2 + Delegation + Context + Workflow + Planner + DocGen
+■ REPLIT: LITE MODE (lightning bolt) | App Testing: OFF | Code Optimization: OFF
+PROMPT 2 — Copy into Replit
+CONTEXT: App: AI-driven productivity platform with Replit Auth. Tech: React + Vite, TypeScript, Tailwind, Shadcn/UI, PostgreSQL, Drizzle ORM (shared/schema.ts),
+Express (server/routes.ts), OpenAI via Replit integration. Router: wouter (client/src/App.tsx). State: @tanstack/react-query. File paths: client/src/components/,
+client/src/pages/, client/src/lib/, client/src/hooks/, server/routes.ts, server/storage.ts (IStorage interface), shared/schema.ts. Auth: Replit Auth — user ID is text string
+from req.user.claims.sub, protected with isAuthenticated middleware from server/replit_integrations/auth/. PKs: serial integers. User IDs: text (not UUID). No
+workspaces. Existing tables: tasks (userId varchar, title text, description text, completionPercentage integer, date text, time text, priority text), notes (not
+pages), group_messages (not messages). No meetings table. No databaseId concept. No Redis, no BullMQ, no Socket.io, no tRPC, no centralized AI service, no
+Google Calendar. Background jobs: node-cron or setInterval (install node-cron before Prompt 5: npm install node-cron @types/node-cron). In-memory cache
+(Map). Rules: TypeScript strict, Zod validation, serial integer PKs, createdAt/updatedAt timestamps, responsive design.
+Feature: 15 UI shell components for remaining features. Current state: Prompt 1 done. Shared components + Autopilot + Predictions +
+TimeMachine Part 1 shells exist. Layer: Layer 1 — Structure only (all shells, hardcoded data, nothing interactive).
+Files to create:
+• client/src/components/timemachine/AIInsightsPanel.tsx
+• client/src/components/timemachine/DetailedActivityLog.tsx
+• client/src/components/timemachine/WeeklyHeatmap.tsx
+• client/src/components/timemachine/TimeMachineSettings.tsx
+• client/src/components/delegation/DelegationPanel.tsx
+• client/src/components/delegation/TeamWorkloadDashboard.tsx
+• client/src/components/context/ContextSwitcherModal.tsx
+• client/src/components/context/CatchUpCard.tsx
+• client/src/components/workflows/RecordingBar.tsx
+• client/src/components/workflows/WorkflowReviewModal.tsx
+• client/src/components/workflows/WorkflowRunModal.tsx
+• client/src/components/workflows/WorkflowLibrary.tsx
+• client/src/pages/planner/DailyPlanner.tsx
+• client/src/components/docgen/TemplateSelector.tsx
+• client/src/components/docgen/CustomTemplateCreator.tsx
+TASK: Add 15 UI shell components. Hardcoded data. Nothing interactive. No click handlers. No state changes. No API calls.
+1. AI INSIGHTS PANEL (AIInsightsPanel.tsx): "AI Insights" header (font-semibold). 4 cards (flex flex-col gap-2): Each bg-gray-50 rounded-lg p-3. Lightbulb "Most
+productive 10:00-11:30 AM — 3 tasks without switching", AlertTriangle "Checked messages 12 times 2-4 PM — broke flow", Trophy "5 tasks — 2 more than daily
+average!", TrendingUp "Score: 78/100 (up from 72 yesterday)".
+2. DETAILED ACTIVITY LOG (DetailedActivityLog.tsx): 10 timestamped entries (text-sm): "9:00 AM — Opened Tasks", "9:02 AM — Changed Login Redesign → In
+Progress" etc. [Show All 47 Activities] link. Weekly coaching section inline below (bg-blue-50 rounded-lg p-4): "Weekly AI Coaching" + 3 Brain icon cards + "Apply
+Suggestions"/"Export Report"/"Share" buttons.
+3. WEEKLY HEATMAP (WeeklyHeatmap.tsx): Grid. Rows: 9AM-5PM (text-xs text-gray-400). Cols: Mon-Fri. Cells (w-10 h-10 rounded-sm gap-1):
+bg-blue-700(high)/bg-blue-400(medium)/bg-blue-200(low)/bg-gray-100(idle). Legend. Hardcoded data. EMPTY: "No activity for this day." "Not enough data for weekly
+view."
+4. TM SETTINGS (TimeMachineSettings.tsx): Slide-out (w-[380px] bg-white shadow-xl). Tracking: 4 toggles ON. Daily: time "6:00 PM", timezone "Auto", notification
+ON, coaching ON. Weekly: day "Sunday", notification ON, share OFF. Privacy: notice + "Delete All Data". Display: default "Daily", score ON.
+5. DELEGATION PANEL (DelegationPanel.tsx — includes CandidateCard inline): Dropdown (w-[380px] bg-white rounded-lg shadow-xl border p-4). Robot icon +
+"AI Delegation Suggestions" + task title (text-sm text-gray-500). 3 candidate rows (py-3 border-b last:border-0): Avatar(w-10 h-10) + Name(font-medium) + score
+badge "94/100"(bg-green-500 text-white text-xs rounded-full px-2). Status: green dot + "Available | 3 tasks | React Expert". Reasoning (italic text-sm text-gray-500). 3
+mini factor bars inline (text-xs). [Assign] button (blue w-full mt-2). First: "Best Match" badge. Footer: "Assign to someone else..." link.
+6. TEAM WORKLOAD DASHBOARD (TeamWorkloadDashboard.tsx — includes MemberWorkloadCard inline): Header "Team Workload Overview" +
+[Auto-Balance] button (blue, Robot icon). Horizontal scroll (flex gap-3 overflow-x-auto pb-2) of 5 member cards. Each card (w-[130px] bg-white rounded-lg shadow-sm
+p-3 flex-shrink-0): Avatar(w-10 mx-auto) + Name(text-sm font-medium text-center) + status "Good"(green)/"Busy"(yellow)/"Overloaded"(red)(text-xs rounded-full) +
+"Tasks: 3" "Due: 1" + capacity bar (h-2 rounded-full: green<80%/orange/red>100%) + percentage. Cards: Alice 60%, Bob 85%, Carol 15%, Dave 110%, Eve 45%.
+EMPTY: "No team members available."
+7. CONTEXT SWITCHER MODAL (ContextSwitcherModal.tsx — includes ProjectContextCard inline): Centered modal (max-w-[560px] max-h-[70vh] rounded-xl
+shadow-2xl p-5). Shuffle icon + "Switch Project Context" + X. Search "Search projects...". "PINNED": 1 project row (h-16 hover:bg-gray-50 rounded-lg px-3 py-2): pin
+icon + color dot(w-3 h-3) + name(font-medium) + "Last: 2h ago"(text-sm text-gray-400 ml-auto). Line 2: "5 active tasks | 3 unread | 1 draft"(text-xs text-gray-500).
+"RECENT": 3 project rows. One has "3 important updates"(text-xs text-orange-500). One has "2 decisions need input". Footer: "+ Create New Project Context" link.
+EMPTY: "No project contexts detected."
+8. CATCH-UP CARD (CatchUpCard.tsx): Floating (max-w-[440px] bg-white shadow-xl rounded-xl p-5). Shuffle + "Welcome back to 'API Documentation'". "Away for
+1 day 4 hours". "What happened:" 4 bullets (text-sm): "3 tasks completed", "2 new assigned to you", "New group message about auth", "Design review notes posted".
+"Suggested first action: Check group messages — 6 hours old". Buttons: "Go to messages"(blue)/"View all"(border)/"Dismiss"(ghost).
+9. RECORDING BAR (RecordingBar.tsx): Fixed top-center (fixed top-4 left-1/2 -translate-x-1/2 z-50). Pill (h-12 bg-white rounded-full shadow-lg border px-6 flex
+items-center gap-4): Red dot pulse + "Recording..." + "Steps: 5" + "Last: Created task"(text-sm text-gray-500 truncate max-w-[200px]). Buttons: "Pause"(border
+rounded-full px-3 py-1 text-sm)/"Stop"(bg-red-500 text-white rounded-full px-3 py-1)/"Undo Last"(text-gray-400 text-sm).
+10. WORKFLOW REVIEW MODAL (WorkflowReviewModal.tsx): Modal (max-w-[600px] max-h-[80vh] overflow-y-auto rounded-xl shadow-2xl p-6). CheckCircle
+green + "Workflow Recorded: 'Client Onboarding'". Name+Desc inputs. "INPUT VARIABLES": 4 rows: checkbox + "Client Name"[Text]/"Client Email"[Text]/"Start
+Date"[Date]/"Assigned User"[User] + "+ Add variable". "WORKFLOW STEPS": 5 numbered steps icon+desc+{{variables}} in blue text + [Edit][Remove][Make
+Optional]. "TRIGGER": 3 radios Manual/Scheduled/Event. Cancel+"Save Workflow".
+11. WORKFLOW RUN MODAL (WorkflowRunModal.tsx): Modal (max-w-[440px] p-6). Play icon + "Run: Client Onboarding". 4 variable fields (label+input).
+Cancel+"Run Workflow". Completion state: 5 green checks + steps + "Time saved: ~8 min" + "View Created Items"/"Run Again"/"Done".
+12. WORKFLOW LIBRARY (WorkflowLibrary.tsx — includes WorkflowCard inline): Header "Workflows" + "Record New Workflow"(blue). Tabs
+"My"/"Shared"/"All". Grid (grid-cols-2 gap-3): 4 cards each bg-white rounded-lg shadow-sm p-4 border hover:shadow-md. Icon+name(font-semibold
+text-sm)+desc(text-xs text-gray-500 line-clamp-2)+"Run 12 times | Avg: 45s"(text-xs text-gray-400)+Run+[Edit][Share][Delete] icons. EMPTY: "No workflows yet.
+Record your first!"
+13. DAILY PLANNER (DailyPlanner.tsx — includes PlanBlock + PlanSummaryBar inline): Header: Calendar + "My Day — Wednesday, March 4" + Regenerate.
+AI Reasoning (bg-blue-50 rounded-lg p-3 text-sm italic): "Deadline tomorrow, prioritized backend in peak hours". Vertical timeline: 8 blocks (bg-white rounded-lg
+shadow-sm p-3 border-l-4 gap-2). Each: time range (text-xs text-gray-400) + icon+title(font-medium) + priority badge "MUST DO"(bg-red-100 text-red-700
+text-xs)/"Should Do"(blue)/"Nice to Do"(gray) + energy "High"/"Medium"/"Low" + [Done][Skip][Start Focus][Reschedule] buttons. Colors: task=blue, break=gray,
+comms=yellow, focus=orange. 8 blocks: 9:00 Comms(30min), 9:30 "Implement auth API"(90min MUST DO), 11:00 Break(15min), 11:15 "Review mockups"(45min),
+12:00 Lunch(60min), 1:00 "Code review"(45min), 1:45 "Unit tests"(60min), 2:45 "Update docs"(45min Nice). Bottom bar (fixed bottom-0 bg-white shadow-lg border-t
+p-3 z-30): "Must Do: 1/2 | Should Do: 1/4 | Nice: 0/2" + "Planned: 6h 30m | Completed: 0h | Remaining: 6h 30m". EMPTY: "Click Regenerate to create today's plan".
+14. TEMPLATE SELECTOR (TemplateSelector.tsx): Modal (max-w-[560px] rounded-xl shadow-2xl p-6). FileText + "Generate Document with AI". Sections:
+"REPORTS" [Weekly Status Report][Sprint Retrospective], "PLANNING" [Project Brief], "HANDOFFS" [Handoff Document][Onboarding Guide], "CUSTOM" [Describe
+what you need]. Each card: bg-white rounded-lg shadow-sm p-4 border hover:shadow-md icon+title+desc. [Create Custom Template] link. Config form inline after
+select: date range, project, include data checkboxes, notes textarea, "Generate Document" button. Progress inline: 4 steps + bar.
+15. CUSTOM TEMPLATE CREATOR (CustomTemplateCreator.tsx): Modal (max-w-[600px] max-h-[80vh] overflow-y-auto rounded-xl p-6). Name+Desc inputs.
+"Sections": 3 rows each drag handle+title input+type dropdown (Static Text/AI Generated/Data Query/User Input)+delete X. [+ Add Section]. Cancel+"Save Template".
+EMPTY: "No custom templates yet."
+BOUNDARIES — CRITICAL:
+• Do not add any click handlers or state changes
+• Do not add any API calls or database connections
+• Do not modify any existing files
+• Build only and exactly what is described above
+• NOTE: Removed meeting-purple blocks from DailyPlanner — no meetings table. Changed 'Account Manager' to 'Assigned User'. Changed catch-up
+card to reference group_messages not generic messaging API.
+PROMPT 3 OF 6
+Logic: Infrastructure + Autopilot + Predictions + Time Machine
+■ REPLIT: AUTONOMOUS → ECONOMY | App Testing: OFF | Code Optimization: OFF
+PROMPT 3 — Copy into Replit
+CONTEXT: App: AI-driven productivity platform with Replit Auth. Tech: React + Vite, TypeScript, Tailwind, Shadcn/UI, PostgreSQL, Drizzle ORM (shared/schema.ts),
+Express (server/routes.ts), OpenAI via Replit integration. Router: wouter (client/src/App.tsx). State: @tanstack/react-query. File paths: client/src/components/,
+client/src/pages/, client/src/lib/, client/src/hooks/, server/routes.ts, server/storage.ts (IStorage interface), shared/schema.ts. Auth: Replit Auth — user ID is text string
+from req.user.claims.sub, protected with isAuthenticated middleware from server/replit_integrations/auth/. PKs: serial integers. User IDs: text (not UUID). No
+workspaces. Existing tables: tasks (userId varchar, title text, description text, completionPercentage integer, date text, time text, priority text), notes (not
+pages), group_messages (not messages). No meetings table. No databaseId concept. No Redis, no BullMQ, no Socket.io, no tRPC, no centralized AI service, no
+Google Calendar. Background jobs: node-cron or setInterval (install node-cron before Prompt 5: npm install node-cron @types/node-cron). In-memory cache
+(Map). Rules: TypeScript strict, Zod validation, serial integer PKs, createdAt/updatedAt timestamps, responsive design.
+Feature: Event tracking, in-memory queues, OpenAI helpers, all autopilot interactions, prediction engine, time machine logic. Current state:
+Prompts 1-2 done. All UI shells exist. Layer: Layer 2+3.
+Files to create:
+• client/src/hooks/useActivityTracker.ts
+• client/src/lib/eventQueue.ts
+• client/src/lib/aiHelpers.ts
+• client/src/lib/autopilot/triggerEngine.ts
+• client/src/lib/autopilot/actionExecutor.ts
+• client/src/lib/autopilot/undoSystem.ts
+• client/src/lib/predictions/predictionEngine.ts
+• client/src/lib/predictions/sequenceLearner.ts
+• client/src/lib/timemachine/sessionAnalyzer.ts
+• client/src/lib/timemachine/focusScoreCalculator.ts
+Files to change:
+• AutopilotPanel.tsx, RuleCreatorModal.tsx, AutopilotSettings.tsx
+• PredictionBanner.tsx, PostCompletionPopup.tsx, SprintPlanner.tsx
+• TimeMachine.tsx, VisualTimeline.tsx, ActivityBreakdown.tsx, AIInsightsPanel.tsx,
+• DetailedActivityLog.tsx, WeeklyHeatmap.tsx, TimeMachineSettings.tsx
+TASK: Wire all infrastructure, autopilot, prediction, and time machine interactions. All data in React state only (lost on refresh =
+expected). Do not change any visual design.
+PART A — INFRASTRUCTURE
+1. EVENT TRACKER (useActivityTracker.ts): Hook exporting {trackEvent, isTracking}. Events: task_created/completed/status_changed/viewed,
+note_created/edited, group_message_sent, feature_opened/search_performed/session_start/end. Each event: {eventType, eventData,
+sessionId(crypto.randomUUID()), timestamp(ISO), dayOfWeek(0-6), hourOfDay(0-23)}. Debounce note_edited 30s. Daily cap 1000.
+2. EVENT QUEUE (eventQueue.ts): In-memory array. flush() POSTs to /api/autopilot/events (Express route — see Prompt 5). Auto-flush 10s interval + beforeunload.
+Max queue 200. NOTE: This route will be created in Prompt 5. For now, flush() should POST and gracefully handle 404.
+3. AI HELPERS (aiHelpers.ts): Three helper functions for OpenAI calls via Replit integration: generateStructured(prompt, zodSchema) — calls OpenAI, parses with
+Zod. generateWithContext(prompt, contextData) — prepends context to prompt. batchGenerate(prompts[]) — Promise.all with rate limiting (max 3 concurrent). Each:
+token estimation, error handling with retry (1 retry). Use in-memory Map() as cache with 5-minute TTL. NO Redis. NO centralized AI service.
+PART B — AUTOPILOT LOGIC
+4. PANEL: Sidebar Zap icon + Alt+Shift+A toggles panel (NOT Ctrl+Shift — browser conflicts). Tab clicking switches sections. Gear opens settings slide-out.
+5. RULE CREATOR: "+ Create" opens modal. Cancel/X/Escape/overlay close. TRIGGER OPTIONS (each shows sub-config): "Task completed"(status filter), "Task
+created"(content filter), "Task status changed"(from/to), "Task due in X hours"(number default 24), "Task overdue"(hours default 48), "Time-based"(day/time), "Start of
+day"(time+timezone), "End of day"(time+timezone), "Weekly on day", "No activity X min"(default 30). ACTION OPTIONS: "Create task"(title with {{vars}}+due+priority),
+"Update task"(property+value), "Move to status", "Send notification"(msg), "Send reminder"(delay+msg), "AI generate"(prompt+target), "AI summarize"(source), "Wait
+X min", "Condition check"(field+operator+value+if/else). "+Add action" max 5. Variables: {{task.title}}, {{user.firstName}}, {{date.today}}. Validate
+name+trigger+action. Save to state. NOTE: Removed triggers/actions that depend on non-existent systems (messaging channels, meetings, assignee, pages,
+databases). Kept all that work with existing tasks/notes.
+6. SUGGESTIONS: "Do It" executes + toast + move to Recent. "Edit" opens RuleCreator pre-filled. "Skip" removes + animation. "Never" blocks.
+7. FLOATING WIDGET: Show when pending. Max 3 stacked. Auto-dismiss 30s. X individual dismiss.
+8. RULES: Toggle ON/OFF. Edit/Duplicate("Copy" appended)/Delete(confirm)/View History.
+9. TRIGGER ENGINE (triggerEngine.ts): evaluateTriggers(event, rules) — match eventType to triggerType, check config filters, check cooldown+daily limit, max
+chain depth 3.
+10. ACTION EXECUTOR (actionExecutor.ts): executeActions(rule, event) — process actions in order, replace {{vars}}, handlers: create_task/update_task add to
+state, send_notification=toast, wait=setTimeout, condition=branch. Auto mode: execute+toast with Undo. Suggest: add to pending. Confirm: modal first. NOTE:
+Removed send_message/create_page handlers — no messaging API or page API exists. Tasks and notifications only.
+11. UNDO (undoSystem.ts): Store undoData per execution. [Undo] reverses. Available 24h. Toast "Autopilot did X. [Undo]" dismiss 10s.
+12. SETTINGS: Toggles save to state. Master toggle disables all. "Delete All Data" confirms+clears.
+13. TEMPLATES: "Use Template" pre-fills RuleCreator.
+V2 FIX 5: Variable {{user.name}} changed to {{user.firstName}} — the users table has firstName and lastName columns, not a name column.
+PART C — PREDICTIONS LOGIC
+14. BANNER: [Collapse]/[Expand] toggles (200ms). Count from state.
+15. PREDICTION CARDS: "Create Task" creates+toast+fade-out. "Edit & Create" opens task modal pre-filled. "Not Needed" removes+increments dismissals. 3+
+dismissals pauses 1 week.
+16. POST-COMPLETION: Auto-show on task marked complete (completionPercentage set to 100). If prediction exists show popup. "Create It"/"Skip". Auto-dismiss
+10s countdown.
+17. SPRINT: Checkboxes toggle. "Create All Selected". "Customize" = inline edit. "Start Blank" closes.
+18. PREDICTION ENGINE (predictionEngine.ts): predictFollowUpTasks(task) — load task_sequences matching title patterns, confidence>0.7 generate prediction
+{title, due, reasoning}. Duplicate check 80% title match. Max 5 predictions. NOTE: No databaseId, no assignee — predictions are title+due+priority only based on
+content matching.
+19. SEQUENCE LEARNER (sequenceLearner.ts): learnSequences(tasks30d) — find pairs completed within 24h, frequency>3 + confidence>0.6 save as sequence.
+20. SPRINT PREDICTION: predictSprintTasks() from templates (based on recent task patterns).
+V2 FIX 3: Prediction engine and sequence learner now match on tasks.title (not tasks.content which doesn't exist).
+PART D — TIME MACHINE LOGIC
+21. TIME MACHINE: Date nav arrows. Tab switching Daily/Weekly/Monthly.
+22. TIMELINE: Hover shows tooltip (name+duration+details). Click scrolls to activity log.
+23. ACTIVITY LOG: [Show All] expands. Click entry shows detail.
+24. SESSION ANALYZER (sessionAnalyzer.ts): analyzeSession(events[]) — group into blocks (same type 5min gap), calc totals, count context switches.
+25. FOCUS SCORE (focusScoreCalculator.ts): (longestBlock/totalActive)*100. -5 per switch>10. +10 if session>45min. Clamp 0-100.
+26. HEATMAP: Render from 5 days sessions (color by focus).
+27. SETTINGS: All toggles to state.
+BOUNDARIES — CRITICAL:
+• Do not add any database reads or writes
+• All data in React state only (lost on refresh — expected)
+• Do not change any visual design from Structure prompts
+• Do not add any features not described above
+• NO BullMQ, NO Redis, NO Socket.io, NO Next.js App Router routes

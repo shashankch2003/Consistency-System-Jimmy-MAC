@@ -46,6 +46,7 @@ import {
   Sparkles,
   Search,
   Command,
+  Calendar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
@@ -77,6 +78,7 @@ const menuItems = [
   { title: "Connect", icon: MessageSquare, url: "/dashboard/connect" },
   { title: "AI Autopilot", icon: Zap, url: "/dashboard/autopilot" },
   { title: "Time Machine", icon: BarChart3, url: "/dashboard/time-machine" },
+  { title: "Daily Planner", icon: Calendar, url: "/dashboard/daily-planner" },
   { title: "Workspace Setup", icon: Building2, url: "/dashboard/workspace-setup" },
   { title: "Team Management", icon: UsersRound, url: "/dashboard/team-management" },
   { title: "Members", icon: Users, url: "/dashboard/members" },

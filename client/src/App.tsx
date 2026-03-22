@@ -39,6 +39,7 @@ import AutomationsPage from "@/pages/dashboard/automations";
 import ConnectPage from "@/pages/dashboard/connect";
 import AutopilotPanel from "@/pages/autopilot/AutopilotPanel";
 import TimeMachine from "@/pages/analytics/TimeMachine";
+import DailyPlanner from "@/pages/planner/DailyPlanner";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -216,6 +217,11 @@ function Router() {
       <Route path="/dashboard/time-machine">
         <DashboardLayout>
           <TimeMachine />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/daily-planner">
+        <DashboardLayout>
+          <DailyPlanner />
         </DashboardLayout>
       </Route>
 
