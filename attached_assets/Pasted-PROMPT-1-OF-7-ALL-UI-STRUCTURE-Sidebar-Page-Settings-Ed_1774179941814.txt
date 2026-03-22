@@ -1,0 +1,279 @@
+PROMPT 1 OF 7
+ALL UI STRUCTURE: Sidebar + Page + Settings + Editor + Slash + Toolbar
++ Database + Comments + Search + Focus + Split + ContentMap
+■ REPLIT: LITE MODE (lightning bolt) | App Testing: OFF | Code Optimization: OFF
+■ FIX APPLIED: Fix 1 — Tech stack corrected to React + Vite + Drizzle + Express
+■ FIX APPLIED: Fix 3 — All file paths corrected to client/src/components/notes/
+■ FIX APPLIED: Fix 9 — workspace_id removed; uses userId from auth
+■ FIX APPLIED: Fix 11 — Route registration added for App.tsx
+■ FIX APPLIED: Fix 20 — 'My Workspace' replaced with user's display name from auth
+CONTEXT:
+App: AI-driven productivity platform with auth, teams, tasks
+Tech: React, TypeScript, Vite, Tailwind CSS, Shadcn/UI, PostgreSQL, Drizzle ORM,
+Express.js backend in server/routes.ts
+Building: Advanced note-taking system with block editor, 35+ block types, databases,
+AI coaching, focus mode, voice notes, sketching, and 25 unique features beyond
+competitors
+Feature: ALL 12 UI component shells — structure only, no interactivity
+Current state: App has auth. No notes system exists. The app HAS a workspace system (workspaces table, WorkspaceProvider,
+useWorkspace hook) — but notes use userId for personal data ownership.
+Layer: Layer 1 — Structure only (12 components)
+Files to create:
+client/src/components/notes/Sidebar.tsx
+client/src/components/notes/PageView.tsx
+client/src/components/notes/PageSettingsPanel.tsx
+client/src/components/notes/BlockEditor.tsx
+client/src/components/notes/SlashCommandGrid.tsx
+client/src/components/notes/BlockToolbar.tsx
+client/src/components/notes/DatabaseView.tsx
+client/src/components/notes/CollaborationPanel.tsx
+client/src/components/notes/SearchCommandPalette.tsx
+client/src/components/notes/FocusMode.tsx
+client/src/components/notes/SplitView.tsx
+client/src/components/notes/ContentMap.tsx
+NOTE (Fix 22): The route /dashboard/notes ALREADY EXISTS in client/src/App.tsx.
+Do NOT add it again — a duplicate route will cause unexpected routing behavior.
+Just use the existing route.
+TASK:
+Build all 12 UI shells with hardcoded data. Nothing interactive. No click handlers,
+no state changes, no API calls.
+=== COMPONENT 1: SIDEBAR (Sidebar.tsx) ===
+Left panel (w-[260px] h-full bg-gray-50 border-r border-gray-200 flex flex-col).
+Top: Display user.firstName + ' ' + user.lastName from useAuth (font-semibold
+text-sm px-4 py-3) + collapse icon. [FIX 26: No displayName field exists —
+firstName and lastName are separate fields on the user object.] (Use the authenticated user's display name instead of a hardcoded
+workspace
+name — notes are personal data scoped to the user, not the workspace.)
+Tab bar (flex border-b px-2 gap-1): 4 tabs "Pages"/"Recent"/"Favorites"/"Tags".
+Active tab: bg-white rounded-t-md shadow-sm text-blue-700 text-xs font-medium px-3
+py-1.5.
+Inactive: text-gray-500 text-xs px-3 py-1.5 hover:bg-gray-100 rounded-t-md.
+"Pages" tab content (flex-1 overflow-y-auto px-2 py-2):
+■
+Page tree with 6 hardcoded pages with indentation:
+■
+"Getting Started" (icon , no children)
+"Project Notes" (icon , expanded, 2 children indented pl-6: "Sprint 1" "Sprint
+■
+2")
+■ ■ ■
+"Meeting Notes" (icon , collapsed with expand arrow)
+"Ideas" (icon ), "Research" (icon ), "Archive" (icon text-gray-400)
+Each row: h-8 px-2 rounded-md hover:bg-gray-100 cursor-pointer flex items-center
+gap-2 text-sm.
+Expand arrow (ChevronRight w-3 h-3) + icon (text-base) + name (truncate flex-1).
+Selected page: bg-blue-50 text-blue-700.
+Quick Capture inbox section (border-t px-3 py-2): "Inbox" header (text-xs
+text-gray-400 uppercase) + 2 hardcoded captured items (text-xs text-gray-600
+truncate py-1).
+Bottom: "+ New Page" button (w-full h-9 flex items-center gap-2 px-4 text-sm
+text-gray-500 hover:bg-gray-100 rounded-md) with Plus icon.
+"Recent" tab: 5 page names with time "2h ago" "Yesterday".
+"Favorites" tab: 3 starred pages with Star icon.
+"Tags" tab: 6 tag pills "Work" "Personal" "Ideas" "Research" "Team" "Archive"
+(bg-gray-100 text-xs rounded-full px-2 py-1).
+Show only "Pages" tab content visible.
+=== COMPONENT 2: PAGE VIEW (PageView.tsx) ===
+Main content area (flex-1 max-w-[900px] mx-auto px-16 py-8).
+Cover image area (h-[200px] w-full bg-gradient-to-r from-blue-400 to-purple-500
+rounded-b-lg relative). "Change cover" link (absolute bottom-3 right-3 text-white/70
+■
+text-xs).
+Icon (text-5xl -mt-8 ml-2 relative z-10 cursor-pointer) showing .
+Breadcrumbs (flex items-center gap-1 text-xs text-gray-400 mt-3): "Notes" > "Project
+Notes" > "Sprint 1".
+Status badge inline (bg-yellow-100 text-yellow-700 text-xs px-2 py-0.5 rounded-full
+ml-2): "In Progress".
+Reading stats (text-xs text-gray-400 ml-auto): "342 words • 2 min read • Last edited
+3h ago".
+Title (text-4xl font-bold text-gray-900 mt-2 outline-none placeholder "Untitled"
+w-full border-0).
+Content area below (mt-6 min-h-[400px]): Placeholder blocks:
+Paragraph text block (text-base text-gray-700 py-1).
+Heading 2 "Key Decisions" (text-2xl font-semibold py-2).
+Bullet list: 3 items (pl-6).
+■
+Callout block (bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-lg flex gap-3):
+icon + text.
+Code block (bg-gray-900 text-green-400 rounded-lg p-4 font-mono text-sm): 3 lines of
+sample code with language badge "javascript" top-right.
+Each block has invisible grip handle area on left (opacity-0 group-hover:opacity-100
+w-6).
+=== COMPONENT 3: PAGE SETTINGS PANEL (PageSettingsPanel.tsx) ===
+Right sidebar (fixed right-0 top-0 h-full w-[340px] bg-white shadow-xl border-l z-40
+overflow-y-auto).
+Header: "Page Settings" (font-semibold text-lg) + X close (border-b px-5 py-4).
+Scrollable sections (px-5 py-4 space-y-6):
+"Appearance" section (text-xs font-semibold text-gray-400 uppercase mb-3):
+Font selector: 3 cards side-by-side (grid grid-cols-3 gap-2): "Default"(active, blue
+border) / "Serif" / "Mono" — each showing Aa preview.
+"Small text" toggle (flex justify-between py-2). "Full width" toggle.
+"Page Status" section: 5 status pills (flex flex-wrap gap-2): "Draft"(gray)/"In
+Progress"(yellow)/"Review"(blue)/"Final"(green)/"Archived"(gray-400).
+"Page Info" section: Icon picker button, Cover image button, Created "Mar 1, 2026",
+Last edited "3h ago", Word count "342", Reading time "2 min".
+"AI Insights" section: "Generate Insights" button (border text-sm) + placeholder
+"Insights will appear here".
+"Actions" section: Rows (each h-10 flex items-center hover:bg-gray-50 rounded px-2
+text-sm cursor-pointer): Copy link, Duplicate page, Move to..., Lock page, Suggest
+edits, Use with AI, Translate, History, Share, Export, Import.
+"Danger Zone" section: "Move to Trash" (text-red-500 text-sm).
+=== COMPONENT 4: BLOCK EDITOR (BlockEditor.tsx) ===
+Container for rendering blocks (w-full min-h-[400px]).
+10 hardcoded sample blocks demonstrating different types:
+Block 1: TEXT — regular paragraph (text-base text-gray-700 py-1 px-1).
+Block 2: HEADING 2 — "Project Overview" (text-2xl font-semibold py-2).
+Block 3: BULLET LIST — 3 items (pl-6, each with • marker).
+Block 4: TO-DO — 2 checkboxes (first checked with line-through).
+Block 5: TOGGLE — "Click to expand" with ChevronRight + hidden content.
+Block 6: QUOTE — left border (border-l-3 border-gray-300 pl-4 italic text-gray-600).
+gap-3)■■
+Block 7: CALLOUT — (bg-amber-50 border-l-4 border-amber-400 p-3 rounded-r-lg flex
+icon + warning text.
+Block 8: CODE — (bg-gray-900 text-green-400 rounded-lg p-4 font-mono text-sm
+overflow-x-auto) with "python" badge.
+Block 9: DIVIDER — (border-t border-gray-200 my-4).
+Block 10: TABLE — 3x3 grid (border border-gray-200, each cell px-3 py-2 text-sm
+border).
+Each block wrapped in container (group relative py-0.5): Left grip handle (absolute
+-left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 w-6 h-6 flex
+items-center justify-center text-gray-300 cursor-grab): GripVertical icon. Block
+type icon (absolute -left-14 opacity-0 group-hover:opacity-40 text-xs
+text-gray-400).
+Empty block row at bottom: just cursor line blinking.
+=== COMPONENT 5: SLASH COMMAND GRID (SlashCommandGrid.tsx) ===
+Popup positioned below cursor (absolute z-50 w-[480px] bg-white rounded-xl
+shadow-2xl border p-4).
+Search input at top (h-9 w-full border-0 outline-none text-sm placeholder "Search
+blocks...").
+Category headers (text-xs font-semibold text-gray-400 uppercase mt-3 mb-2).
+"BASIC" category: Card grid (grid grid-cols-3 gap-2) of block type cards. Each card
+(p-3 rounded-lg hover:bg-blue-50 cursor-pointer border border-transparent
+hover:border-blue-200 transition): Icon (text-xl mb-1) + name (text-sm font-medium)
+■ ■ ■ ■
++ desc (text-xs text-gray-400).
+Cards: Text, Heading 1, Heading 2, Heading 3, • Bullet List, 1.
+■ ■ ■ ■ ✍■ ■ ■
+Numbered, ■ To-Do, ■ Toggle, " Quote.
+"MEDIA" category: Image, Video, Voice Note, Sketch, File,
+■ ■ ■ ■
+Bookmark, Embed.
+■
+"ADVANCED" category: Table, Database, Code, ✖ Equation, Callout, ■
+■ ■ ■ ■ ■
+Divider, Synced Block.
+■
+"UNIQUE" category (with
+Timeline, Poll,
+sparkle accent): Progress Bar,
+Reading List, ■ Code Runner.
+Flashcard,
+Show popup visible for testing.
+=== COMPONENT 6: BLOCK TOOLBAR (BlockToolbar.tsx) ===
+Floating bar that appears above text selection (absolute z-50).
+Bar (bg-gray-900 rounded-lg shadow-xl px-2 py-1 flex items-center gap-0.5).
+Format buttons (each w-7 h-7 rounded flex items-center justify-center text-white/80
+<>(code), ■
+hover:bg-white/20 text-sm): B(bold), I(italic), U(underline), S(strikethrough),
+■ ■
+(link), A with color dot(text color picker), highlight icon(background
+color), @(mention), (comment on selection), (AI improve).
+Separator line (w-px h-4 bg-white/20) between format group and action group.
+Action buttons: "Turn into" dropdown trigger, "Copy" icon.
+Show bar visible for testing at a fixed position.
+=== COMPONENT 7: DATABASE VIEW (DatabaseView.tsx) ===
+Inline block (bg-white rounded-lg border border-gray-200 overflow-hidden).
+Header (px-4 py-2 border-b flex items-center justify-between): Database title "Task
+Tracker" (font-medium text-sm) + view tabs (flex gap-1):
+"Table"(active)/"Board"/"Calendar"/"Timeline"/"Gallery"/"List" (each text-xs px-2
+py-1 rounded).
+Toolbar (px-4 py-1.5 border-b flex gap-2 text-xs text-gray-500): "Filter" + "Sort" +
+"Group" + "Properties" + "New view" + Search icon.
+TABLE VIEW content: Header row (bg-gray-50 text-xs font-medium text-gray-500): Name
+/ Status / Priority / Assignee / Due Date. 5 data rows (h-10 border-b text-sm
+hover:bg-gray-50). Status as colored badge. Priority as icon. Assignee as avatar.
+Date as text.
+BOARD VIEW placeholder (flex gap-4 p-4): 3 columns "To Do"/"In Progress"/"Done" with
+2-3 cards each.
+"+ New" button at bottom (text-sm text-gray-400 px-4 py-2).
+Show Table view active.
+=== COMPONENT 8: COLLABORATION PANEL (CollaborationPanel.tsx) ===
+Right panel (w-[320px] bg-white border-l h-full overflow-y-auto).
+Tabs: "Comments"(active) / "Activity" (text-sm).
+"Comments" tab: 3 hardcoded comment threads. Each: avatar (w-8 h-8 rounded-full
+bg-gray-200) + name (font-medium text-sm) + time (text-xs text-gray-400) + comment
+text (text-sm mt-1) + "Reply" link (text-xs text-blue-600) + "Resolve" link (text-xs
+text-gray-400).
+■ ❤■
+Block reactions section: "Reactions on this page" header (text-xs text-gray-400). 2
+reaction rows: block text snippet + emoji reactions ( 3, 1).
+Comment input at bottom (border-t p-3): avatar + input (rounded-lg border text-sm
+placeholder "Write a comment...").
+"Activity" tab: 5 entries "Alice edited Block 3" "Bob added comment" etc with
+timestamps.
+=== COMPONENT 9: SEARCH COMMAND PALETTE (SearchCommandPalette.tsx) ===
+Overlay (fixed inset-0 bg-black/40 z-50 flex items-start justify-center pt-[15vh]).
+Card (w-[600px] bg-white rounded-xl shadow-2xl overflow-hidden).
+Input (h-12 w-full border-0 px-5 text-base placeholder "Search pages, blocks, or
+type a command..." outline-none).
+Divider.
+Quick actions section (px-4 py-2): "ACTIONS" header (text-xs text-gray-400). Action
+rows: "+ New Page" / "Quick Capture" / "Toggle Focus Mode" / "Open Split View" /
+"Open Content Map" (each h-9 px-3 rounded-md hover:bg-gray-50 flex items-center
+gap-3 text-sm cursor-pointer).
+Recent section: "RECENT" header + 4 page rows with icon + title + time.
+Search results placeholder: "Start typing to search..." (text-sm text-gray-400
+text-center py-6).
+Keyboard hint: "Ctrl+K" (text-xs text-gray-300 px-4 py-2 text-right).
+Show visible for testing.
+=== COMPONENT 10: FOCUS MODE (FocusMode.tsx) ===
+Full-screen overlay (fixed inset-0 bg-gray-950 z-50 flex flex-col).
+Top bar (flex justify-between items-center px-8 py-4):
+Left: "Focus Mode" (text-white/60 text-sm) + word target "Goal: 500 words".
+Center: Animated progress ring (w-12 h-12 SVG circle stroke-width-3 stroke-blue-400)
+with "342" inside (text-white text-xs).
+Right: Ambient sound selector (3 icons: Rain/Forest/Silence, text-white/40) + timer
+"25:00" + X exit (text-white/40).
+Editor area (max-w-[700px] mx-auto flex-1 py-12):
+Title "Sprint 1 Planning" (text-3xl font-bold text-white outline-none placeholder
+"Start writing...").
+Content (text-lg text-white/80 leading-relaxed mt-6): 2 paragraphs of sample text.
+Current block slightly brighter (text-white), other blocks dimmed (text-white/40).
+Bottom (text-center py-4): Word count "342 / 500" (text-white/30 text-sm) + "Press
+Esc to exit" (text-white/20 text-xs).
+Show visible for testing.
+=== COMPONENT 11: SPLIT VIEW (SplitView.tsx) ===
+Full layout (flex h-full).
+Left pane (flex-1 border-r border-gray-200 overflow-y-auto): PageView header with
+"Sprint 1" + content blocks.
+Divider handle (w-1 bg-gray-200 hover:bg-blue-400 cursor-col-resize relative flex
+items-center justify-center): Grip dots (w-3 h-8 flex flex-col gap-0.5 items-center
+justify-center): 6 small dots (w-1 h-1 rounded-full bg-gray-400).
+Right pane (flex-1 overflow-y-auto): PageView header with "Research Notes" +
+different content blocks.
+Tab bar on each pane top (h-8 bg-gray-50 border-b flex items-center px-3 gap-2):
+Page title (text-xs font-medium) + X close (text-gray-400 w-4 h-4).
+=== COMPONENT 12: CONTENT MAP (ContentMap.tsx) ===
+Full overlay (fixed inset-0 bg-white z-50 flex flex-col).
+Header (h-12 border-b px-6 flex items-center justify-between): "Content Map"
+(font-semibold) + zoom controls (+/- buttons) + X close.
+Canvas area (flex-1 overflow-auto p-8 bg-gray-50):
+Mind-map layout with 7 hardcoded page nodes:
+Center node "My Notes" (bg-blue-500 text-white rounded-xl px-4 py-2 shadow-lg
+font-medium).
+Connected nodes radiating out: "Project Notes" "Meeting Notes" "Ideas" "Research"
+"Getting Started" "Archive".
+Each node (bg-white rounded-lg shadow-md px-3 py-2 text-sm border border-gray-200
+cursor-pointer hover:shadow-lg).
+Connection lines (SVG paths, stroke-gray-300 stroke-width-2) between linked pages.
+Page icon displayed on each node.
+Show visible for testing.
+EMPTY STATES:
+- No pages: "Create your first page to get started"
+- Favorites empty: "Star pages to add them here"
+- Tags empty: "AI will auto-tag your pages, or add tags manually"
+BOUNDARIES — CRITICAL:
+- Do not add any click handlers or state changes
+- Do not add any API calls or database connections
+- Do not modify any existing files (the /dashboard/notes route already exists)
+- Build only and exactly what is described above — all 12 components

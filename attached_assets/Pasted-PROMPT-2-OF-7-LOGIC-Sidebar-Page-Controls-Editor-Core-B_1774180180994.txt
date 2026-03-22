@@ -1,0 +1,134 @@
+PROMPT 2 OF 7
+LOGIC: Sidebar + Page Controls + Editor Core Blocks
+■ REPLIT: AUTONOMOUS → ECONOMY | App Testing: OFF | Code Optimization: OFF
+■ FIX APPLIED: Fix 1 — Tech stack corrected
+■ FIX APPLIED: Fix 3 — File paths corrected to client/src/components/notes/
+■ FIX APPLIED: Fix 9 — No workspace_id references
+CONTEXT:
+App: AI-driven productivity platform with auth, teams, tasks
+Tech: React, TypeScript, Vite, Tailwind CSS, Shadcn/UI, PostgreSQL, Drizzle ORM,
+Express.js backend in server/routes.ts
+Building: Advanced note-taking system with block editor, 35+ block types, databases,
+AI coaching, focus mode, voice notes, sketching, and 25 unique features beyond
+competitors
+Feature: All sidebar interactions + page controls + core block editor with basic
+block types, slash commands, drag-drop, rich text, markdown, keyboard shortcuts
+Current state: Prompt 1 done. All 12 UI shells exist.
+Layer: Layer 2+3 — All interactions (no database)
+Files to change: client/src/components/notes/Sidebar.tsx,
+client/src/components/notes/PageView.tsx,
+client/src/components/notes/PageSettingsPanel.tsx,
+client/src/components/notes/BlockEditor.tsx,
+client/src/components/notes/SlashCommandGrid.tsx,
+client/src/components/notes/BlockToolbar.tsx
+=== PART A: SIDEBAR + PAGE CONTROLS ===
+1. SIDEBAR TABS: Clicking tab switches content. Pages/Recent/Favorites/Tags. Active
+tab styling.
+2. PAGE TREE: Click page selects it and loads in PageView. Expand/collapse arrow
+toggles children (200ms). Drag page rows to reorder (onDragStart/onDragOver/onDrop).
+Right-click page shows context menu: Rename/Duplicate/Move/Delete/Add to
+Favorites/Set Status.
+3. NEW PAGE: "+ New Page" creates untitled page in state, selects it, focuses title.
+4. FAVORITES: Star icon on hover toggles favorite. Favorites tab shows starred
+pages.
+5. TAGS: Click tag filters pages by that tag. "Add Tag" on page adds to tags state.
+6. QUICK CAPTURE: Capture button opens mini input (overlay bottom-right). Type text
++ Enter saves to inbox array. Inbox items shown in sidebar.
+7. RECENT: Track last 10 pages opened. Show in Recent tab with relative time.
+8. SEARCH: Ctrl+K opens SearchCommandPalette. Escape closes. Type filters pages by
+title. Actions execute: "New Page" creates, "Focus Mode" opens, "Split View" opens,
+"Content Map" opens.
+9. PAGE VIEW: Title contentEditable. Click to edit, blur saves. Breadcrumbs
+auto-generated from page parent chain.
+10. COVER: "Change cover" opens picker with 6 gradient presets + "Upload" option +
+"Remove" option. Selecting changes cover in state.
+11. ICON: Click icon opens emoji picker grid (6x8 common emojis). Selecting changes
+icon.
+12. STATUS: Click badge opens dropdown: Draft(gray)/In
+Progress(yellow)/Review(blue)/Final(green)/Archived(gray-400). Updates in sidebar
+tree too.
+13. READING STATS: Calculate word count from blocks, reading time (words/200 rounded
+up), last edited timestamp. Display inline.
+14. SETTINGS PANEL: Gear icon or three-dot menu opens panel (slide 200ms). X/outside
+closes.
+15. FONT: Clicking Default/Serif/Mono card changes page font-family in state.
+16. SMALL TEXT: Toggle reduces base font size from 16px to 14px.
+17. FULL WIDTH: Toggle changes max-width from 900px to 100%.
+18. LOCK: Toggle disables all editing on page content. Shows lock icon in header.
+19. ACTIONS: Copy Link copies URL to clipboard + toast. Duplicate creates copy. Move
+opens page picker. Delete moves to trash array. Undo restores last action.
+20. History: Opens version list (placeholder, populated in DB prompts).
+21. Share: Opens share modal with link copy + permission dropdown.
+22. Export: Downloads page as Markdown. Import: Accepts .md file, parses to blocks.
+=== PART B: EDITOR CORE BLOCKS ===
+23. BLOCK DATA MODEL (in React state): Array of block objects. Each: { id: uuid,
+type: string, content: string, properties: {}, children: [] (for nested/toggle),
+indent: 0-3 }
+24. BASIC BLOCK TYPES (render based on type):
+"text" — contentEditable div (text-base). Enter at end creates new text block below.
+Backspace on empty deletes block.
+"heading1" — text-3xl font-bold. "heading2" — text-2xl font-semibold. "heading3" —
+text-xl font-medium.
+"bullet_list" — • marker + text (pl-6). Enter creates next bullet. Empty + Enter
+converts to text.
+"numbered_list" — Auto-incrementing number. Same enter behavior.
+"todo" — Checkbox + text. Click checkbox toggles checked (line-through +
+text-gray-400). Enter creates next todo.
+"toggle" — ChevronRight/Down icon + text. Click arrow expands/collapses children
+area (200ms). Children can be any block type.
+"toggle_heading1/2/3" — Heading + toggle combined.
+"quote" — border-l-3 border-gray-300 pl-4 text-gray-600 italic.
+picker + color picker. Default:■
+"callout" — bg-[color]-50 border-l-4 border-[color]-400 p-3 rounded-r-lg. Icon
+blue.
+"divider" — border-t border-gray-200 my-3. Not editable.
+"code" — bg-gray-900 text-green-400 rounded-lg p-4 font-mono text-sm. Language
+selector dropdown (50+ languages). Copy button top-right.
+"table" — Rows x Cols grid. Tab moves between cells. Shift+Tab goes back. Enter in
+last cell adds row. Column resize handles. Header row toggle.
+"image" — Click to upload or paste URL. Display with resize handles (drag corners).
+Caption text below. Alignment: left/center/full-width.
+"video" — Paste URL (YouTube/Vimeo). Renders embedded player.
+"file" — Upload attachment. Shows filename + size + download icon.
+"bookmark" — Paste URL. Renders card with site title + description + favicon +
+thumbnail.
+"embed" — Paste URL. Renders iframe. Resize handles.
+25. COLUMN LAYOUT: Type /columns or drag block to side of another block. Creates
+2-column layout (flex gap-4). Each column is a drop zone for blocks. Resize handle
+between columns.
+26. SLASH COMMANDS:
+Typing "/" at start of empty block opens SlashCommandGrid below cursor. Search input
+filters cards by name. Arrow keys navigate. Enter selects. Selecting converts
+current block to that type. Typing more characters after "/" filters: "/h1" shows
+Heading 1, "/todo" shows To-Do, etc. Escape or click outside closes grid.
+27. BLOCK TOOLBAR:
+Select text in any block → floating toolbar appears above selection. B toggles bold
+(Ctrl+B). I toggles italic (Ctrl+I). U toggles underline (Ctrl+U). S toggles
+strikethrough (Ctrl+Shift+S). <> toggles inline code (Ctrl+E). Link opens URL input
+(Ctrl+K). Text color: Click A opens color grid (10 colors + default). Background:
+Same grid for highlight. "Turn into" dropdown: Convert selected block to any other
+type while keeping content.
+28. DRAG-DROP:
+Hover block → grip handle appears on left. Drag grip to reorder blocks. Blue
+insertion line shows drop position. Drop reorders in state array. Drag to column
+edge creates/moves to column layout.
+29. MARKDOWN SHORTCUTS (on typing):
+"# " at line start → heading1. "## " → heading2. "### " → heading3.
+"- " or "* " → bullet_list. "1. " → numbered_list. "[] " or "[ ] " → todo.
+"> " → quote. Triple backticks → code block. "---" → divider.
+"**text**" → bold. "*text*" → italic. "~~text~~" → strikethrough. Backtick-wrapped
+text → inline code.
+30. KEYBOARD SHORTCUTS:
+Ctrl+Z undo, Ctrl+Y redo (maintain 50-step history stack). Tab indents block (max 3
+levels). Shift+Tab outdents. Ctrl+Shift+0 → text, Ctrl+Shift+1 → h1, Ctrl+Shift+2 →
+h2, Ctrl+Shift+3 → h3. Ctrl+Shift+4 → todo, Ctrl+Shift+5 → bullet, Ctrl+Shift+6 →
+numbered. Ctrl+D duplicate block. Ctrl+Shift+Delete delete block. Ctrl+Up/Down move
+block. Ctrl+/ toggle block menu.
+31. BLOCK MENU: Click grip handle (or right-click block or type Ctrl+/) opens block
+context menu: "Delete" / "Duplicate" / "Turn into..." / "Move to..." / "Copy link to
+block" / "Color" / "Comment" / "Add reaction"
+BOUNDARIES — CRITICAL:
+- Do not add any database reads or writes
+- All data in React state only (lost on refresh — expected)
+- Do not change any visual design from Prompt 1
+- Do not add any features not described above
