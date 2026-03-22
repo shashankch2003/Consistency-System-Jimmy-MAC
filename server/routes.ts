@@ -2649,6 +2649,10 @@ export async function registerRoutes(
         priority: priority || "Medium", startDate: startDate || null, dueDate: dueDate || null,
         ownerId: req.user.claims.sub, template: template || null, visibility: visibility || "public",
       });
+      // Auto-create project channel
+      try {
+        await storage.createChannel({ workspaceId, name: `#${name.toLowerCase().replace(/\s+/g, '-')}`, type: "project", projectId: project.id });
+      } catch { }
       res.status(201).json(project);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
@@ -2777,6 +2781,119 @@ export async function registerRoutes(
     try {
       const { taskId, dependsOnTaskId } = req.body;
       await storage.deleteTaskDependency(parseInt(taskId), parseInt(dependsOnTaskId));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ─── Collaboration Routes ─────────────────────────────────────────────────
+
+  // Channels
+  app.get("/api/channels", isAuthenticated, async (req: any, res) => {
+    try {
+      const workspaceId = parseInt(req.query.workspaceId as string);
+      if (!workspaceId) return res.status(400).json({ message: "workspaceId required" });
+      res.json(await storage.getChannels(workspaceId));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/channels", isAuthenticated, async (req: any, res) => {
+    try {
+      const { workspaceId, name, type, projectId } = req.body;
+      if (!workspaceId || !name) return res.status(400).json({ message: "workspaceId and name required" });
+      const ch = await storage.createChannel({ workspaceId, name, type: type || "team", projectId: projectId || null });
+      res.status(201).json(ch);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Messages
+  app.get("/api/messages", isAuthenticated, async (req: any, res) => {
+    try {
+      const channelId = parseInt(req.query.channelId as string);
+      if (!channelId) return res.status(400).json({ message: "channelId required" });
+      res.json(await storage.getChannelMessages(channelId));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/messages", isAuthenticated, async (req: any, res) => {
+    try {
+      const { channelId, content } = req.body;
+      if (!channelId || !content) return res.status(400).json({ message: "channelId and content required" });
+      const msg = await storage.createChannelMessage({ channelId, senderId: req.user.claims.sub, content });
+      res.status(201).json(msg);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Task Comments
+  app.get("/api/task-comments", isAuthenticated, async (req: any, res) => {
+    try {
+      const taskId = parseInt(req.query.taskId as string);
+      if (!taskId) return res.status(400).json({ message: "taskId required" });
+      res.json(await storage.getTaskComments(taskId));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/task-comments", isAuthenticated, async (req: any, res) => {
+    try {
+      const { taskId, content, parentCommentId } = req.body;
+      if (!taskId || !content) return res.status(400).json({ message: "taskId and content required" });
+      const comment = await storage.createTaskComment({
+        taskId, authorId: req.user.claims.sub, content, parentCommentId: parentCommentId || null,
+      });
+      res.status(201).json(comment);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Documents
+  app.get("/api/documents", isAuthenticated, async (req: any, res) => {
+    try {
+      const workspaceId = parseInt(req.query.workspaceId as string);
+      if (!workspaceId) return res.status(400).json({ message: "workspaceId required" });
+      const isWiki = req.query.isWiki === "true" ? true : req.query.isWiki === "false" ? false : undefined;
+      res.json(await storage.getDocuments(workspaceId, isWiki));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/documents", isAuthenticated, async (req: any, res) => {
+    try {
+      const { workspaceId, title, content, isWiki, parentDocumentId, sortOrder } = req.body;
+      if (!workspaceId) return res.status(400).json({ message: "workspaceId required" });
+      const doc = await storage.createDocument({
+        workspaceId, title: title || "Untitled", content: content || "",
+        createdBy: req.user.claims.sub, isWiki: isWiki || false,
+        parentDocumentId: parentDocumentId || null, sortOrder: sortOrder || 0,
+      });
+      res.status(201).json(doc);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/documents/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const doc = await storage.getDocument(parseInt(req.params.id));
+      if (!doc) return res.status(404).json({ message: "Document not found" });
+      res.json(doc);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/documents/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const updated = await storage.updateDocument(parseInt(req.params.id), req.body);
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/documents/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteDocument(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // View Preference
+  app.patch("/api/workspace-members/me/preferred-view", isAuthenticated, async (req: any, res) => {
+    try {
+      const { view, workspaceId } = req.body;
+      if (!view || !workspaceId) return res.status(400).json({ message: "view and workspaceId required" });
+      await storage.updatePreferredView(req.user.claims.sub, parseInt(workspaceId), view);
       res.json({ success: true });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });

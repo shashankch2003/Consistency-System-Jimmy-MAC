@@ -28,6 +28,8 @@ import WorkspaceSetupPage from "@/pages/dashboard/workspace-setup";
 import TeamManagementPage from "@/pages/dashboard/team-management";
 import MembersPage from "@/pages/dashboard/members";
 import ProjectsPage from "@/pages/dashboard/projects";
+import MessagesPage from "@/pages/dashboard/messages";
+import WikiPage from "@/pages/dashboard/wiki";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -149,6 +151,16 @@ function Router() {
       <Route path="/dashboard/projects">
         <DashboardLayout>
           <ProjectsPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/messages">
+        <DashboardLayout>
+          <MessagesPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/wiki">
+        <DashboardLayout>
+          <WikiPage />
         </DashboardLayout>
       </Route>
 

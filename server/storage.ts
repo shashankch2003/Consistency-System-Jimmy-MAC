@@ -13,6 +13,7 @@ import {
   teamDailySnapshots, teamAiInsights, teamAiSettings, teamManagerAssignments, teamAlerts, teamOrgSettings,
   workspaces, teams, workspaceMembers,
   projects, teamTasks, subtasks, taskDependencies,
+  channels, channelMessages, taskComments, documents,
 } from "@shared/schema";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
 import { or, sql, inArray } from "drizzle-orm";
@@ -302,6 +303,28 @@ export interface IStorage extends IAuthStorage {
   getTaskDependencies(taskId: number): Promise<(typeof taskDependencies.$inferSelect)[]>;
   createTaskDependency(data: typeof taskDependencies.$inferInsert): Promise<typeof taskDependencies.$inferSelect>;
   deleteTaskDependency(taskId: number, dependsOnTaskId: number): Promise<void>;
+
+  // Channels
+  getChannels(workspaceId: number): Promise<(typeof channels.$inferSelect)[]>;
+  createChannel(data: typeof channels.$inferInsert): Promise<typeof channels.$inferSelect>;
+
+  // Channel Messages
+  getChannelMessages(channelId: number): Promise<(typeof channelMessages.$inferSelect)[]>;
+  createChannelMessage(data: typeof channelMessages.$inferInsert): Promise<typeof channelMessages.$inferSelect>;
+
+  // Task Comments
+  getTaskComments(taskId: number): Promise<(typeof taskComments.$inferSelect)[]>;
+  createTaskComment(data: typeof taskComments.$inferInsert): Promise<typeof taskComments.$inferSelect>;
+
+  // Documents
+  getDocuments(workspaceId: number, isWiki?: boolean): Promise<(typeof documents.$inferSelect)[]>;
+  getDocument(id: number): Promise<(typeof documents.$inferSelect) | undefined>;
+  createDocument(data: typeof documents.$inferInsert): Promise<typeof documents.$inferSelect>;
+  updateDocument(id: number, data: Partial<typeof documents.$inferInsert>): Promise<typeof documents.$inferSelect>;
+  deleteDocument(id: number): Promise<void>;
+
+  // Preferred view
+  updatePreferredView(userId: string, workspaceId: number, view: string): Promise<void>;
 
   // Workspace Platform
   getWorkspaces(userId: string): Promise<(typeof workspaces.$inferSelect)[]>;
@@ -1331,6 +1354,62 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteTaskDependency(taskId: number, dependsOnTaskId: number) {
     await db.delete(taskDependencies).where(and(eq(taskDependencies.taskId, taskId), eq(taskDependencies.dependsOnTaskId, dependsOnTaskId)));
+  }
+
+  // Channels
+  async getChannels(workspaceId: number) {
+    return await db.select().from(channels).where(eq(channels.workspaceId, workspaceId)).orderBy(asc(channels.name));
+  }
+  async createChannel(data: typeof channels.$inferInsert) {
+    const [created] = await db.insert(channels).values(data).returning();
+    return created;
+  }
+
+  // Channel Messages
+  async getChannelMessages(channelId: number) {
+    return await db.select().from(channelMessages).where(eq(channelMessages.channelId, channelId)).orderBy(asc(channelMessages.createdAt));
+  }
+  async createChannelMessage(data: typeof channelMessages.$inferInsert) {
+    const [created] = await db.insert(channelMessages).values(data).returning();
+    return created;
+  }
+
+  // Task Comments
+  async getTaskComments(taskId: number) {
+    return await db.select().from(taskComments).where(eq(taskComments.taskId, taskId)).orderBy(asc(taskComments.createdAt));
+  }
+  async createTaskComment(data: typeof taskComments.$inferInsert) {
+    const [created] = await db.insert(taskComments).values(data).returning();
+    return created;
+  }
+
+  // Documents
+  async getDocuments(workspaceId: number, isWiki?: boolean) {
+    const conditions: any[] = [eq(documents.workspaceId, workspaceId)];
+    if (isWiki !== undefined) conditions.push(eq(documents.isWiki, isWiki));
+    return await db.select().from(documents).where(and(...conditions)).orderBy(asc(documents.sortOrder), asc(documents.createdAt));
+  }
+  async getDocument(id: number) {
+    const [doc] = await db.select().from(documents).where(eq(documents.id, id));
+    return doc;
+  }
+  async createDocument(data: typeof documents.$inferInsert) {
+    const [created] = await db.insert(documents).values(data).returning();
+    return created;
+  }
+  async updateDocument(id: number, data: Partial<typeof documents.$inferInsert>) {
+    const [updated] = await db.update(documents).set({ ...data, updatedAt: new Date() }).where(eq(documents.id, id)).returning();
+    return updated;
+  }
+  async deleteDocument(id: number) {
+    await db.delete(documents).where(eq(documents.id, id));
+  }
+
+  // Preferred view
+  async updatePreferredView(userId: string, workspaceId: number, view: string) {
+    await db.update(workspaceMembers)
+      .set({ preferredView: view })
+      .where(and(eq(workspaceMembers.userId, userId), eq(workspaceMembers.workspaceId, workspaceId)));
   }
 
   // Workspace Platform

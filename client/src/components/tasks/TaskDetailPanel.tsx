@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { X } from "lucide-react";
 import { TaskProperties } from "./TaskProperties";
 import { SubtaskList } from "./SubtaskList";
+import { TaskComments } from "@/components/collaboration/TaskComments";
 import { useToast } from "@/hooks/use-toast";
 
 interface TeamTask {
@@ -352,10 +353,9 @@ export function TaskDetailPanel({ task, members, allTasks, onClose }: TaskDetail
           <SubtaskList taskId={task.id} />
         </div>
 
-        {/* Activity placeholder */}
+        {/* Comments */}
         <div className="pt-2 border-t border-border">
-          <p className="text-sm font-medium mb-2">Activity</p>
-          <p className="text-xs text-muted-foreground">Task created. Updates will appear here.</p>
+          <TaskComments taskId={task.id} />
         </div>
       </div>
     </div>

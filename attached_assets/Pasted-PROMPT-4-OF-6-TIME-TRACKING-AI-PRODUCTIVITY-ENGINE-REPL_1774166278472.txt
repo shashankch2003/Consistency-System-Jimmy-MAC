@@ -1,0 +1,91 @@
+PROMPT 4 OF 6 — TIME TRACKING & AI PRODUCTIVITY ENGINE
+■ REPLIT SETTINGS: AUTONOMOUS MODE → ECONOMY | App Testing: OFF | Code Optimization: OFF
+(Copy everything below this line into Replit)
+CONTEXT
+App: AI-driven team and workplace productivity platform. Feature being built: Time tracking and AI Productivity Engine.
+Current state: All features from Prompts 1-3 working. Task table = team_tasks. Goal: Build time tracking + full productivity
+analytics in one pass.
+WORKSPACE ID: Use const { workspaceId } = useWorkspace() from @/context/WorkspaceContext. (Fix 19)
+Follow all critical instructions from Prompt 1. Use Recharts (v2.15.2) for all charts. (Fix 14)
+FILES TO CREATE
+(Fix 18: Page paths use client/src/pages/dashboard/)
+• client/src/components/time/TimeTracker.tsx
+• client/src/pages/dashboard/timesheets.tsx (Fix 32: moved from components/ — routable page belongs in pages/)
+• client/src/components/time/TimeReport.tsx
+• client/src/pages/dashboard/productivity.tsx
+• client/src/components/productivity/ProductivityScore.tsx
+• client/src/components/productivity/ComparisonCards.tsx
+• client/src/components/productivity/PerformanceProfile.tsx
+• client/src/components/productivity/TeamHealthDashboard.tsx
+• client/src/components/productivity/PerformerIdentification.tsx
+• client/src/utils/productivityCalculator.ts
+PART A: TIME TRACKING
+1. TIME TRACKER WIDGET (TimeTracker.tsx)
+Floating widget, fixed bottom-right. Collapsed: clock icon (36px circle). Expanded: task name, timer '00:00:00'
+(monospace, 24px), Play/Pause/Stop buttons. 'Today: 0h 0m' summary (sum time_entries for today). Task name
+dropdown shows 'In Progress' tasks from team_tasks. Play: start counting. Pause: freeze. Stop: insert time_entry into DB
+(task_id, date, minutes, source='timer'). Add elapsed to team_tasks.actual_minutes.
+2. TIMESHEET PAGE (timesheets.tsx — in pages/dashboard/)
+Title 'Timesheets' with week selector. Table: rows = task names, columns = Mon-Sun + Total. Cells clickable to edit time
+(accept '1:30' or '1.5'). Upsert time_entry per user+task+date. Row/column totals auto-sum. 'Submit Timesheet' button.
+Status: Draft/Submitted/Approved. Submit disables editing.
+3. TIME REPORT (TimeReport.tsx)
+Header with date range selector (This Week/Last Week/This Month/Last Month/Custom). Summary cards: Total Hours,
+Avg Hours/Day, Most Time On (project name), Overtime. Recharts BarChart: hours per project. Table: Date, Task,
+Project, Time, Notes.
+4-5. DATABASE TABLES
+time_entries: id (serial PK), userId (text), taskId (int, references teamTasks), projectId (int, references projects), date,
+minutes (int), notes (text, nullable), createdAt, source ('timer'/'manual')
+timesheets: id (serial PK), userId (text), workspaceId (int), weekStart (date), status (text, default 'draft')
+Fix 28 — EXPLICIT COLUMN TYPES: submittedAt: timestamp('submitted_at') — nullable. approvedBy:
+text('approved_by') — nullable, varchar user ID. approvedAt: timestamp('approved_at') — nullable.
+PART B: AI PRODUCTIVITY ENGINE
+6. PRODUCTIVITY DASHBOARD (productivity.tsx)
+Title 'Productivity Intelligence'. Tabs: Overview, Individual Profiles, Team Health, Comparisons.
+Fix 29 — TAB-TO-COMPONENT MAPPING:
+• Overview tab: renders ProductivityScore (for current user) + ComparisonCards
+• Individual Profiles tab: renders PerformanceProfile + PerformerIdentification
+• Team Health tab: renders TeamHealthDashboard
+• Comparisons tab: renders ComparisonCards in detailed view with team member selector
+7. PRODUCTIVITY SCORE (ProductivityScore.tsx)
+Circle progress ring (120px, 8px stroke, dasharray animation), score 0-100 in center. 7 factor bars below (8px height,
+colored by range: 90-100=green, 75-89=blue, 60-74=yellow, 40-59=orange, <40=red).
+8. COMPARISON CARDS (ComparisonCards.tsx)
+5 cards: Today vs Yesterday, Week vs Week, Month vs Month, Avg Completion Time, Hours Worked. Green/red arrows.
+9. PERFORMANCE PROFILE (PerformanceProfile.tsx)
+Employee header, ProductivityScore component, 30-day Recharts LineChart trend, AI Strengths (top 3 factors), Growth
+Opportunities (bottom 2), work output stats, activity heatmap.
+10. PRODUCTIVITY CALCULATOR (productivityCalculator.ts)
+calculateProductivityScore(userId, dateRange): Task Completion 25%, Quality 20%, Estimation Accuracy 10%,
+Collaboration 15%, Initiative 10%, Consistency 10%, Impact 10%. Labels: 90-100=Exceptional, 75-89=High Performer,
+60-74=Steady, 40-59=Needs Attention, 0-39=At Risk. calculateComparisons + identifyPerformers functions. All queries
+reference team_tasks and time_entries.
+11. TEAM HEALTH DASHBOARD (TeamHealthDashboard.tsx)
+6 metric cards: Team Velocity (Recharts LineChart, 6 weeks), Bottleneck Detection, Workload Balance (bars), Burnout
+Risk (badges), Team Morale Proxy (gauge), Sprint Velocity Trend (Recharts BarChart). (Fix 14)
+12. PERFORMER IDENTIFICATION (PerformerIdentification.tsx)
+Side-by-side: Top Performers (gold, 3 cards) and Needs Attention (orange, 3 cards). Privacy notice.
+13. DATABASE — PRODUCTIVITY_SNAPSHOTS TABLE
+id (serial PK), userId (text), workspaceId (int), date, overallScore (int), taskCompletionRate (int), qualityScore (int),
+estimationAccuracy (int), collaborationScore (int), initiativeScore (int), consistencyScore (int), impactWeight (int),
+tasksCompleted (int), hoursWorked (int), createdAt.
+Fix 30 — UNIQUE CONSTRAINT: Add unique index: (table) => ({ uniqueSnapshot:
+uniqueIndex('unique_user_date_snapshot').on(table.userId, table.date) }). On first dashboard load each day:
+calculate + insert.
+API ROUTES
+• Time entries: CRUD /api/time-entries
+• Timesheets: GET/POST/PATCH /api/timesheets
+• Productivity: GET /api/productivity/score?userId=X, GET /api/productivity/comparisons, GET
+/api/productivity/team-health?teamId=X, GET /api/productivity/performers?teamId=X
+• Snapshots: GET /api/productivity/snapshots?userId=X
+PAGE REGISTRATION
+Fix 25 — EXPLICIT ROUTES:
+• Route /dashboard/productivity → ProductivityDashboard
+• Route /dashboard/timesheets → Timesheets (Fix 32: page file at pages/dashboard/timesheets.tsx)
+Fix 24 — SIDEBAR: Add 'Productivity' (BarChart3 icon) and 'Timesheets' (Clock icon) to menuItems in
+AppSidebar.tsx.
+AFTER ALL CODE CHANGES: Run npx drizzle-kit push
+BOUNDARIES
+✖ Build everything described: time tracking + productivity engine + database + API routes + pages + sidebar
+✖ Do not modify files from Prompts 1-3 except updating team_tasks.actual_minutes on timer stop
+✖ All task references use team_tasks table

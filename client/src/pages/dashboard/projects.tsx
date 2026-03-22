@@ -11,6 +11,13 @@ import { FolderKanban, Plus, Building2, Search } from "lucide-react";
 import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
 import { ProjectHeader } from "@/components/projects/ProjectHeader";
 import { TaskList } from "@/components/tasks/TaskList";
+import { ViewSwitcher, ViewType } from "@/components/views/ViewSwitcher";
+import { BoardView } from "@/components/views/BoardView";
+import { ListView } from "@/components/views/ListView";
+import { TimelineView } from "@/components/views/TimelineView";
+import { CalendarView } from "@/components/views/CalendarView";
+import { TableView } from "@/components/views/TableView";
+import { DashboardView } from "@/components/views/DashboardView";
 import { useToast } from "@/hooks/use-toast";
 
 interface Project {
@@ -51,6 +58,7 @@ export default function ProjectsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [sortBy, setSortBy] = useState<"name" | "dueDate" | "status">("name");
+  const [activeView, setActiveView] = useState<ViewType>("board");
 
   const { data: projects = [], isLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects", workspaceId],
@@ -93,15 +101,16 @@ export default function ProjectsPage() {
   if (selectedProject) {
     const liveProject = projects.find((p) => p.id === selectedProject.id) ?? selectedProject;
     return (
-      <div className="h-full flex flex-col">
+      <div className="h-full flex flex-col overflow-hidden">
         <ProjectHeader project={liveProject} members={members} onBack={() => setSelectedProject(null)} />
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold">Tasks</h2>
-            </div>
-            <TaskList projectId={liveProject.id} members={members} />
-          </div>
+        <ViewSwitcher activeView={activeView} onViewChange={setActiveView} />
+        <div className="flex-1 overflow-hidden">
+          {activeView === "board" && <BoardView projectId={liveProject.id} members={members} />}
+          {activeView === "list" && <ListView projectId={liveProject.id} members={members} />}
+          {activeView === "timeline" && <TimelineView projectId={liveProject.id} members={members} />}
+          {activeView === "calendar" && <CalendarView projectId={liveProject.id} members={members} />}
+          {activeView === "table" && <TableView projectId={liveProject.id} members={members} />}
+          {activeView === "dashboard" && <DashboardView projectId={liveProject.id} members={members} />}
         </div>
       </div>
     );

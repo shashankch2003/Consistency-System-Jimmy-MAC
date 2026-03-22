@@ -37,7 +37,14 @@ Preferred communication style: Simple, everyday language.
 -   **Level/Ranking System**: 7-tier system (Unproductive to Elite) based on productivity metrics, with monthly evaluations and level-gated group messaging.
 -   **Grow Together (Social)**: Friend connections, comparison of productivity metrics, group creation and chat (paid feature), and privacy controls.
 -   **Know More (Learning)**: Video learning center with YouTube embeds and in-app feedback system.
--   **Team Productivity Intelligence (Future)**: Advanced module for team-level insights, scoring, pattern detection, and alerts.
+-   **Team Productivity Intelligence**: Advanced module for team-level insights, scoring, pattern detection, and alerts.
+-   **AI-Driven Platform (Prompts 1-3 Done)**:
+    -   Workspaces, Teams, Members management
+    -   Projects, Tasks, Subtasks, Dependencies
+    -   6 Task Views: Board (drag-and-drop), List, Timeline, Calendar, Table, Dashboard
+    -   Channels & Messaging (real-time polling, team + project channels)
+    -   Task Comments (threaded, per-task)
+    -   Wiki/Document Editor (TipTap rich text, hierarchical pages)
 
 ### Shared Code
 -   `shared/` directory contains common types, API route definitions with validation schemas (`shared/routes.ts`), and database schemas (`shared/schema.ts`).

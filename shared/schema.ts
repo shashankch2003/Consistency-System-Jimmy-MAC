@@ -956,6 +956,7 @@ export const workspaceMembers = pgTable("workspace_members", {
   invitedBy: text("invited_by"),
   invitedAt: timestamp("invited_at").defaultNow(),
   joinedAt: timestamp("joined_at"),
+  preferredView: text("preferred_view").default("board"),
 });
 
 export const teamOrgSettings = pgTable("team_org_settings", {
@@ -973,4 +974,45 @@ export const teamOrgSettings = pgTable("team_org_settings", {
   workDays: jsonb("work_days").$defaultFn(() => [1, 2, 3, 4, 5]).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ─── Collaboration Tables ─────────────────────────────────────────────────────
+
+export const channels = pgTable("channels", {
+  id: serial("id").primaryKey(),
+  workspaceId: integer("workspace_id"),
+  name: text("name").notNull(),
+  type: text("type").notNull().default("team"),
+  projectId: integer("project_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const channelMessages = pgTable("channel_messages", {
+  id: serial("id").primaryKey(),
+  channelId: integer("channel_id"),
+  senderId: text("sender_id").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const taskComments = pgTable("task_comments", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id"),
+  authorId: text("author_id").notNull(),
+  content: text("content").notNull(),
+  parentCommentId: integer("parent_comment_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const documents = pgTable("documents", {
+  id: serial("id").primaryKey(),
+  workspaceId: integer("workspace_id"),
+  title: text("title").notNull().default("Untitled"),
+  content: text("content").default(""),
+  createdBy: text("created_by").notNull(),
+  isWiki: boolean("is_wiki").default(false),
+  parentDocumentId: integer("parent_document_id"),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
