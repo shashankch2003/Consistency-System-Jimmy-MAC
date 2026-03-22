@@ -48,6 +48,12 @@ import {
   Command,
   Calendar,
   Flame,
+  Bot,
+  Workflow,
+  Brain,
+  Database,
+  Video,
+  Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
@@ -83,6 +89,15 @@ const menuItems = [
   { title: "My Day", icon: Clock, url: "/dashboard/my-day" },
   { title: "AI Habits", icon: Flame, url: "/dashboard/ai-habits" },
   { title: "Focus Coach", icon: Target, url: "/dashboard/focus-coach" },
+  { title: "AI Agents", icon: Bot, url: "/dashboard/ai-agents" },
+  { title: "AI Workflows", icon: Workflow, url: "/dashboard/ai-workflows" },
+  { title: "Project Manager", icon: BarChart3, url: "/dashboard/project-manager" },
+  { title: "Task Intelligence", icon: Brain, url: "/dashboard/task-intel" },
+  { title: "Database AI", icon: Database, url: "/dashboard/database-ai" },
+  { title: "Meetings", icon: Video, url: "/dashboard/meetings" },
+  { title: "Doc Generator", icon: FileText, url: "/dashboard/doc-generator" },
+  { title: "Messaging AI", icon: MessageSquare, url: "/dashboard/messaging-ai" },
+  { title: "Email", icon: Mail, url: "/dashboard/email" },
   { title: "Workspace Setup", icon: Building2, url: "/dashboard/workspace-setup" },
   { title: "Team Management", icon: UsersRound, url: "/dashboard/team-management" },
   { title: "Members", icon: Users, url: "/dashboard/members" },

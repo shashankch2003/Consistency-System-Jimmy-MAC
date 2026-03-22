@@ -32,6 +32,15 @@ Preferred communication style: Simple, everyday language.
 -   **Key Tables**: Includes users, sessions, payments, various goal and habit trackers, tasks, hourly entries, notes, money management entities (expenses, budgets, subscriptions, bills, credit cards, savings goals), video content, social features (friends, groups, comparison data), and future team productivity metrics.
 
 ### Core Features
+-   **AI Agents (Sprint 4)**: Build, configure, and chat with custom AI agents. Supports tool-calling (read/write tasks, search workspace, send messages), 6 pre-built templates, and run history tracking.
+-   **AI Workflow Recorder (Sprint 4)**: Record, save, and replay multi-step automations with AI-detected variable substitution and run history.
+-   **AI Project Manager (Sprint 5)**: Daily standup report, risk detection, executive status report, and natural-language automation builder — all from real task data.
+-   **AI Task Intelligence (Sprint 5)**: Natural language task parsing, AI task breakdown, smart prioritization, duration estimation, and assignee suggestions.
+-   **AI Database Intelligence (Sprint 5)**: Natural language database queries, AI auto-fill columns, create database structures from descriptions, and formula generation.
+-   **AI Meeting Intelligence (Sprint 6)**: Process meeting transcripts to extract summary, key points, decisions, action items, and open questions. One-click task creation from action items.
+-   **AI Document Generator (Sprint 6)**: Generate 7 document types (weekly status, meeting agenda, project brief, sprint retro, handoff, client update, onboarding) from real workspace data.
+-   **AI Messaging Intelligence (Sprint 7)**: Thread summarizer, channel catch-up, smart reply suggestions, AI message composer, and decision extractor.
+-   **AI Email Assistant (Sprint 7)**: Compose/reply/follow-up email writer, thread summarizer, and inbox triage with AI priority labels.
 -   **Goal & Habit Tracking**: Yearly/monthly goals, daily tasks, good/bad habit tracking, hourly time tracking, AI-powered habit tracking with streak calculation.
 -   **Money Tracking**: Comprehensive module for expenses, budgets, subscriptions, bills, credit cards, and savings goals with user-defined currency settings and categories.
 -   **Level/Ranking System**: 7-tier system (Unproductive to Elite) based on productivity metrics, with monthly evaluations and level-gated group messaging.

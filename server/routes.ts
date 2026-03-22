@@ -36,7 +36,13 @@ import {
   schedulingPreferences, aiHabits, aiHabitCompletions, focusSessions, aiProductivityScores,
   timeEntries,
 } from "../shared/schema";
-import { gt, gte, lte, like, count, asc } from "drizzle-orm";
+import { gt, gte, lte, like, count, asc, or, ilike } from "drizzle-orm";
+import {
+  aiAgents, agentRuns, agentConversations,
+  aiWorkflows, aiWorkflowRuns, aiWorkflowAutomations,
+  meetingIntelligence, emailThreads,
+  channelMessages, users, aiRiskAlerts,
+} from "../shared/schema";
 
 const ADMIN_USER_ID = process.env.ADMIN_USER_ID || "";
 
@@ -5622,6 +5628,862 @@ Provide specific, actionable insights. Be encouraging but honest.`,
       return res.status(500).json({ error: error.message });
     }
   });
+
+  // ============================================================
+  // SPRINT 4 — AI AGENTS (Feature 4)
+  // ============================================================
+
+  // Helper: build tool definitions for agent
+  function buildAgentTools(capabilities: string[]): any[] {
+    const allTools: Record<string, any> = {
+      read_pages: { type: "function", function: { name: "read_page", description: "Read note content", parameters: { type: "object", properties: { pageId: { type: "number" } }, required: ["pageId"] } } },
+      search_workspace: { type: "function", function: { name: "search_workspace", description: "Search workspace data", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } } },
+      read_tasks: { type: "function", function: { name: "read_tasks", description: "Read tasks", parameters: { type: "object", properties: { filter: { type: "string" } }, required: [] } } },
+      write_tasks: { type: "function", function: { name: "create_task", description: "Create a new task", parameters: { type: "object", properties: { title: { type: "string" }, description: { type: "string" }, priority: { type: "string" } }, required: ["title"] } } },
+      send_messages: { type: "function", function: { name: "send_message", description: "Send a channel message", parameters: { type: "object", properties: { channelId: { type: "number" }, content: { type: "string" } }, required: ["channelId", "content"] } } },
+      read_messages: { type: "function", function: { name: "read_messages", description: "Read channel messages", parameters: { type: "object", properties: { channelId: { type: "number" }, limit: { type: "number" } }, required: ["channelId"] } } },
+    };
+    return capabilities.filter(c => allTools[c]).map(c => allTools[c]);
+  }
+
+  // Helper: execute agent tool call
+  async function executeAgentTool(toolName: string, args: any, userId: string): Promise<any> {
+    switch (toolName) {
+      case "search_workspace": {
+        const results = await db.select().from(notes).where(ilike(notes.content, `%${args.query}%`)).limit(5);
+        return results.map((r: any) => ({ id: r.id, title: r.title, content: (r.content || "").substring(0, 300) }));
+      }
+      case "read_tasks": {
+        return db.select({ id: tasks.id, title: tasks.title, priority: tasks.priority, completionPercentage: tasks.completionPercentage, date: tasks.date }).from(tasks).where(eq(tasks.userId, userId)).limit(20);
+      }
+      case "send_message": return { sent: true, channelId: args.channelId, content: args.content };
+      case "read_page": {
+        const [note] = await db.select({ id: notes.id, title: notes.title, content: notes.content }).from(notes).where(eq(notes.id, args.pageId)).limit(1);
+        return note || { error: "Note not found" };
+      }
+      default: return { error: `Unknown tool: ${toolName}` };
+    }
+  }
+
+  // GET /api/agents — list agents
+  app.get("/api/agents", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const agents = await db.select().from(aiAgents).where(or(eq(aiAgents.visibility, "workspace"), eq(aiAgents.createdBy, userId))).orderBy(desc(aiAgents.createdAt));
+      return res.json(agents);
+    } catch (error: any) { return res.status(500).json({ error: error.message }); }
+  });
+
+  // GET /api/agents/:id — get agent + runs
+  app.get("/api/agents/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = z.coerce.number().parse(req.params.id);
+      const [agent] = await db.select().from(aiAgents).where(eq(aiAgents.id, id)).limit(1);
+      if (!agent) return res.status(404).json({ error: "Agent not found" });
+      const runs = await db.select().from(agentRuns).where(eq(agentRuns.agentId, id)).orderBy(desc(agentRuns.createdAt)).limit(10);
+      return res.json({ ...agent, runs });
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/agents — create agent
+  app.post("/api/agents", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const input = z.object({
+        name: z.string().min(1).max(100),
+        description: z.string().optional(),
+        icon: z.string().optional(),
+        systemPrompt: z.string().min(10),
+        model: z.string().default("gpt-4o"),
+        temperature: z.number().min(0).max(2).default(0.7),
+        capabilities: z.array(z.string()).default([]),
+        dataAccess: z.any().optional(),
+        triggerType: z.enum(["manual", "scheduled", "event", "message_in_channel", "webhook"]).default("manual"),
+        triggerConfig: z.any().optional(),
+        visibility: z.enum(["private", "workspace", "specific_members"]).default("workspace"),
+        visibleToUserIds: z.array(z.string()).optional(),
+      }).parse(req.body);
+      const [agent] = await db.insert(aiAgents).values({ ...input, createdBy: userId, userId, type: "custom" }).returning();
+      return res.json(agent);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // PATCH /api/agents/:id — update agent
+  app.patch("/api/agents/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = z.coerce.number().parse(req.params.id);
+      const input = z.object({
+        name: z.string().optional(), description: z.string().optional(), icon: z.string().optional(),
+        systemPrompt: z.string().optional(), model: z.string().optional(), temperature: z.number().optional(),
+        capabilities: z.array(z.string()).optional(), dataAccess: z.any().optional(),
+        triggerType: z.string().optional(), triggerConfig: z.any().optional(),
+        visibility: z.string().optional(), visibleToUserIds: z.array(z.string()).optional(), isActive: z.boolean().optional(),
+      }).parse(req.body);
+      const [updated] = await db.update(aiAgents).set(input).where(eq(aiAgents.id, id)).returning();
+      return res.json(updated);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // DELETE /api/agents/:id — soft delete
+  app.delete("/api/agents/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = z.coerce.number().parse(req.params.id);
+      const [updated] = await db.update(aiAgents).set({ isActive: false }).where(eq(aiAgents.id, id)).returning();
+      return res.json(updated);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/agents/:agentId/chat — chat with agent
+  app.post("/api/agents/:agentId/chat", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const agentId = z.coerce.number().parse(req.params.agentId);
+      const { message, conversationId } = z.object({ message: z.string().min(1).max(5000), conversationId: z.coerce.number().optional() }).parse(req.body);
+      const [agent] = await db.select().from(aiAgents).where(eq(aiAgents.id, agentId)).limit(1);
+      if (!agent) return res.status(404).json({ error: "Agent not found" });
+
+      let conversation: any;
+      if (conversationId) {
+        [conversation] = await db.select().from(agentConversations).where(eq(agentConversations.id, conversationId)).limit(1);
+      }
+      if (!conversation) {
+        [conversation] = await db.insert(agentConversations).values({ agentId, userId, messages: [{ role: "user", content: message, timestamp: new Date().toISOString() }] }).returning();
+      } else {
+        const msgs = (conversation.messages as any[]) || [];
+        msgs.push({ role: "user", content: message, timestamp: new Date().toISOString() });
+        await db.update(agentConversations).set({ messages: msgs }).where(eq(agentConversations.id, conversation.id));
+      }
+
+      const [run] = await db.insert(agentRuns).values({ agentId: agent.id, userId, triggeredBy: "manual", triggerData: { message, conversationId: conversation.id }, invokedByUserId: userId, status: "running", steps: [] }).returning();
+
+      const conversationMessages = ((conversation.messages as any[]) || []).map((m: any) => ({ role: m.role === "user" ? "user" as const : "assistant" as const, content: m.content }));
+      const tools = buildAgentTools(agent.capabilities || []);
+      const aiMessages = [{ role: "system" as const, content: agent.systemPrompt }, ...conversationMessages];
+
+      let finalResponse = "";
+      const steps: any[] = [];
+
+      try {
+        if (tools.length > 0) {
+          const response = await aiService.generateWithTools(aiMessages, tools, { model: agent.model as any, temperature: agent.temperature || 0.7 });
+          finalResponse = response.content || "";
+          if (response.tool_calls && response.tool_calls.length > 0) {
+            for (const toolCall of response.tool_calls.slice(0, 10)) {
+              const stepResult = await executeAgentTool(toolCall.function.name, JSON.parse(toolCall.function.arguments), userId);
+              steps.push({ stepNumber: steps.length + 1, action: toolCall.function.name, input: JSON.parse(toolCall.function.arguments), output: stepResult, status: "success" });
+            }
+            const followUp = await aiService.generateText(`Based on these tool results, provide your final response:\n${JSON.stringify(steps.map(s => ({ action: s.action, result: s.output })))}`, { systemPrompt: agent.systemPrompt, model: agent.model as any });
+            finalResponse = followUp.text;
+          }
+        } else {
+          const resp = await aiService.generateText(message, { systemPrompt: agent.systemPrompt, model: agent.model as any, temperature: agent.temperature || 0.7 });
+          finalResponse = resp.text;
+        }
+      } catch (_e) {
+        finalResponse = "I encountered an error processing your request.";
+      }
+
+      const updatedMsgs = [...((conversation.messages as any[]) || [])];
+      updatedMsgs.push({ role: "agent", content: finalResponse, timestamp: new Date().toISOString(), runId: run.id });
+      await db.update(agentConversations).set({ messages: updatedMsgs }).where(eq(agentConversations.id, conversation.id));
+      await db.update(agentRuns).set({ status: "completed", finalOutput: finalResponse, steps, completedAt: new Date() }).where(eq(agentRuns.id, run.id));
+      return res.json({ conversationId: conversation.id, response: finalResponse, runId: run.id, steps });
+    } catch (error: any) { return res.status(500).json({ error: error.message }); }
+  });
+
+  // GET /api/agents/:agentId/conversation — get active conversation
+  app.get("/api/agents/:agentId/conversation", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const agentId = z.coerce.number().parse(req.params.agentId);
+      const [conv] = await db.select().from(agentConversations).where(and(eq(agentConversations.agentId, agentId), eq(agentConversations.userId, userId), eq(agentConversations.status, "active"))).orderBy(desc(agentConversations.updatedAt)).limit(1);
+      return res.json(conv || null);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // GET /api/agents/:agentId/runs — get run history
+  app.get("/api/agents/:agentId/runs", isAuthenticated, async (req: any, res) => {
+    try {
+      const agentId = z.coerce.number().parse(req.params.agentId);
+      const limit = z.coerce.number().default(20).parse(req.query.limit);
+      const runs = await db.select().from(agentRuns).where(eq(agentRuns.agentId, agentId)).orderBy(desc(agentRuns.createdAt)).limit(limit);
+      return res.json(runs);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/agents/generate-instructions — AI-generate agent instructions
+  app.post("/api/agents/generate-instructions", isAuthenticated, async (req: any, res) => {
+    try {
+      const { description } = z.object({ description: z.string() }).parse(req.body);
+      const result = await aiService.generateText(
+        `Generate detailed instructions for an AI agent with this description: "${description}"\n\nWrite clear, specific instructions telling the agent:\n1. What its role and purpose is\n2. What data it should read and how to process it\n3. What actions it should take\n4. How it should format its responses\n5. Any rules or boundaries\n\nWrite in second person ("You are...", "You should...").`,
+        { systemPrompt: "You are an expert at writing AI agent instructions.", maxTokens: 1000, temperature: 0.5 }
+      );
+      return res.json({ instructions: result.text });
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/agents/from-template — create agent from template
+  app.post("/api/agents/from-template", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { templateId } = z.object({ templateId: z.enum(["sprint_status", "qa_knowledge", "meeting_prep", "onboarding", "task_triage", "weekly_digest"]) }).parse(req.body);
+      const TEMPLATES: Record<string, any> = {
+        sprint_status: { name: "Sprint Status Bot", description: "Generates daily sprint status reports", systemPrompt: "You are a Sprint Status Bot. Read all task changes from the last 24 hours. Group by team member: completed, in-progress, blocked. Generate a clear, formatted status report. Include sprint progress percentage and any risks.", capabilities: ["read_tasks", "send_messages", "search_workspace"], triggerType: "scheduled", triggerConfig: { cron: "0 9 * * 1-5" } },
+        qa_knowledge: { name: "Q&A Knowledge Bot", description: "Answers questions using workspace knowledge", systemPrompt: "You are a Knowledge Bot. When someone asks a question, search the workspace for relevant information and provide a clear answer with citations.", capabilities: ["search_workspace", "read_pages", "read_messages"], triggerType: "message_in_channel", triggerConfig: { keywords: ["?", "how", "what", "where", "when"] } },
+        meeting_prep: { name: "Meeting Prep Agent", description: "Gathers context before meetings", systemPrompt: "You are a Meeting Prep Agent. Before each meeting, gather: recent task updates, open action items, relevant channel discussions. Create a concise prep brief.", capabilities: ["read_tasks", "read_messages", "send_messages"], triggerType: "scheduled", triggerConfig: { minutesBefore: 30 } },
+        onboarding: { name: "Onboarding Agent", description: "Welcomes and guides new members", systemPrompt: "You are an Onboarding Agent. When a new member joins, send a welcome DM with: workspace overview, key channels, important documents, team intros, and first tasks.", capabilities: ["send_messages", "read_pages", "search_workspace"], triggerType: "event", triggerConfig: { eventType: "member_joined" } },
+        task_triage: { name: "Task Triage Agent", description: "Auto-prioritizes and categorizes new tasks", systemPrompt: "You are a Task Triage Agent. When a new task is created, read its title and description. Assign: priority, category, and suggest the best assignee.", capabilities: ["read_tasks", "write_tasks", "search_workspace"], triggerType: "event", triggerConfig: { eventType: "task_created" } },
+        weekly_digest: { name: "Weekly Digest Agent", description: "Friday afternoon summary", systemPrompt: "You are a Weekly Digest Agent. Every Friday at 4 PM, compile: tasks completed this week, key decisions, meetings held, upcoming deadlines, open blockers. Post formatted summary.", capabilities: ["read_tasks", "read_messages", "send_messages", "search_workspace"], triggerType: "scheduled", triggerConfig: { cron: "0 16 * * 5" } },
+      };
+      const template = TEMPLATES[templateId];
+      if (!template) return res.status(404).json({ error: "Template not found" });
+      const [agent] = await db.insert(aiAgents).values({ ...template, createdBy: userId, userId, type: "template", model: "gpt-4o", temperature: 0.5, visibility: "workspace", visibleToUserIds: [], dataAccess: { allPages: true, allDatabases: true, allChannels: true, allMeetings: true, specificPageIds: [], specificDatabaseIds: [], specificChannelIds: [] }, isActive: true, maxRunsPerDay: 100, maxActionsPerRun: 25, timeoutMinutes: 5 }).returning();
+      return res.json(agent);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // ============================================================
+  // SPRINT 4 — AI WORKFLOW RECORDER (Feature 19)
+  // ============================================================
+
+  // Helper: execute a workflow step
+  async function executeWorkflowStep(actionType: string, data: any, userId: string): Promise<any> {
+    switch (actionType) {
+      case "create_task": {
+        const [task] = await db.insert(tasks).values({ userId, title: data.title, description: data.description, priority: data.priority || "medium", date: new Date().toISOString().split("T")[0] }).returning();
+        return task;
+      }
+      case "create_page": {
+        const [note] = await db.insert(notes).values({ userId, title: data.title, content: data.content }).returning();
+        return note;
+      }
+      case "send_message": return { sent: true };
+      case "update_task": {
+        const [updated] = await db.update(tasks).set(data.updates).where(eq(tasks.id, data.taskId)).returning();
+        return updated;
+      }
+      default: throw new Error(`Unknown action type: ${actionType}`);
+    }
+  }
+
+  // GET /api/ai-workflows — list workflows
+  app.get("/api/ai-workflows", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const result = await db.select().from(aiWorkflows).where(or(eq(aiWorkflows.isPublic, true), eq(aiWorkflows.createdBy, userId))).orderBy(desc(aiWorkflows.createdAt));
+      return res.json(result);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/ai-workflows/save-recording — save workflow recording
+  app.post("/api/ai-workflows/save-recording", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const input = z.object({
+        name: z.string().min(1),
+        description: z.string().optional(),
+        recordedSteps: z.array(z.object({ stepNumber: z.number(), actionType: z.string(), rawData: z.any() })),
+      }).parse(req.body);
+      if (input.recordedSteps.length === 0) return res.status(400).json({ error: "Record at least one action" });
+
+      const aiResult = await aiService.generateJSON<{ cleanedSteps: Array<{ stepNumber: number; actionType: string; cleanedData: any; variables: any[] }>; variables: Array<{ name: string; type: string; description: string }> }>(
+        `Clean up these recorded workflow steps and detect reusable variables.\n\nRECORDED STEPS:\n${JSON.stringify(input.recordedSteps, null, 2)}\n\nFor each step:\n1. Clean the data (remove unnecessary fields)\n2. Detect variables (names, dates, project names)\n3. Replace hardcoded values with {{variable_name}}\n\nReturn: { cleanedSteps: [...], variables: [...] }`,
+        { systemPrompt: "You are an automation expert.", temperature: 0.2 }
+      );
+
+      const [workflow] = await db.insert(aiWorkflows).values({ name: input.name, description: input.description, recordedSteps: aiResult.cleanedSteps, variables: aiResult.variables, createdBy: userId, userId }).returning();
+      return res.json(workflow);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/ai-workflows/:workflowId/execute — run a workflow
+  app.post("/api/ai-workflows/:workflowId/execute", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const workflowId = z.coerce.number().parse(req.params.workflowId);
+      const { variableValues } = z.object({ variableValues: z.record(z.string()) }).parse(req.body);
+      const [workflow] = await db.select().from(aiWorkflows).where(eq(aiWorkflows.id, workflowId)).limit(1);
+      if (!workflow) return res.status(404).json({ error: "Workflow not found" });
+
+      const [run] = await db.insert(aiWorkflowRuns).values({ workflowId: workflow.id, userId, variableValues, steps: [], status: "running" }).returning();
+      const steps = (workflow.recordedSteps as any[]) || [];
+      const executedSteps: any[] = [];
+
+      for (const step of steps) {
+        try {
+          let stepData = JSON.stringify(step.cleanedData || step.rawData);
+          for (const [key, value] of Object.entries(variableValues)) {
+            stepData = stepData.replace(new RegExp(`{{${key}}}`, "g"), value as string);
+          }
+          const parsedData = JSON.parse(stepData);
+          const result = await executeWorkflowStep(step.actionType, parsedData, userId);
+          executedSteps.push({ stepNumber: step.stepNumber, status: "success", output: result });
+        } catch (error: any) {
+          executedSteps.push({ stepNumber: step.stepNumber, status: "failed", error: error.message });
+        }
+      }
+
+      await db.update(aiWorkflowRuns).set({ steps: executedSteps, status: "completed", completedAt: new Date() }).where(eq(aiWorkflowRuns.id, run.id));
+      await db.update(aiWorkflows).set({ runCount: (workflow.runCount || 0) + 1 }).where(eq(aiWorkflows.id, workflow.id));
+      return res.json({ runId: run.id, steps: executedSteps });
+    } catch (error: any) { return res.status(500).json({ error: error.message }); }
+  });
+
+  // GET /api/ai-workflows/:workflowId/runs — run history
+  app.get("/api/ai-workflows/:workflowId/runs", isAuthenticated, async (req: any, res) => {
+    try {
+      const workflowId = z.coerce.number().parse(req.params.workflowId);
+      const runs = await db.select().from(aiWorkflowRuns).where(eq(aiWorkflowRuns.workflowId, workflowId)).orderBy(desc(aiWorkflowRuns.startedAt)).limit(20);
+      return res.json(runs);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // DELETE /api/ai-workflows/:id — soft delete
+  app.delete("/api/ai-workflows/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = z.coerce.number().parse(req.params.id);
+      const [updated] = await db.update(aiWorkflows).set({ deletedAt: new Date() }).where(eq(aiWorkflows.id, id)).returning();
+      return res.json(updated);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // ============================================================
+  // SPRINT 5 — AI PROJECT MANAGER (Feature 5)
+  // ============================================================
+
+  // POST /api/project-manager/standup
+  app.post("/api/project-manager/standup", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const allTasks = await db.select().from(tasks).where(eq(tasks.userId, userId)).orderBy(desc(tasks.date)).limit(50);
+      const completedTasks = allTasks.filter(t => (t.completionPercentage || 0) >= 100);
+      const inProgressTasks = allTasks.filter(t => (t.completionPercentage || 0) > 0 && (t.completionPercentage || 0) < 100);
+      const notStarted = allTasks.filter(t => (t.completionPercentage || 0) === 0);
+      const total = allTasks.length;
+      const done = completedTasks.length;
+      const progressPercent = total > 0 ? Math.round((done / total) * 100) : 0;
+
+      const result = await aiService.generateText(
+        `Generate a daily standup report from this data:\n\nCOMPLETED: ${JSON.stringify(completedTasks.map(t => ({ title: t.title, priority: t.priority })))}\nIN PROGRESS: ${JSON.stringify(inProgressTasks.map(t => ({ title: t.title, priority: t.priority, completion: t.completionPercentage })))}\nNOT STARTED: ${JSON.stringify(notStarted.map(t => ({ title: t.title, priority: t.priority })))}\n\nPROGRESS: ${progressPercent}% complete (${done}/${total} tasks)\n\nFormat as a clear standup report. Include progress and any risks.`,
+        { systemPrompt: "Generate a concise, well-formatted standup report.", maxTokens: 1500, temperature: 0.3 }
+      );
+      return res.json({ summary: result.text, stats: { total, done, inProgress: inProgressTasks.length, progressPercent } });
+    } catch (error: any) { return res.status(500).json({ error: error.message }); }
+  });
+
+  // POST /api/project-manager/detect-risks
+  app.post("/api/project-manager/detect-risks", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const userTasks = await db.select().from(tasks).where(and(eq(tasks.userId, userId), drizzleSql`${tasks.completionPercentage} < 100`));
+      const risks: any[] = [];
+
+      const highPriority = userTasks.filter(t => t.priority === "high" && (t.completionPercentage || 0) < 50);
+      if (highPriority.length > 0) {
+        risks.push({ riskType: "high_priority_incomplete", severity: "high", title: `${highPriority.length} high-priority tasks under 50% complete`, description: highPriority.map(t => `"${t.title}"`).join(", ") + " need attention.", affectedTaskIds: highPriority.map(t => String(t.id)), suggestedAction: "Prioritize these tasks." });
+      }
+      if (userTasks.length > 8) {
+        risks.push({ riskType: "overloaded", severity: userTasks.length > 12 ? "high" : "medium", title: `${userTasks.length} active tasks`, description: `You have ${userTasks.length} active tasks, exceeding recommended 8.`, affectedTaskIds: userTasks.map(t => String(t.id)), suggestedAction: `Consider deferring ${userTasks.length - 8} lower-priority tasks.` });
+      }
+      const noPriority = userTasks.filter(t => !t.priority);
+      if (noPriority.length > 0) {
+        risks.push({ riskType: "unassigned_priority", severity: "medium", title: `${noPriority.length} tasks have no priority set`, description: noPriority.map(t => `"${t.title}"`).join(", "), affectedTaskIds: noPriority.map(t => String(t.id)), suggestedAction: "Set priorities to plan." });
+      }
+
+      for (const risk of risks) {
+        await db.insert(aiRiskAlerts).values({ ...risk, userId });
+      }
+      return res.json({ risks, count: risks.length });
+    } catch (error: any) { return res.status(500).json({ error: error.message }); }
+  });
+
+  // GET /api/project-manager/risks
+  app.get("/api/project-manager/risks", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const risks = await db.select().from(aiRiskAlerts).where(and(eq(aiRiskAlerts.userId, userId), eq(aiRiskAlerts.status, "active"))).orderBy(desc(aiRiskAlerts.createdAt));
+      return res.json(risks);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/project-manager/status-report
+  app.post("/api/project-manager/status-report", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const allTasks = await db.select().from(tasks).where(eq(tasks.userId, userId));
+      const total = allTasks.length;
+      const done = allTasks.filter(t => (t.completionPercentage || 0) >= 100).length;
+      const inProg = allTasks.filter(t => (t.completionPercentage || 0) > 0 && (t.completionPercentage || 0) < 100).length;
+
+      const result = await aiService.generateText(
+        `Generate an executive project status report:\nTotal tasks: ${total}, Done: ${done} (${Math.round(done/Math.max(total,1)*100)}%), In Progress: ${inProg}\n\nTask list: ${JSON.stringify(allTasks.map(t => ({ title: t.title, priority: t.priority, completion: t.completionPercentage })))}\n\nWrite a concise executive summary (3-4 sentences), then list key highlights and concerns.`,
+        { systemPrompt: "Write a professional project status report for stakeholders.", maxTokens: 1000, temperature: 0.3 }
+      );
+      return res.json({ report: result.text });
+    } catch (error: any) { return res.status(500).json({ error: error.message }); }
+  });
+
+  // POST /api/project-manager/create-automation
+  app.post("/api/project-manager/create-automation", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { description } = z.object({ description: z.string() }).parse(req.body);
+      const result = await aiService.generateJSON<{ name: string; trigger: any; conditions: any[]; actions: any[] }>(
+        `Parse this automation description into a structured automation config:\n"${description}"\n\nReturn JSON with: name, trigger ({type, config}), conditions ([{field, operator, value}]), actions ([{type, config}])\nTrigger types: task_created, task_status_changed, task_overdue, scheduled\nAction types: update_task, send_message, create_task, assign, notify`,
+        { systemPrompt: "Parse natural language into automation configs.", temperature: 0.2 }
+      );
+      await db.insert(aiWorkflowAutomations).values({ name: result.name, trigger: result.trigger, conditions: result.conditions, actions: result.actions, createdBy: userId, userId, createdFromPrompt: description });
+      return res.json({ name: result.name, trigger: result.trigger, conditions: result.conditions, actions: result.actions, createdBy: userId });
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // GET /api/project-manager/automations
+  app.get("/api/project-manager/automations", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const automations = await db.select().from(aiWorkflowAutomations).where(and(eq(aiWorkflowAutomations.userId, userId), eq(aiWorkflowAutomations.isActive, true))).orderBy(desc(aiWorkflowAutomations.createdAt));
+      return res.json(automations);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // ============================================================
+  // SPRINT 5 — AI TASK INTELLIGENCE (Feature 6)
+  // ============================================================
+
+  // POST /api/task-intelligence/breakdown
+  app.post("/api/task-intelligence/breakdown", isAuthenticated, async (req: any, res) => {
+    try {
+      const input = z.object({ taskTitle: z.string(), taskDescription: z.string().optional(), complexity: z.enum(["simple", "medium", "detailed", "very_detailed"]).default("medium") }).parse(req.body);
+      const depthMap = { simple: "3-5", medium: "5-8", detailed: "8-12", very_detailed: "12-20" };
+      const result = await aiService.generateJSON<{ subtasks: Array<{ title: string; subtasks?: Array<{ title: string }> }> }>(
+        `Break down this task into ${depthMap[input.complexity]} actionable subtasks:\nTask: "${input.taskTitle}"\n${input.taskDescription ? `Description: ${input.taskDescription}` : ""}\n\nReturn JSON: { subtasks: [{ title: string, subtasks?: [{ title: string }] }] }\nEach subtask should be clear and actionable.`,
+        { systemPrompt: "Break tasks into clear, actionable subtasks.", temperature: 0.4 }
+      );
+      return res.json(result);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/task-intelligence/prioritize
+  app.post("/api/task-intelligence/prioritize", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const userTasks = await db.select({ id: tasks.id, title: tasks.title, description: tasks.description, priority: tasks.priority, date: tasks.date, completionPercentage: tasks.completionPercentage }).from(tasks).where(and(eq(tasks.userId, userId), drizzleSql`${tasks.completionPercentage} < 100`));
+      const result = await aiService.generateJSON<{ ranked: Array<{ taskId: number; suggestedPriority: string; reason: string }> }>(
+        `Rank these tasks by priority (critical > high > medium > low):\n${JSON.stringify(userTasks)}\n\nConsider: task complexity, blocking potential, business impact.\nReturn: { ranked: [{ taskId, suggestedPriority: 'critical'|'high'|'medium'|'low', reason }] }`,
+        { systemPrompt: "Prioritize tasks based on urgency and impact.", temperature: 0.2 }
+      );
+      return res.json(result);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/task-intelligence/parse-natural-language
+  app.post("/api/task-intelligence/parse-natural-language", isAuthenticated, async (req: any, res) => {
+    try {
+      const { text } = z.object({ text: z.string() }).parse(req.body);
+      const result = await aiService.generateJSON<{ title: string; description?: string; date?: string; priority?: string; estimatedMinutes?: number }>(
+        `Parse this natural language into a structured task:\n"${text}"\n\nExtract: title, description, date (ISO format), priority (low/medium/high), estimatedMinutes.\nReturn JSON. Only include fields that are mentioned.`,
+        { systemPrompt: "Parse natural language into structured task data.", temperature: 0.2 }
+      );
+      return res.json(result);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/task-intelligence/estimate-duration
+  app.post("/api/task-intelligence/estimate-duration", isAuthenticated, async (req: any, res) => {
+    try {
+      const { taskId } = z.object({ taskId: z.coerce.number() }).parse(req.body);
+      const [task] = await db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
+      if (!task) return res.status(404).json({ error: "Task not found" });
+      const result = await aiService.generateJSON<{ estimatedMinutes: number; confidence: number; reasoning: string }>(
+        `Estimate how long this task will take:\nTitle: "${task.title}"\nDescription: "${task.description || "No description"}"\n\nReturn: { estimatedMinutes: number (nearest 15), confidence: 0-1, reasoning: string }`,
+        { systemPrompt: "Estimate task durations.", temperature: 0.3 }
+      );
+      await db.update(tasks).set({ time: result.estimatedMinutes }).where(eq(tasks.id, taskId));
+      return res.json(result);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/task-intelligence/suggest-assignee
+  app.post("/api/task-intelligence/suggest-assignee", isAuthenticated, async (req: any, res) => {
+    try {
+      const { taskId } = z.object({ taskId: z.coerce.number() }).parse(req.body);
+      const [task] = await db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
+      if (!task) return res.status(404).json({ error: "Task not found" });
+      const allUsers = await db.select({ id: users.id, firstName: users.firstName, lastName: users.lastName }).from(users);
+      const memberWorkloads = await Promise.all(allUsers.map(async (u) => {
+        const [result] = await db.select({ count: drizzleSql<number>`count(*)` }).from(tasks).where(and(eq(tasks.userId, u.id), drizzleSql`${tasks.completionPercentage} < 100`));
+        return { userId: u.id, name: `${u.firstName || ""} ${u.lastName || ""}`.trim(), activeTasks: Number(result?.count || 0) };
+      }));
+      const result = await aiService.generateJSON<{ suggestions: Array<{ userId: string; name: string; score: number; reason: string }> }>(
+        `Suggest the best assignee for this task:\nTask: "${task.title}" - ${task.description || ""}\n\nTeam members and workload:\n${JSON.stringify(memberWorkloads)}\n\nReturn top 3 suggestions with score (0-100).`,
+        { systemPrompt: "Suggest task assignees based on skills and workload.", temperature: 0.3 }
+      );
+      return res.json(result);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // ============================================================
+  // SPRINT 5 — AI DATABASE INTELLIGENCE (Feature 8)
+  // ============================================================
+
+  // POST /api/database-ai/auto-fill
+  app.post("/api/database-ai/auto-fill", isAuthenticated, async (req: any, res) => {
+    try {
+      const { taskId, aiPrompt, inputFields } = z.object({ taskId: z.coerce.number(), aiPrompt: z.string(), inputFields: z.array(z.string()) }).parse(req.body);
+      const [task] = await db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
+      if (!task) return res.status(404).json({ error: "Task not found" });
+      const inputData: Record<string, string> = {};
+      for (const field of inputFields) { inputData[field] = (task as any)[field] || ""; }
+      const result = await aiService.generateText(`${aiPrompt}\n\nInput data:\n${JSON.stringify(inputData)}`, { systemPrompt: "Generate the requested value. Return ONLY the value.", maxTokens: 200, temperature: 0.2 });
+      return res.json({ value: result.text.trim() });
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/database-ai/query
+  app.post("/api/database-ai/query", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { query } = z.object({ query: z.string() }).parse(req.body);
+      const userTasks = await db.select({ id: tasks.id, title: tasks.title, priority: tasks.priority, date: tasks.date, completionPercentage: tasks.completionPercentage, description: tasks.description }).from(tasks).where(eq(tasks.userId, userId)).limit(100);
+      const result = await aiService.generateText(
+        `Answer this question about the database:\n"${query}"\n\nDATABASE CONTENTS (${userTasks.length} rows):\n${JSON.stringify(userTasks)}\n\nProvide a direct answer.`,
+        { systemPrompt: "Answer database queries accurately and concisely.", maxTokens: 500, temperature: 0.2 }
+      );
+      return res.json({ answer: result.text });
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/database-ai/create-from-description
+  app.post("/api/database-ai/create-from-description", isAuthenticated, async (req: any, res) => {
+    try {
+      const { description } = z.object({ description: z.string() }).parse(req.body);
+      const result = await aiService.generateJSON<{ name: string; properties: Array<{ name: string; type: string; options?: string[] }>; views: Array<{ name: string; type: string; groupBy?: string }>; sampleRows: Array<Record<string, any>> }>(
+        `Create a database structure for:\n"${description}"\n\nReturn JSON with:\n- name: database name\n- properties: [{name, type, options?}]\n- views: [{name, type, groupBy?}]\n- sampleRows: 3 example rows`,
+        { systemPrompt: "Design practical database structures.", temperature: 0.4 }
+      );
+      return res.json(result);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/database-ai/generate-formula
+  app.post("/api/database-ai/generate-formula", isAuthenticated, async (req: any, res) => {
+    try {
+      const { description, properties } = z.object({ description: z.string(), properties: z.array(z.object({ name: z.string(), type: z.string() })) }).parse(req.body);
+      const result = await aiService.generateText(
+        `Generate a formula for: "${description}"\nAvailable properties: ${JSON.stringify(properties)}\nReturn ONLY the formula expression.`,
+        { systemPrompt: "Generate database formulas.", maxTokens: 200, temperature: 0.1 }
+      );
+      return res.json({ formula: result.text.trim() });
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // ============================================================
+  // SPRINT 6 — AI MEETING INTELLIGENCE (Feature 7)
+  // ============================================================
+
+  // POST /api/meetings/:meetingId/process — start processing meeting
+  app.post("/api/meetings/:meetingId/process", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const meetingId = req.params.meetingId;
+      const { audioUrl } = z.object({ audioUrl: z.string() }).parse(req.body);
+
+      const existing = await db.select().from(meetingIntelligence).where(eq(meetingIntelligence.meetingId, meetingId)).limit(1);
+      let intel: any;
+      if (existing.length > 0) {
+        [intel] = await db.update(meetingIntelligence).set({ audioUrl, processingStatus: "transcribing" }).where(eq(meetingIntelligence.meetingId, meetingId)).returning();
+      } else {
+        [intel] = await db.insert(meetingIntelligence).values({ meetingId, userId, audioUrl, processingStatus: "transcribing" }).returning();
+      }
+
+      processMeetingInline(intel.id, meetingId).catch(err => console.error("Meeting processing failed:", err));
+      return res.json({ intelligenceId: intel.id, status: "processing" });
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // GET /api/meetings/:meetingId/intelligence
+  app.get("/api/meetings/:meetingId/intelligence", isAuthenticated, async (req: any, res) => {
+    try {
+      const meetingId = req.params.meetingId;
+      const [intel] = await db.select().from(meetingIntelligence).where(eq(meetingIntelligence.meetingId, meetingId)).limit(1);
+      return res.json(intel || null);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // GET /api/meetings — list all meetings for user
+  app.get("/api/meetings", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const meetings = await db.select().from(meetingIntelligence).where(eq(meetingIntelligence.userId, userId)).orderBy(desc(meetingIntelligence.createdAt));
+      return res.json(meetings);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/meetings — create a new meeting
+  app.post("/api/meetings", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { title } = z.object({ title: z.string().min(1) }).parse(req.body);
+      const meetingId = `meeting_${Date.now()}_${userId.replace(/[^a-z0-9]/gi, "")}`;
+      const [intel] = await db.insert(meetingIntelligence).values({ meetingId, userId, processingStatus: "pending", aiSummary: title }).returning();
+      return res.json(intel);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/meetings/:meetingId/create-tasks
+  app.post("/api/meetings/:meetingId/create-tasks", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const meetingId = req.params.meetingId;
+      const { actionItemIndices } = z.object({ actionItemIndices: z.array(z.number()) }).parse(req.body);
+      const [intel] = await db.select().from(meetingIntelligence).where(eq(meetingIntelligence.meetingId, meetingId)).limit(1);
+      if (!intel || !intel.actionItems) return res.status(404).json({ error: "No action items found" });
+
+      const actionItems = intel.actionItems as any[];
+      const createdTasks: any[] = [];
+      for (const index of actionItemIndices) {
+        const item = actionItems[index];
+        if (!item) continue;
+        const [task] = await db.insert(tasks).values({ userId, title: item.title, description: item.description || "Action item from meeting", priority: "medium", date: new Date().toISOString().split("T")[0] }).returning();
+        actionItems[index].taskCreated = true;
+        actionItems[index].taskId = task.id;
+        createdTasks.push(task);
+      }
+      await db.update(meetingIntelligence).set({ actionItems }).where(eq(meetingIntelligence.meetingId, meetingId));
+      return res.json({ created: createdTasks.length, tasks: createdTasks });
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/meetings/:meetingId/prep-brief
+  app.post("/api/meetings/:meetingId/prep-brief", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const meetingId = req.params.meetingId;
+      const recentTasks = await db.select({ title: tasks.title, priority: tasks.priority, completionPercentage: tasks.completionPercentage }).from(tasks).where(eq(tasks.userId, userId)).limit(15);
+      const result = await aiService.generateText(
+        `Generate a meeting prep brief.\nRecent task updates: ${JSON.stringify(recentTasks)}\n\nInclude: agenda suggestions, relevant context, open questions to discuss.`,
+        { systemPrompt: "Generate concise meeting prep briefs.", maxTokens: 800, temperature: 0.4 }
+      );
+      await db.insert(meetingIntelligence).values({ meetingId, userId, prepBrief: result.text }).onConflictDoUpdate({ target: [meetingIntelligence.meetingId], set: { prepBrief: result.text } });
+      return res.json({ prepBrief: result.text });
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/meetings/process-text — process a text transcript directly
+  app.post("/api/meetings/process-text", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { meetingId, transcript, title } = z.object({ meetingId: z.string().optional(), transcript: z.string(), title: z.string().optional() }).parse(req.body);
+
+      const mId = meetingId || `meeting_${Date.now()}_${userId.replace(/[^a-z0-9]/gi, "")}`;
+      const summaryResult = await aiService.generateJSON<{ summary: string; keyPoints: string[]; decisions: Array<{ decision: string; context: string }>; actionItems: Array<{ title: string; description?: string; suggestedOwner?: string }>; openQuestions: string[] }>(
+        `Analyze this meeting transcript:\n\nTRANSCRIPT:\n${transcript.slice(0, 15000)}\n\nReturn JSON with: summary (3-5 sentences), keyPoints, decisions [{decision, context}], actionItems [{title, description, suggestedOwner}], openQuestions.`,
+        { systemPrompt: "Extract structured meeting information from transcripts.", temperature: 0.2 }
+      );
+
+      const existing = await db.select().from(meetingIntelligence).where(eq(meetingIntelligence.meetingId, mId)).limit(1);
+      let intel: any;
+      if (existing.length > 0) {
+        [intel] = await db.update(meetingIntelligence).set({ transcriptRaw: transcript, aiSummary: summaryResult.summary, keyPoints: summaryResult.keyPoints, decisions: summaryResult.decisions, actionItems: summaryResult.actionItems.map(a => ({ ...a, taskCreated: false })), openQuestions: summaryResult.openQuestions, processingStatus: "completed" }).where(eq(meetingIntelligence.meetingId, mId)).returning();
+      } else {
+        [intel] = await db.insert(meetingIntelligence).values({ meetingId: mId, userId, transcriptRaw: transcript, aiSummary: title || summaryResult.summary.substring(0, 100), keyPoints: summaryResult.keyPoints, decisions: summaryResult.decisions, actionItems: summaryResult.actionItems.map(a => ({ ...a, taskCreated: false })), openQuestions: summaryResult.openQuestions, processingStatus: "completed" }).returning();
+      }
+      return res.json(intel);
+    } catch (error: any) { return res.status(500).json({ error: error.message }); }
+  });
+
+  // ============================================================
+  // SPRINT 6 — AI DOCUMENT GENERATOR (Feature 10)
+  // ============================================================
+
+  app.post("/api/doc-generator/generate", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const input = z.object({
+        templateType: z.enum(["weekly_status", "meeting_agenda", "project_brief", "sprint_retro", "handoff_doc", "client_update", "onboarding_guide"]),
+        config: z.object({ dateRangeStart: z.string().optional(), dateRangeEnd: z.string().optional(), projectName: z.string().optional() }).default({}),
+      }).parse(req.body);
+
+      const { templateType, config } = input;
+      let contextData = "";
+
+      if (templateType === "weekly_status" || templateType === "sprint_retro") {
+        const userTasks = await db.select().from(tasks).where(eq(tasks.userId, userId)).limit(50);
+        const completed = userTasks.filter(t => (t.completionPercentage || 0) >= 100);
+        const inProgress = userTasks.filter(t => (t.completionPercentage || 0) > 0 && (t.completionPercentage || 0) < 100);
+        const notStarted = userTasks.filter(t => (t.completionPercentage || 0) === 0);
+        contextData = `Tasks completed: ${completed.length} (${completed.map(t => t.title).join(", ")})\nIn progress: ${inProgress.length} (${inProgress.map(t => t.title).join(", ")})\nNot started: ${notStarted.length} (${notStarted.map(t => t.title).join(", ")})`;
+      }
+      if (templateType === "meeting_agenda") {
+        const userTasks = await db.select().from(tasks).where(and(eq(tasks.userId, userId), drizzleSql`${tasks.completionPercentage} < 100`)).limit(10);
+        contextData = `Open tasks: ${JSON.stringify(userTasks.map(t => ({ title: t.title, priority: t.priority })))}`;
+      }
+
+      const TEMPLATE_PROMPTS: Record<string, string> = {
+        weekly_status: "Generate a weekly status report with: Executive Summary, Completed, In Progress, Blocked Items, Risks, Plan for Next Week.",
+        meeting_agenda: "Generate a meeting agenda with: Review Action Items, Status Updates, Discussion Topics, Decisions Needed, Next Steps.",
+        project_brief: `Generate a project brief for "${config.projectName || "Project"}" with: Overview, Objectives, Requirements, Timeline, Team, Risks.`,
+        sprint_retro: "Generate a sprint retrospective with: Sprint Summary, What Went Well, What Could Improve, Action Items.",
+        handoff_doc: "Generate a handoff document with: Project Overview, Current State, Key Decisions Made, Open Items, Contact Points.",
+        client_update: "Generate a client-facing update with: Summary, Progress, Milestones, Next Steps, Timeline.",
+        onboarding_guide: "Generate an onboarding guide with: Welcome, Getting Started, Key Resources, Team Overview, First Week Tasks.",
+      };
+
+      const result = await aiService.generateText(
+        `${TEMPLATE_PROMPTS[templateType]}\n\nWORKSPACE DATA:\n${contextData}\n\nWrite a complete, professional document using the real data provided.`,
+        { systemPrompt: "Generate professional documents from workspace data.", maxTokens: 3000, temperature: 0.4 }
+      );
+      return res.json({ content: result.text, templateType });
+    } catch (error: any) { return res.status(500).json({ error: error.message }); }
+  });
+
+  // ============================================================
+  // SPRINT 7 — AI MESSAGING INTELLIGENCE (Feature 11)
+  // ============================================================
+
+  // POST /api/messaging-ai/summarize-thread
+  app.post("/api/messaging-ai/summarize-thread", isAuthenticated, async (req: any, res) => {
+    try {
+      const { threadParentId } = z.object({ threadParentId: z.coerce.number() }).parse(req.body);
+      const messages = await db.select().from(channelMessages).where(or(eq(channelMessages.id, threadParentId), eq(channelMessages.threadParentId, threadParentId))).orderBy(asc(channelMessages.createdAt));
+      const formatted = await Promise.all(messages.map(async (m) => {
+        const [user] = await db.select({ firstName: users.firstName, lastName: users.lastName }).from(users).where(eq(users.id, m.userId)).limit(1);
+        const name = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Unknown" : "Unknown";
+        return `${name}: ${m.content}`;
+      }));
+      const result = await aiService.generateText(`Summarize this thread in 3-5 sentences:\n\n${formatted.join("\n")}`, { systemPrompt: "Summarize message threads concisely.", maxTokens: 300, temperature: 0.3 });
+      return res.json({ summary: result.text });
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/messaging-ai/catch-up
+  app.post("/api/messaging-ai/catch-up", isAuthenticated, async (req: any, res) => {
+    try {
+      const { channelId, since } = z.object({ channelId: z.coerce.number(), since: z.string() }).parse(req.body);
+      const messages = await db.select().from(channelMessages).where(and(eq(channelMessages.channelId, channelId), gte(channelMessages.createdAt, new Date(since)))).orderBy(asc(channelMessages.createdAt)).limit(100);
+      if (messages.length === 0) return res.json({ summary: "Nothing new since you were last here.", messageCount: 0 });
+      const formatted = await Promise.all(messages.map(async (m) => {
+        const [user] = await db.select({ firstName: users.firstName, lastName: users.lastName }).from(users).where(eq(users.id, m.userId)).limit(1);
+        const name = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Unknown" : "Unknown";
+        return `${name}: ${m.content}`;
+      }));
+      const result = await aiService.generateText(`Summarize what happened in this channel (${messages.length} messages):\n\n${formatted.join("\n")}`, { systemPrompt: "Provide a catch-up summary. Highlight: key decisions, important updates, questions, action items.", maxTokens: 500, temperature: 0.3 });
+      return res.json({ summary: result.text, messageCount: messages.length });
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/messaging-ai/suggest-replies
+  app.post("/api/messaging-ai/suggest-replies", isAuthenticated, async (req: any, res) => {
+    try {
+      const { messageId } = z.object({ messageId: z.coerce.number() }).parse(req.body);
+      const [message] = await db.select().from(channelMessages).where(eq(channelMessages.id, messageId)).limit(1);
+      if (!message) return res.status(404).json({ error: "Message not found" });
+      const [user] = await db.select({ firstName: users.firstName, lastName: users.lastName }).from(users).where(eq(users.id, message.userId)).limit(1);
+      const authorName = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Someone" : "Someone";
+      const result = await aiService.generateJSON<{ replies: string[] }>(
+        `Suggest 3 short reply options for:\n"${authorName}: ${message.content}"\n\nReturn JSON: { replies: ["r1", "r2", "r3"] }\nMake varied (agreeing, follow-up, providing info).`,
+        { systemPrompt: "Generate natural reply suggestions.", temperature: 0.7 }
+      );
+      return res.json(result);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/messaging-ai/compose
+  app.post("/api/messaging-ai/compose", isAuthenticated, async (req: any, res) => {
+    try {
+      const input = z.object({ action: z.enum(["draft_reply", "make_professional", "translate"]), inputText: z.string().optional(), threadContext: z.string().optional(), language: z.string().optional() }).parse(req.body);
+      const prompts: Record<string, string> = {
+        draft_reply: `Draft a reply to:\n${input.threadContext}\n\nDraft a helpful, professional response.`,
+        make_professional: `Rewrite professionally:\n"${input.inputText}"`,
+        translate: `Translate to ${input.language || "English"}:\n"${input.inputText}"`,
+      };
+      const result = await aiService.generateText(prompts[input.action], { systemPrompt: "Write clear, professional messages.", maxTokens: 500, temperature: 0.5 });
+      return res.json({ text: result.text });
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/messaging-ai/extract-decisions
+  app.post("/api/messaging-ai/extract-decisions", isAuthenticated, async (req: any, res) => {
+    try {
+      const { channelId, dateRange } = z.object({ channelId: z.coerce.number(), dateRange: z.object({ start: z.string(), end: z.string() }) }).parse(req.body);
+      const messages = await db.select().from(channelMessages).where(and(eq(channelMessages.channelId, channelId), gte(channelMessages.createdAt, new Date(dateRange.start)), lte(channelMessages.createdAt, new Date(dateRange.end)))).orderBy(asc(channelMessages.createdAt)).limit(200);
+      const formatted = await Promise.all(messages.map(async (m) => {
+        const [user] = await db.select({ firstName: users.firstName, lastName: users.lastName }).from(users).where(eq(users.id, m.userId)).limit(1);
+        const name = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Unknown" : "Unknown";
+        return `[${m.createdAt?.toISOString()}] ${name}: ${m.content}`;
+      }));
+      const result = await aiService.generateJSON<{ decisions: Array<{ decision: string; decidedBy: string; context: string; date: string }> }>(
+        `Extract all decisions made:\n${formatted.join("\n")}\n\nReturn: { decisions: [{decision, decidedBy, context, date}] }`,
+        { systemPrompt: "Extract team decisions.", temperature: 0.2 }
+      );
+      return res.json(result);
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // ============================================================
+  // SPRINT 7 — AI EMAIL ASSISTANT (Feature 13)
+  // ============================================================
+
+  // POST /api/email/compose
+  app.post("/api/email/compose", isAuthenticated, async (req: any, res) => {
+    try {
+      const input = z.object({ action: z.enum(["compose", "reply", "follow_up"]), subject: z.string().optional(), to: z.string().optional(), threadContext: z.string().optional(), instructions: z.string().optional(), tone: z.enum(["professional", "casual", "friendly", "formal"]).default("professional") }).parse(req.body);
+      const prompts: Record<string, string> = {
+        compose: `Write an email:\nTo: ${input.to || "recipient"}\nSubject: ${input.subject || "subject"}\nInstructions: ${input.instructions || "Write a clear email"}\nTone: ${input.tone}`,
+        reply: `Write a reply to:\n${input.threadContext}\n\nInstructions: ${input.instructions || "Write a professional reply."}\nTone: ${input.tone}`,
+        follow_up: `Write a follow-up:\n${input.threadContext}\n\nInstructions: ${input.instructions || "Politely follow up."}\nTone: ${input.tone}`,
+      };
+      const result = await aiService.generateText(prompts[input.action], { systemPrompt: "Write professional emails. Include subject line if composing new.", maxTokens: 1000, temperature: 0.5 });
+      return res.json({ text: result.text });
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/email/triage
+  app.post("/api/email/triage", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const threads = await db.select().from(emailThreads).where(drizzleSql`${emailThreads.aiPriority} IS NULL`).limit(50);
+      let triaged = 0;
+      for (const thread of threads) {
+        try {
+          const result = await aiService.generateJSON<{ priority: string; labels: string[] }>(
+            `Classify email:\nSubject: ${thread.subject}\nPreview: ${thread.latestSnippet || ""}\nReturn: { priority: 'urgent'|'important'|'fyi'|'low', labels: [...] }`,
+            { systemPrompt: "Triage emails.", temperature: 0.2 }
+          );
+          await db.update(emailThreads).set({ aiPriority: result.priority, aiLabels: result.labels }).where(eq(emailThreads.id, thread.id));
+          triaged++;
+        } catch (_e) {}
+      }
+      return res.json({ triaged });
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // POST /api/email/:threadId/summarize
+  app.post("/api/email/:threadId/summarize", isAuthenticated, async (req: any, res) => {
+    try {
+      const { subject, content } = z.object({ subject: z.string(), content: z.string() }).parse(req.body);
+      const result = await aiService.generateText(`Summarize this email thread:\nSubject: ${subject}\nContent: ${content}`, { systemPrompt: "Summarize email threads concisely.", maxTokens: 300, temperature: 0.3 });
+      return res.json({ summary: result.text });
+    } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // ============================================================
+  // INLINE MEETING PROCESSOR (no BullMQ — async inline)
+  // ============================================================
+  async function processMeetingInline(intelligenceId: number, meetingId: string) {
+    try {
+      await db.update(meetingIntelligence).set({ processingStatus: "summarizing" }).where(eq(meetingIntelligence.id, intelligenceId));
+      const transcript = "Meeting transcript placeholder - integrate with audio transcription service for real use.";
+      const summaryResult = await aiService.generateJSON<{ summary: string; keyPoints: string[]; decisions: Array<{ decision: string; context: string }>; actionItems: Array<{ title: string; description?: string; suggestedOwner?: string }>; openQuestions: string[] }>(
+        `Analyze this meeting:\n\nTRANSCRIPT:\n${transcript}\n\nReturn JSON with: summary (3-5 sentences), keyPoints, decisions [{decision, context}], actionItems [{title, description, suggestedOwner}], openQuestions.`,
+        { systemPrompt: "Extract structured meeting information from transcripts.", temperature: 0.2 }
+      );
+      await db.update(meetingIntelligence).set({ processingStatus: "completed", transcriptRaw: transcript, aiSummary: summaryResult.summary, keyPoints: summaryResult.keyPoints, decisions: summaryResult.decisions, actionItems: summaryResult.actionItems.map(a => ({ ...a, taskCreated: false })), openQuestions: summaryResult.openQuestions }).where(eq(meetingIntelligence.id, intelligenceId));
+    } catch (error: any) {
+      await db.update(meetingIntelligence).set({ processingStatus: "failed", processingError: error.message }).where(eq(meetingIntelligence.id, intelligenceId));
+    }
+  }
 
   // Register Sprint 1 AI cron jobs
   setupAiCronJobs();

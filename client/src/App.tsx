@@ -43,6 +43,15 @@ import DailyPlanner from "@/pages/planner/DailyPlanner";
 import MyDayPage from "@/pages/dashboard/my-day";
 import AiHabitsPage from "@/pages/dashboard/ai-habits";
 import FocusCoachPage from "@/pages/dashboard/focus-coach";
+import AiAgentsPage from "@/pages/dashboard/ai-agents";
+import AiWorkflowsPage from "@/pages/dashboard/ai-workflows";
+import ProjectManagerPage from "@/pages/dashboard/project-manager";
+import TaskIntelPage from "@/pages/dashboard/task-intel";
+import DatabaseAiPage from "@/pages/dashboard/database-ai";
+import MeetingsPage from "@/pages/dashboard/meetings";
+import DocGeneratorPage from "@/pages/dashboard/doc-generator";
+import MessagingAiPage from "@/pages/dashboard/messaging-ai";
+import EmailPage from "@/pages/dashboard/email";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -240,6 +249,51 @@ function Router() {
       <Route path="/dashboard/focus-coach">
         <DashboardLayout>
           <FocusCoachPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/ai-agents">
+        <DashboardLayout>
+          <AiAgentsPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/ai-workflows">
+        <DashboardLayout>
+          <AiWorkflowsPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/project-manager">
+        <DashboardLayout>
+          <ProjectManagerPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/task-intel">
+        <DashboardLayout>
+          <TaskIntelPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/database-ai">
+        <DashboardLayout>
+          <DatabaseAiPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/meetings">
+        <DashboardLayout>
+          <MeetingsPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/doc-generator">
+        <DashboardLayout>
+          <DocGeneratorPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/messaging-ai">
+        <DashboardLayout>
+          <MessagingAiPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/email">
+        <DashboardLayout>
+          <EmailPage />
         </DashboardLayout>
       </Route>
 
