@@ -75,6 +75,8 @@ const menuItems = [
   { title: "Wiki", icon: BookMarked, url: "/dashboard/wiki" },
   { title: "Automations", icon: Zap, url: "/dashboard/automations" },
   { title: "Connect", icon: MessageSquare, url: "/dashboard/connect" },
+  { title: "AI Autopilot", icon: Zap, url: "/dashboard/autopilot" },
+  { title: "Time Machine", icon: BarChart3, url: "/dashboard/time-machine" },
   { title: "Workspace Setup", icon: Building2, url: "/dashboard/workspace-setup" },
   { title: "Team Management", icon: UsersRound, url: "/dashboard/team-management" },
   { title: "Members", icon: Users, url: "/dashboard/members" },

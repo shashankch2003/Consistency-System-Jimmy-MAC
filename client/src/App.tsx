@@ -37,6 +37,8 @@ import ReportsPage from "@/pages/dashboard/reports";
 import OKRGoalsPage from "@/pages/dashboard/okr-goals";
 import AutomationsPage from "@/pages/dashboard/automations";
 import ConnectPage from "@/pages/dashboard/connect";
+import AutopilotPanel from "@/pages/autopilot/AutopilotPanel";
+import TimeMachine from "@/pages/analytics/TimeMachine";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -204,6 +206,16 @@ function Router() {
       <Route path="/dashboard/connect">
         <DashboardLayout>
           <ConnectPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/autopilot">
+        <DashboardLayout>
+          <AutopilotPanel />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/time-machine">
+        <DashboardLayout>
+          <TimeMachine />
         </DashboardLayout>
       </Route>
 

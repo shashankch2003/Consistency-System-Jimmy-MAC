@@ -1,0 +1,149 @@
+8 AI FEATURES — 6 CORRECTED PROMPTS (V2)
+Autopilot • Predictions • Time Machine • Delegation • Context Switcher • Workflow Recorder • Daily Planner •
+Document Autopilot
+All 47 components. Zero features removed. All 33 original mistakes fixed + 6 additional mistakes fixed (V2).
+Corrected for: React + Vite, Drizzle ORM, Express routes, Replit Auth, serial PKs, no workspaces, no Redis/BullMQ/Socket.io
+# Name Mode What's Built ~Cr
+1 UI: Shared+Autopilot+Predictions+TimeMachine1 Lite 12 shell components 0.20
+2 UI: TM2+Delegation+Context+Workflow+Planner Lite 15 shell components 0.20
+3 Logic: Infra+Autopilot+Predictions+TimeMachine Economy Event tracker, triggers, actions, undo, predictions, sessions1.00
+4 Logic: Delegation+Context+Workflow+Planner+DocGen Economy Scoring, context, recorder, planner, assembler 1.00
+5 DB: All Tables + Connect Events+Autopilot+Predictions Economy 18 tables, Express APIs, cron jobs 1.00
+6 DB: TM+Delegation+Context+Workflows+Planner+DocGen+Verify+Seed Economy Remaining DB, verify, seed 1.00
+TOTAL: ~4.40 credits (2 Lite x 0.20 + 4 Economy x 1.00) | Fix prompts ~0.20-0.40 | Realistic total ~4.40-5.00
+INSTRUCTIONS
+• Copy ONE prompt at a time into Replit
+• Wait for full completion
+• Verify no console errors
+• If error → STOP → go to Claude → get targeted fix → never re-send failed prompt
+• If success → next prompt
+• Do NOT skip or reorder
+V2 FIXES APPLIED IN THIS DOCUMENT (6 additional fixes):
+FIX 1 (CRITICAL): tasks table description corrected in ALL 6 context blocks — now reads: tasks (userId varchar, title text, description text,
+completionPercentage integer, date text, time text, priority text)
+FIX 2 (CRITICAL): Prompt 6 '[Done]' now updates completionPercentage=100 (was isCompleted=true which doesn't exist)
+FIX 3 (CRITICAL): Prompt 5 sequence learner / prediction engine now references tasks.title (was tasks.content which doesn't exist)
+FIX 4 (MEDIUM): Prompt 6 Part F Route declarations now complete with actual Route components
+FIX 5 (MEDIUM): Prompt 3 variables now use {{user.firstName}} (was {{user.name}} which doesn't exist)
+FIX 6 (LOW): node-cron install instruction added to context block for early awareness
+CORRECTED CONTEXT BLOCK (used in all 6 prompts)
+Every prompt below uses this CONTEXT. It replaces all previous versions.
+CONTEXT: App: AI-driven productivity platform with Replit Auth. Tech: React + Vite, TypeScript, Tailwind, Shadcn/UI, PostgreSQL, Drizzle ORM (shared/schema.ts),
+Express (server/routes.ts), OpenAI via Replit integration. Router: wouter (client/src/App.tsx). State: @tanstack/react-query. File paths: client/src/components/,
+client/src/pages/, client/src/lib/, client/src/hooks/, server/routes.ts, server/storage.ts (IStorage interface), shared/schema.ts. Auth: Replit Auth — user ID is text string
+from req.user.claims.sub, protected with isAuthenticated middleware from server/replit_integrations/auth/. PKs: serial integers. User IDs: text (not UUID). No
+workspaces. Existing tables: tasks (userId varchar, title text, description text, completionPercentage integer, date text, time text, priority text), notes (not
+pages), group_messages (not messages). No meetings table. No databaseId concept. No Redis, no BullMQ, no Socket.io, no tRPC, no centralized AI service, no
+Google Calendar. Background jobs: node-cron or setInterval (install node-cron before Prompt 5: npm install node-cron @types/node-cron). In-memory cache
+(Map). Rules: TypeScript strict, Zod validation, serial integer PKs, createdAt/updatedAt timestamps, responsive design.
+KEY DIFFERENCES FROM ORIGINAL (summary of all 33+6 fixes)
+• React + Vite (NOT Next.js 14+) — no App Router, no page.tsx, no src/app/
+• Drizzle ORM with shared/schema.ts (NOT Prisma) — use db.select(), db.insert(), NOT prisma.x.findMany()
+• File paths: client/src/... (NOT src/...) and server/routes.ts for APIs
+• Express routes (NOT Next.js App Router route.ts) — app.get(), app.post() in server/routes.ts
+• node-cron for scheduled jobs (NOT BullMQ) — no Redis required — must install: npm install node-cron @types/node-cron
+• In-memory Map for caching (NOT Redis)
+• OpenAI via Replit integration (NOT centralized AI service)
+• No Socket.io — use polling or @tanstack/react-query refetch for updates
+• User IDs are text strings e.g. 'user:12345678' (NOT UUIDs)
+• Primary keys: serial() (NOT UUID)
+• No workspaceId anywhere — app has no workspace system
+• No meetings, pages, or messages table in expected format — use notes, group_messages
+• Must register new pages in client/src/App.tsx with wouter Route
+• Must add sidebar links in AppSidebar component
+• Must use IStorage interface in server/storage.ts for DB operations
+• Must use isAuthenticated middleware on all new Express routes
+• User ID via req.user.claims.sub (NOT ctx.user.id or tRPC context)
+• npx drizzle-kit push for migrations (NOT npx prisma migrate dev)
+• Install @dnd-kit/core for drag-and-drop (explicitly specified)
+• Keyboard shortcuts: Alt+Shift+A / Alt+Shift+P / Alt+Shift+R (NOT Ctrl+Shift — browser conflicts)
+• V2 FIX: tasks table has: userId varchar, title text, description text, completionPercentage integer, date text, time text, priority text — NOT isCompleted
+bool / content text
+• V2 FIX: Task completion = set completionPercentage=100 — NOT isCompleted=true
+• V2 FIX: Task content matching uses tasks.title — NOT tasks.content
+• V2 FIX: User name variable is {{user.firstName}} — NOT {{user.name}}
+PROMPT 1 OF 6
+UI: Shared + Autopilot + Predictions + Time Machine Part 1
+■ REPLIT: LITE MODE (lightning bolt) | App Testing: OFF | Code Optimization: OFF
+PROMPT 1 — Copy into Replit
+CONTEXT: App: AI-driven productivity platform with Replit Auth. Tech: React + Vite, TypeScript, Tailwind, Shadcn/UI, PostgreSQL, Drizzle ORM (shared/schema.ts),
+Express (server/routes.ts), OpenAI via Replit integration. Router: wouter (client/src/App.tsx). State: @tanstack/react-query. File paths: client/src/components/,
+client/src/pages/, client/src/lib/, client/src/hooks/, server/routes.ts, server/storage.ts (IStorage interface), shared/schema.ts. Auth: Replit Auth — user ID is text string
+from req.user.claims.sub, protected with isAuthenticated middleware from server/replit_integrations/auth/. PKs: serial integers. User IDs: text (not UUID). No
+workspaces. Existing tables: tasks (userId varchar, title text, description text, completionPercentage integer, date text, time text, priority text), notes (not
+pages), group_messages (not messages). No meetings table. No databaseId concept. No Redis, no BullMQ, no Socket.io, no tRPC, no centralized AI service, no
+Google Calendar. Background jobs: node-cron or setInterval (install node-cron before Prompt 5: npm install node-cron @types/node-cron). In-memory cache
+(Map). Rules: TypeScript strict, Zod validation, serial integer PKs, createdAt/updatedAt timestamps, responsive design.
+Feature: 12 UI shell components across shared, autopilot, predictions, and time machine. Current state: App has auth, tasks, notes, group
+messaging. No AI UI exists yet. Layer: Layer 1 — Structure only (all shells, hardcoded data, nothing interactive).
+Files to create:
+• client/src/components/ai/SuggestionCard.tsx
+• client/src/components/ai/ProgressModal.tsx
+• client/src/components/ai/TimelineVisualizer.tsx
+• client/src/pages/autopilot/AutopilotPanel.tsx
+• client/src/components/autopilot/RuleCreatorModal.tsx
+• client/src/components/autopilot/AutopilotSettings.tsx
+• client/src/components/predictions/PredictionBanner.tsx
+• client/src/components/predictions/PostCompletionPopup.tsx
+• client/src/components/predictions/SprintPlanner.tsx
+• client/src/pages/analytics/TimeMachine.tsx
+• client/src/components/timemachine/VisualTimeline.tsx
+• client/src/components/timemachine/ActivityBreakdown.tsx
+TASK: Add 12 UI shell components. Hardcoded data. Nothing interactive. No click handlers. No state changes. No API calls.
+1. SUGGESTION CARD (SuggestionCard.tsx): Card (rounded-lg shadow-md border-l-4 border-blue-500 max-w-[400px] p-4 bg-white). Zap icon + "Autopilot
+Suggestion" (text-sm font-semibold text-gray-600). Title "Create follow-up task" (text-base font-bold text-gray-900 mt-1). "Because: You completed wireframes and
+usually create review next" (text-sm text-gray-500 mt-1). Detail row (flex gap-2 mt-2 text-sm): avatar (w-5 h-5 rounded-full bg-gray-200) + "@alice" + "Due: Mar 7" +
+blue dot. 4 buttons (flex gap-2 mt-3): "Do It" (bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm), "Edit First" (border rounded-md px-3 py-1.5 text-sm), "Skip"
+(text-gray-500 text-sm), "Never" (text-red-400 text-xs).
+2. PROGRESS MODAL (ProgressModal.tsx): Overlay (fixed inset-0 bg-black/40 z-50 flex items-center justify-center). Card (max-w-[480px] bg-white rounded-xl
+shadow-2xl p-6). Robot emoji + "Processing..." (text-lg font-bold) + desc (text-sm text-gray-500). 4 steps (space-y-2 mt-4): 3 green CheckCircle + done text, 1 blue
+Loader2 spinning + "Generating...". Progress bar (h-2 rounded-full bg-gray-200 mt-4) blue fill at 75%.
+3. TIMELINE VISUALIZER (TimelineVisualizer.tsx): Full-width (w-full bg-white rounded-lg p-4). Hour labels (flex justify-between text-xs text-gray-400): "9AM"
+through "5PM". Bar row (h-8 flex gap-0.5 rounded-sm overflow-hidden mt-2): Blue 20%, Purple 12%, Green 12%, Yellow 5%, Gray 12%, Orange 15%, Blue 24%.
+Legend (flex gap-4 mt-3 text-xs): dot+label for Task Work(blue), Meetings(purple), Docs(green), Messaging(yellow), Break(gray), Focus(orange). EMPTY: "No activity
+recorded today".
+4. AUTOPILOT PANEL (AutopilotPanel.tsx): Full panel (bg-white border-l h-full overflow-y-auto). Header: Zap icon + "AI Work Autopilot" (text-xl font-bold) + gear
+icon (far right). Tab bar: "Dashboard"/"My Rules"/"Suggestions"/"Activity Log"/"Templates" (Dashboard active blue). DASHBOARD SECTION: 4 stats cards (flex
+gap-4): "Time Saved" "3.2h" green+0.5h, "Actions" "47" green+12, "Rules Active" "12" sub "6 learned", "Accuracy" "94%" green bar. Cards: bg-white rounded-lg
+shadow-sm p-4 border. "Pending Suggestions" header + 2 SuggestionCard imports. "Recent Actions" 3 rows: CheckCircle+time+text+[Undo][View]. Floating widget
+area: 2 stacked SuggestionCards fixed bottom-6 right-6 z-50 with X dismiss + "Dismissing in 30s". MY RULES SECTION: "+ Create New Rule" button + filters. 3 rule
+cards (border-l-4 purple/blue/green): name + toggle + "Type/Mode/Triggered/Confidence" + Edit/Duplicate/Delete/History. SUGGESTIONS SECTION: 2 pattern cards:
+Brain icon + pattern description + auto/suggest/confirm pills + Enable/Customize/NotUseful buttons. ACTIVITY LOG SECTION: date+status filters. 8 log entries: status
+icon + timestamp + description + rule badge. TEMPLATES SECTION: category pills "All/Tasks/Meetings/Communication/Reporting". Grid 6 cards:
+icon+title+desc+"Used by X teams"+[Use Template]. Show only Dashboard section visible (others hidden for testing).
+5. RULE CREATOR MODAL (RuleCreatorModal.tsx): Overlay + card (max-w-[600px] max-h-[80vh] overflow-y-auto rounded-xl shadow-2xl p-6). "Create Autopilot
+Rule" + X. Name+Description inputs. "WHEN" (bg-gray-50 rounded px-4 py-2 font-semibold text-sm) + trigger dropdown "Select trigger...". "THEN" + action dropdown
+"Select action..." + "+ Add Another Action" link. Execution Mode: 3 radios Suggest(selected)/Auto/Confirm with descriptions. Safety: Max/day "50", Cooldown "0 min",
+Active hours toggle OFF, Active days checkboxes Mon-Fri. Cancel + "Save Rule".
+6. AUTOPILOT SETTINGS (AutopilotSettings.tsx): Slide-out (fixed right-0 top-0 h-full w-[400px] bg-white shadow-xl z-50 overflow-y-auto). "Autopilot Settings" + X.
+General: enabled ON, default "Suggest", tracking ON, detection ON. Notifications: alerts ON, floating ON, dismiss "30s". Limits: max "50", credits "100". Privacy: 5
+checkboxes (tasks/messages/docs/notes/calendar) + "Delete All Data" red button. EMPTY: "No pending suggestions." "No rules yet." "No patterns detected." "No
+activity yet."
+7. PREDICTION BANNER (PredictionBanner.tsx — includes PredictionCard inline): Collapsible container (bg-purple-50 rounded-lg border border-purple-200
+p-3). Header: crystal ball + "AI Predictions (3 suggested tasks)" (font-semibold text-sm text-purple-800) + [Collapse] link. Expanded: 2 prediction cards stacked
+(gap-3). Each card: bg-white rounded-lg shadow-sm p-4 border-l-4 border-purple-400. Crystal ball + title (font-semibold) + "Confidence: 94%" (inline green badge
+text-xs bg-green-100 text-green-700 rounded-full px-2) + reasoning (text-sm text-gray-500) + "Due: Mar 8 | Priority: Medium" + 3 buttons "Create Task"(blue)/"Edit &
+Create"(border)/"Not Needed"(ghost). Collapsed: "3 predictions available" + [Expand]. EMPTY: "AI is learning your patterns. Predictions appear after more activity."
+8. POST-COMPLETION POPUP (PostCompletionPopup.tsx): Fixed bottom-6 right-6 z-40 (max-w-[380px] bg-white rounded-xl shadow-xl p-4). CheckCircle green +
+"Task completed!" (font-semibold). Crystal ball + "Usually you do this next:" (text-sm text-gray-500 mt-2). Predicted title (font-medium mt-1) + "Due: Tomorrow"
+(text-sm text-gray-500). "Create It"(bg-blue-600 text-white text-sm px-3 py-1.5 rounded-md) + "Skip"(text-gray-400 text-sm). "Dismissing in 10s" (text-xs text-gray-300
+mt-2).
+9. SPRINT PLANNER (SprintPlanner.tsx): Modal (max-w-[600px] rounded-xl shadow-2xl p-6). Crystal ball + "AI Sprint Planner" (text-lg font-bold) + "Based on your
+last 5 sprints:" (text-sm text-gray-500). 7 checkbox rows (divide-y h-11 px-3 hover:bg-gray-50): all checked, each with task title + "(day X)" + edit icon. "Create All
+Selected"(blue) / "Customize"(border) / "Start Blank"(ghost). EMPTY: "Complete 3 sprints for AI suggestions."
+10. TIME MACHINE PAGE (TimeMachine.tsx — includes DailySummaryCard inline): Header: BarChart icon + "Work Time Machine" + date nav (ChevronLeft +
+"Mar 4" + ChevronRight). Tabs: "Daily"/"Weekly"/"Monthly" (Daily active blue). Inline summary bar (bg-white rounded-lg shadow-sm p-3 flex gap-6 text-sm mb-4):
+"Active: 6h 42m" | "Focus: 78/100" (green badge) | "Tasks: 5 done" | "Notes: 3 edited". Content area below for child components.
+11. VISUAL TIMELINE (VisualTimeline.tsx): Import shared TimelineVisualizer. Show 9AM-5PM with hardcoded blocks: Blue "Login Redesign"(9-10:30), Purple
+"Sprint Planning"(10:30-11:15), Green "API Docs"(11:15-12), Yellow "Chat"(12-12:15), Gray "Lunch"(12:15-1:15), Orange "Focus"(1:15-2:15), Blue "Bug
+Fix"(2:15-3:30), Yellow "Messages"(3:30-3:45), Blue "Review"(3:45-5). "Hover for details" tooltip hint.
+12. ACTIVITY BREAKDOWN (ActivityBreakdown.tsx): Two-column layout. Left: SVG pie chart (w-[200px] h-[200px]) with 5 colored segments. Right: Category list.
+Each: colored dot (w-3 h-3 rounded-full) + name + time + percentage. "Task Work 3h 12m (48%)", "Documentation 1h 02m (15%)", "Messaging 0h 45m (11%)",
+"Planning 0h 28m (7%)", "Other 1h 15m (19%)".
+BOUNDARIES — CRITICAL:
+• Do not add any click handlers or state changes
+• Do not add any API calls or database connections
+• Do not modify any existing files
+• Build only and exactly what is described above
+• NOTE: Removed 'Assign @carol' from prediction cards and '@bob' from popup — no assignee system exists. Removed 'Messages: 34' and
+'Meetings: 2 (1h 15m)' from Time Machine summary — no meetings/messages tables.
