@@ -14,6 +14,7 @@ import {
   workspaces, teams, workspaceMembers,
   projects, teamTasks, subtasks, taskDependencies,
   channels, channelMessages, taskComments, documents,
+  timeEntries, timesheets, productivitySnapshots,
 } from "@shared/schema";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
 import { or, sql, inArray } from "drizzle-orm";
@@ -325,6 +326,23 @@ export interface IStorage extends IAuthStorage {
 
   // Preferred view
   updatePreferredView(userId: string, workspaceId: number, view: string): Promise<void>;
+
+  // Time Entries
+  getTimeEntries(userId: string, filters?: { taskId?: number; projectId?: number; dateFrom?: string; dateTo?: string }): Promise<(typeof timeEntries.$inferSelect)[]>;
+  createTimeEntry(data: typeof timeEntries.$inferInsert): Promise<typeof timeEntries.$inferSelect>;
+  updateTimeEntry(id: number, data: Partial<typeof timeEntries.$inferInsert>): Promise<typeof timeEntries.$inferSelect>;
+  deleteTimeEntry(id: number): Promise<void>;
+
+  // Timesheets
+  getTimesheets(userId: string, workspaceId?: number): Promise<(typeof timesheets.$inferSelect)[]>;
+  getTimesheet(id: number): Promise<(typeof timesheets.$inferSelect) | undefined>;
+  createTimesheet(data: typeof timesheets.$inferInsert): Promise<typeof timesheets.$inferSelect>;
+  updateTimesheet(id: number, data: Partial<typeof timesheets.$inferInsert>): Promise<typeof timesheets.$inferSelect>;
+
+  // Productivity Snapshots
+  getProductivitySnapshots(userId: string, workspaceId?: number): Promise<(typeof productivitySnapshots.$inferSelect)[]>;
+  upsertProductivitySnapshot(data: typeof productivitySnapshots.$inferInsert): Promise<typeof productivitySnapshots.$inferSelect>;
+  getTeamSnapshots(workspaceId: number, date: string): Promise<(typeof productivitySnapshots.$inferSelect)[]>;
 
   // Workspace Platform
   getWorkspaces(userId: string): Promise<(typeof workspaces.$inferSelect)[]>;
@@ -1410,6 +1428,64 @@ export class DatabaseStorage implements IStorage {
     await db.update(workspaceMembers)
       .set({ preferredView: view })
       .where(and(eq(workspaceMembers.userId, userId), eq(workspaceMembers.workspaceId, workspaceId)));
+  }
+
+  // Time Entries
+  async getTimeEntries(userId: string, filters?: { taskId?: number; projectId?: number; dateFrom?: string; dateTo?: string }) {
+    const conditions: any[] = [eq(timeEntries.userId, userId)];
+    if (filters?.taskId) conditions.push(eq(timeEntries.taskId, filters.taskId));
+    if (filters?.projectId) conditions.push(eq(timeEntries.projectId, filters.projectId));
+    if (filters?.dateFrom) conditions.push(sql`${timeEntries.date} >= ${filters.dateFrom}`);
+    if (filters?.dateTo) conditions.push(sql`${timeEntries.date} <= ${filters.dateTo}`);
+    return await db.select().from(timeEntries).where(and(...conditions)).orderBy(desc(timeEntries.date));
+  }
+  async createTimeEntry(data: typeof timeEntries.$inferInsert) {
+    const [created] = await db.insert(timeEntries).values(data).returning();
+    return created;
+  }
+  async updateTimeEntry(id: number, data: Partial<typeof timeEntries.$inferInsert>) {
+    const [updated] = await db.update(timeEntries).set(data).where(eq(timeEntries.id, id)).returning();
+    return updated;
+  }
+  async deleteTimeEntry(id: number) {
+    await db.delete(timeEntries).where(eq(timeEntries.id, id));
+  }
+
+  // Timesheets
+  async getTimesheets(userId: string, workspaceId?: number) {
+    const conditions: any[] = [eq(timesheets.userId, userId)];
+    if (workspaceId) conditions.push(eq(timesheets.workspaceId, workspaceId));
+    return await db.select().from(timesheets).where(and(...conditions)).orderBy(desc(timesheets.weekStart));
+  }
+  async getTimesheet(id: number) {
+    const [ts] = await db.select().from(timesheets).where(eq(timesheets.id, id));
+    return ts;
+  }
+  async createTimesheet(data: typeof timesheets.$inferInsert) {
+    const [created] = await db.insert(timesheets).values(data).returning();
+    return created;
+  }
+  async updateTimesheet(id: number, data: Partial<typeof timesheets.$inferInsert>) {
+    const [updated] = await db.update(timesheets).set(data).where(eq(timesheets.id, id)).returning();
+    return updated;
+  }
+
+  // Productivity Snapshots
+  async getProductivitySnapshots(userId: string, workspaceId?: number) {
+    const conditions: any[] = [eq(productivitySnapshots.userId, userId)];
+    if (workspaceId) conditions.push(eq(productivitySnapshots.workspaceId, workspaceId));
+    return await db.select().from(productivitySnapshots).where(and(...conditions)).orderBy(desc(productivitySnapshots.date)).limit(90);
+  }
+  async upsertProductivitySnapshot(data: typeof productivitySnapshots.$inferInsert) {
+    const [result] = await db.insert(productivitySnapshots)
+      .values(data)
+      .onConflictDoUpdate({ target: [productivitySnapshots.userId, productivitySnapshots.date], set: { ...data } })
+      .returning();
+    return result;
+  }
+  async getTeamSnapshots(workspaceId: number, date: string) {
+    return await db.select().from(productivitySnapshots)
+      .where(and(eq(productivitySnapshots.workspaceId, workspaceId), sql`${productivitySnapshots.date} = ${date}`));
   }
 
   // Workspace Platform

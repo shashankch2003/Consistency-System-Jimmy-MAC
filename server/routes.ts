@@ -2785,6 +2785,153 @@ export async function registerRoutes(
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  // ─── Time Tracking Routes ─────────────────────────────────────────────────
+
+  app.get("/api/time-entries", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { taskId, projectId, dateFrom, dateTo } = req.query;
+      const entries = await storage.getTimeEntries(userId, {
+        taskId: taskId ? parseInt(taskId as string) : undefined,
+        projectId: projectId ? parseInt(projectId as string) : undefined,
+        dateFrom: dateFrom as string,
+        dateTo: dateTo as string,
+      });
+      res.json(entries);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/time-entries", isAuthenticated, async (req: any, res) => {
+    try {
+      const { taskId, projectId, date, minutes, notes, source } = req.body;
+      if (!date || !minutes) return res.status(400).json({ message: "date and minutes required" });
+      const entry = await storage.createTimeEntry({
+        userId: req.user.claims.sub, taskId: taskId || null, projectId: projectId || null,
+        date, minutes: parseInt(minutes), notes: notes || null, source: source || "manual",
+      });
+      // Update actual_minutes on team_tasks
+      if (taskId) {
+        const task = await storage.getTeamTask(parseInt(taskId));
+        if (task) {
+          await storage.updateTeamTask(parseInt(taskId), { actualMinutes: (task.actualMinutes ?? 0) + parseInt(minutes) });
+        }
+      }
+      res.status(201).json(entry);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/time-entries/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const updated = await storage.updateTimeEntry(parseInt(req.params.id), req.body);
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/time-entries/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteTimeEntry(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Timesheets
+  app.get("/api/timesheets", isAuthenticated, async (req: any, res) => {
+    try {
+      const workspaceId = req.query.workspaceId ? parseInt(req.query.workspaceId as string) : undefined;
+      res.json(await storage.getTimesheets(req.user.claims.sub, workspaceId));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/timesheets", isAuthenticated, async (req: any, res) => {
+    try {
+      const { workspaceId, weekStart } = req.body;
+      if (!weekStart) return res.status(400).json({ message: "weekStart required" });
+      const ts = await storage.createTimesheet({ userId: req.user.claims.sub, workspaceId: workspaceId || null, weekStart, status: "draft" });
+      res.status(201).json(ts);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/timesheets/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const data: any = { ...req.body };
+      if (data.status === "submitted" && !data.submittedAt) data.submittedAt = new Date();
+      const updated = await storage.updateTimesheet(parseInt(req.params.id), data);
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Productivity
+  app.get("/api/productivity/score", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.query.userId as string) || req.user.claims.sub;
+      const snapshots = await storage.getProductivitySnapshots(userId);
+      const latest = snapshots[0] || null;
+      res.json(latest);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/productivity/snapshots", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = (req.query.userId as string) || req.user.claims.sub;
+      const workspaceId = req.query.workspaceId ? parseInt(req.query.workspaceId as string) : undefined;
+      res.json(await storage.getProductivitySnapshots(userId, workspaceId));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/productivity/snapshot", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const today = new Date().toISOString().split("T")[0];
+      const entries = await storage.getTimeEntries(userId, { dateFrom: today, dateTo: today });
+      const hoursWorked = Math.round(entries.reduce((s, e) => s + e.minutes, 0) / 60);
+      const snapshot = await storage.upsertProductivitySnapshot({
+        userId, workspaceId: req.body.workspaceId || null,
+        date: today, overallScore: req.body.overallScore ?? 60,
+        taskCompletionRate: req.body.taskCompletionRate ?? 60,
+        qualityScore: req.body.qualityScore ?? 70,
+        estimationAccuracy: req.body.estimationAccuracy ?? 65,
+        collaborationScore: req.body.collaborationScore ?? 70,
+        initiativeScore: req.body.initiativeScore ?? 55,
+        consistencyScore: req.body.consistencyScore ?? 60,
+        impactWeight: req.body.impactWeight ?? 65,
+        tasksCompleted: req.body.tasksCompleted ?? 0, hoursWorked,
+      });
+      res.json(snapshot);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/productivity/comparisons", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const snapshots = await storage.getProductivitySnapshots(userId);
+      const today = new Date().toISOString().split("T")[0];
+      const todaySnap = snapshots.find((s) => s.date === today);
+      const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+      const yesterdaySnap = snapshots.find((s) => s.date === yesterday);
+      res.json({ today: todaySnap, yesterday: yesterdaySnap, recent: snapshots.slice(0, 14) });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/productivity/team-health", isAuthenticated, async (req: any, res) => {
+    try {
+      const workspaceId = parseInt(req.query.workspaceId as string) || 0;
+      if (!workspaceId) return res.status(400).json({ message: "workspaceId required" });
+      const today = new Date().toISOString().split("T")[0];
+      const teamSnaps = await storage.getTeamSnapshots(workspaceId, today);
+      res.json({ snapshots: teamSnaps, date: today });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/productivity/performers", isAuthenticated, async (req: any, res) => {
+    try {
+      const workspaceId = parseInt(req.query.workspaceId as string) || 0;
+      const today = new Date().toISOString().split("T")[0];
+      const snaps = workspaceId ? await storage.getTeamSnapshots(workspaceId, today) : [];
+      const sorted = [...snaps].sort((a, b) => (b.overallScore ?? 0) - (a.overallScore ?? 0));
+      res.json({ top: sorted.slice(0, 3), needsAttention: sorted.slice(-3).reverse() });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   // ─── Collaboration Routes ─────────────────────────────────────────────────
 
   // Channels

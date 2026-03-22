@@ -1016,3 +1016,54 @@ export const documents = pgTable("documents", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+// ─── Time Tracking Tables ─────────────────────────────────────────────────────
+
+export const timeEntries = pgTable("time_entries", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  taskId: integer("task_id"),
+  projectId: integer("project_id"),
+  date: date("date").notNull(),
+  minutes: integer("minutes").notNull(),
+  notes: text("notes"),
+  source: text("source").notNull().default("manual"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const timesheets = pgTable("timesheets", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  workspaceId: integer("workspace_id"),
+  weekStart: date("week_start").notNull(),
+  status: text("status").notNull().default("draft"),
+  submittedAt: timestamp("submitted_at"),
+  approvedBy: text("approved_by"),
+  approvedAt: timestamp("approved_at"),
+});
+
+// ─── Productivity Tables ──────────────────────────────────────────────────────
+
+export const productivitySnapshots = pgTable(
+  "productivity_snapshots",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    workspaceId: integer("workspace_id"),
+    date: date("date").notNull(),
+    overallScore: integer("overall_score"),
+    taskCompletionRate: integer("task_completion_rate"),
+    qualityScore: integer("quality_score"),
+    estimationAccuracy: integer("estimation_accuracy"),
+    collaborationScore: integer("collaboration_score"),
+    initiativeScore: integer("initiative_score"),
+    consistencyScore: integer("consistency_score"),
+    impactWeight: integer("impact_weight"),
+    tasksCompleted: integer("tasks_completed"),
+    hoursWorked: integer("hours_worked"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => ({
+    uniqueSnapshot: uniqueIndex("unique_user_date_snapshot").on(table.userId, table.date),
+  })
+);

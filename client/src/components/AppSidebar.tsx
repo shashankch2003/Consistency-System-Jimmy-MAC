@@ -58,6 +58,8 @@ const menuItems = [
   { title: "Know More", icon: PlayCircle, url: "/dashboard/know-more" },
   { title: "Grow Together", icon: HeartHandshake, url: "/dashboard/grow-together" },
   { title: "Team Intelligence", icon: BarChart3, url: "/dashboard/team-intelligence" },
+  { title: "Productivity", icon: BarChart3, url: "/dashboard/productivity" },
+  { title: "Timesheets", icon: Clock, url: "/dashboard/timesheets" },
   { title: "Projects", icon: FolderKanban, url: "/dashboard/projects" },
   { title: "Messages", icon: MessageSquare, url: "/dashboard/messages" },
   { title: "Wiki", icon: BookMarked, url: "/dashboard/wiki" },
