@@ -1,0 +1,83 @@
+CORRECTED SPRINT 0 — OVERVIEW
+Messaging System 'Connect' — Master Overview
+HOW TO USE THESE FILES
+This messaging system (called 'Connect') is split into sprint files. Build in order:
+• Read this overview
+• Follow Corrected Sprint 1 — Database + Socket.IO + Message CRUD
+• Follow Corrected Sprint 2 — Channels + DMs + Composer
+• Follow Corrected Sprint 3 — Threads + Search + Files + Notifications
+• Follow Corrected Sprint 4 — AI + Admin + Polish
+Never start a new sprint until the current one works without errors.
+MODULE NAME
+// client/src/lib/config.ts
+export const MESSAGING_MODULE_NAME = "Connect";
+FIX #18: Path corrected from src/lib/config.ts to client/src/lib/config.ts
+CORRECTED TECH STACK
+Frontend: React + Vite, TypeScript, Tailwind CSS, Shadcn/UI
+State: React Query (server state) + React Context or Zustand (local state)
+Real-Time: Socket.IO (in-memory adapter for single server; Redis optional)
+Backend: Express.js REST API (server/routes.ts)
+Database: PostgreSQL + Drizzle ORM (shared/schema.ts)
+Search: PostgreSQL full-text search (tsvector/tsquery) — NO pgvector
+File Storage: Local uploads initially (Cloudflare R2 as future upgrade)
+Auth: Replit Auth (req.user.claims.sub)
+Routing: wouter (client-side)
+Migration: npx drizzle-kit push
+FIXES #1,#2,#3,#4,#5,#14,#15,#16: Entire tech stack corrected
+CORRECTED FILE STRUCTURE
+client/src/
+|-- pages/
+| |-- messaging.tsx # Main messaging layout (3-column)
+|-- components/messaging/
+| |-- messaging-layout.tsx # 3-column layout
+| |-- channel-sidebar.tsx # Left sidebar
+| |-- channel-header.tsx # Top bar
+| |-- message-list.tsx # Scrollable message list
+| |-- message-item.tsx # Single message
+| |-- message-composer.tsx # Bottom composer
+| |-- thread-panel.tsx # Right panel: thread view
+| |-- channel-browser.tsx # Browse/search channels modal
+| |-- dm-list.tsx # DM conversation list
+| |-- file-preview.tsx # Inline file previews
+| |-- emoji-picker.tsx # Emoji picker
+| |-- mention-autocomplete.tsx # @mention dropdown
+| |-- reaction-bar.tsx # Reaction display
+| |-- typing-indicator.tsx # 'Alice is typing...'
+| |-- message-actions.tsx # Hover actions
+|-- hooks/
+| |-- use-socket.ts # Socket.IO connection hook
+| |-- use-messages.ts # Message fetching + realtime
+| |-- use-typing.ts # Typing indicator hook
+| |-- use-presence.ts # Presence tracking hook
+|-- lib/
+| |-- config.ts # Module name config
+shared/
+|-- schema.ts # Drizzle schema (ADD messaging tables here)
+server/
+|-- routes.ts # Express routes (ADD messaging endpoints)
+|-- services/
+| |-- socket-server.ts # Socket.IO server setup
+| |-- socket-handlers.ts # Socket event handlers
+| |-- presence-service.ts # Presence tracking (in-memory)
+| |-- typing-service.ts # Typing indicators (in-memory)
+| |-- unread-service.ts # Unread count tracking
+| |-- notification-service.ts # In-app notifications
+|-- db.ts # Drizzle DB connection (already exists)
+FIX #6,#7: All file paths corrected for React+Vite+Express structure
+IMPORTANT NOTES
+Regarding existing tables (FIXES #19, A): Your app already has group_messages,
+grow_group_messages, channels, and channel_messages tables. The new messaging tables are
+COMPLETELY SEPARATE. Do NOT modify the existing tables. The new messaging channels table is
+named 'connect_channels' (not 'channels') to avoid conflicts. Messages are already named
+'connect_messages'.
+Regarding workspaces (FIXES #10, B, D): Your app DOES have a workspace system (workspaces table with
+serial/integer PK, workspace_members, teams). All workspaceId columns in the new messaging schema use integer
+type to match the existing workspaces.id. Use the existing workspace system.
+Regarding user IDs (FIX C): Your users table uses varchar('id') for Replit Auth sub values (e.g. '12345').
+ALL user-referencing columns in the new schema (authorId, createdBy, userId, pinnedBy, startedBy)
+use text/varchar — NOT uuid. This matches req.user.claims.sub.
+Regarding Redis (FIXES #11, #15): All services are written with in-memory fallbacks. Redis is optional and can be
+added later for production scaling.
+Regarding external services (FIXES #12, #13, #16): File uploads via Cloudflare R2, voice huddles via
+LiveKit/Daily.co, and push notifications via Firebase are all deferred to future sprints. Initial build uses local
+alternatives or omits these features.
