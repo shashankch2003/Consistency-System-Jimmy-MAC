@@ -957,6 +957,7 @@ export const workspaceMembers = pgTable("workspace_members", {
   invitedAt: timestamp("invited_at").defaultNow(),
   joinedAt: timestamp("joined_at"),
   preferredView: text("preferred_view").default("board"),
+  weeklyCapacityHours: integer("weekly_capacity_hours").default(40),
 });
 
 export const teamOrgSettings = pgTable("team_org_settings", {
@@ -1067,3 +1068,32 @@ export const productivitySnapshots = pgTable(
     uniqueSnapshot: uniqueIndex("unique_user_date_snapshot").on(table.userId, table.date),
   })
 );
+
+export const memberAvailability = pgTable("member_availability", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  date: date("date").notNull(),
+  type: text("type").notNull().default("pto"),
+  notes: text("notes"),
+  workspaceId: integer("workspace_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertMemberAvailabilitySchema = createInsertSchema(memberAvailability).omit({ id: true, createdAt: true });
+export type InsertMemberAvailability = z.infer<typeof insertMemberAvailabilitySchema>;
+export type MemberAvailability = typeof memberAvailability.$inferSelect;
+
+export const savedReports = pgTable("saved_reports", {
+  id: serial("id").primaryKey(),
+  workspaceId: integer("workspace_id"),
+  name: text("name").notNull(),
+  configuration: jsonb("configuration").$defaultFn(() => ({})),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  schedule: text("schedule"),
+});
+
+export const insertSavedReportSchema = createInsertSchema(savedReports).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSavedReport = z.infer<typeof insertSavedReportSchema>;
+export type SavedReport = typeof savedReports.$inferSelect;

@@ -1,0 +1,65 @@
+PROMPT 5 OF 6 — WORKLOAD MANAGEMENT & REPORTING SUITE
+■ REPLIT SETTINGS: AUTONOMOUS MODE → ECONOMY | App Testing: OFF | Code Optimization: OFF
+(Copy everything below this line into Replit)
+CONTEXT
+Feature being built: Workload management + full reporting suite. Current state: All features from Prompts 1-4 working.
+Task table = team_tasks. Goal: Build workload + reports in one pass.
+CRITICAL: If not already installed from Prompt 3, run: npm install @hello-pangea/dnd (Fix 11)
+WORKSPACE ID: Use const { workspaceId } = useWorkspace() from @/context/WorkspaceContext. (Fix 19)
+Follow all critical instructions. All task references use team_tasks. Use Recharts for charts.
+FILES TO CREATE
+(Fix 18: Page paths use client/src/pages/dashboard/)
+• client/src/pages/dashboard/workload.tsx
+• client/src/components/workload/WorkloadView.tsx
+• client/src/components/workload/CapacityPlanner.tsx
+• client/src/pages/dashboard/reports.tsx
+• client/src/components/reports/ExecutiveDashboard.tsx
+• client/src/components/reports/ReportBuilder.tsx
+• client/src/components/reports/ReportLibrary.tsx
+PART A: WORKLOAD & RESOURCES
+1. WORKLOAD PAGE (workload.tsx)
+Title 'Workload & Resources' with team selector dropdown. Two tabs: Current Workload, Capacity Planning.
+2. WORKLOAD VIEW (WorkloadView.tsx)
+Per member: sum estimated_minutes from assigned incomplete team_tasks. Capacity = 40h/week (from
+weekly_capacity_hours column). Utilization = assigned/capacity * 100. Each row: avatar, name, role, capacity bar (Green
+0-79%, Orange 80-100%, Red >100%). Task pill tags. DRAG-DROP REBALANCE using @hello-pangea/dnd: drag task
+pills between members. Drop updates assignee_id in team_tasks. Bars recalculate.
+3. CAPACITY PLANNER (CapacityPlanner.tsx)
+Horizontal 4-week timeline. Grid cells colored by load (green/orange/red/gray-striped PTO). 'Add PTO' button per
+member: modal for date, type (PTO/Holiday/Sick), notes. Saves to member_availability. Summary: 'Team Available
+Hours: Xh' and 'Team Committed: Xh'.
+4-5. DATABASE
+member_availability: id (serial PK), userId (text), date, type ('pto'/'holiday'/'sick'), notes (text, nullable).
+Add column weekly_capacity_hours (integer, default 40) to workspace_members table. Run npx drizzle-kit push after.
+PART B: REPORTING SUITE
+6. REPORTS PAGE (reports.tsx)
+Title 'Reports & Analytics'. Tabs: Executive Dashboard, Custom Reports, Report Library.
+7. EXECUTIVE DASHBOARD (ExecutiveDashboard.tsx)
+6 summary cards (3x2): Company Productivity Score, Active Projects, Tasks Completed This Week, Team Utilization,
+On-Time Delivery Rate, Avg Task Completion Time. Below: Department Performance Comparison — Recharts BarChart.
+Projects at Risk table. (Fix 14)
+8. REPORT BUILDER (ReportBuilder.tsx)
+Left panel (240px): data source checkboxes (Tasks, Time, Members, Projects). Center: report canvas. Top toolbar: chart
+type icons (bar/line/pie/table), 'Add Filter' button, 'Group By' dropdown. 'Generate Report': validate + render. 'Export'
+dropdown: toast 'Export coming soon'. 'Save Report': save config JSON to saved_reports table.
+9. REPORT LIBRARY (ReportLibrary.tsx)
+10 template cards: Daily Standup Summary, Weekly Productivity, Sprint Retrospective, Individual Performance Review,
+Project Health, Workload Distribution, Time Utilization, Client Profitability, Department Comparison, Burnout Risk.
+'Generate' button pre-configures report builder and auto-generates.
+10. DATABASE — SAVED_REPORTS TABLE
+id (serial PK), workspaceId (int), name (text), configuration: jsonb.$defaultFn(() => ({})), createdBy (text), createdAt,
+updatedAt, schedule (text, nullable).
+API ROUTES
+• Workload: GET /api/workload?teamId=X, PATCH /api/team-tasks/:id/reassign
+• Availability: GET/POST/DELETE /api/member-availability
+• Reports: GET /api/reports/executive, GET/POST /api/saved-reports, GET /api/saved-reports/:id
+PAGE REGISTRATION
+Fix 25 — EXPLICIT ROUTES:
+• Route /dashboard/workload → Workload
+• Route /dashboard/reports → Reports
+Fix 24 — SIDEBAR: Add 'Workload' (Scale icon) and 'Reports' (FileBarChart icon) to menuItems in AppSidebar.tsx.
+AFTER ALL CODE CHANGES: Run npx drizzle-kit push
+BOUNDARIES
+✖ Build everything described: workload + reporting + database + API routes + pages + sidebar
+✖ Only modify workspace_members (add weekly_capacity_hours column) from earlier prompts
+✖ All task references use team_tasks

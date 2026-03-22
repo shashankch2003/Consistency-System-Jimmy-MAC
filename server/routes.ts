@@ -3169,5 +3169,89 @@ export async function registerRoutes(
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  // ── WORKLOAD ──────────────────────────────────────────────────────────────
+  app.get("/api/workload", isAuthenticated, async (req: any, res) => {
+    try {
+      const workspaceId = parseInt(req.query.workspaceId as string);
+      const teamId = req.query.teamId ? parseInt(req.query.teamId as string) : undefined;
+      if (!workspaceId) return res.status(400).json({ message: "workspaceId required" });
+      const data = await storage.getWorkloadData(workspaceId, teamId);
+      res.json(data);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/team-tasks/:id/reassign", isAuthenticated, async (req: any, res) => {
+    try {
+      const { assigneeId } = req.body;
+      if (!assigneeId) return res.status(400).json({ message: "assigneeId required" });
+      const updated = await storage.reassignTask(parseInt(req.params.id), assigneeId);
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ── MEMBER AVAILABILITY ───────────────────────────────────────────────────
+  app.get("/api/member-availability", isAuthenticated, async (req: any, res) => {
+    try {
+      const workspaceId = parseInt(req.query.workspaceId as string);
+      if (!workspaceId) return res.status(400).json({ message: "workspaceId required" });
+      const data = await storage.getMemberAvailability(
+        workspaceId,
+        req.query.dateFrom as string | undefined,
+        req.query.dateTo as string | undefined
+      );
+      res.json(data);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/member-availability", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const created = await storage.createMemberAvailability({ ...req.body, userId });
+      res.status(201).json(created);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/member-availability/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteMemberAvailability(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ── REPORTS ───────────────────────────────────────────────────────────────
+  app.get("/api/reports/executive", isAuthenticated, async (req: any, res) => {
+    try {
+      const workspaceId = parseInt(req.query.workspaceId as string);
+      if (!workspaceId) return res.status(400).json({ message: "workspaceId required" });
+      const data = await storage.getExecutiveSummary(workspaceId);
+      res.json(data);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/saved-reports", isAuthenticated, async (req: any, res) => {
+    try {
+      const workspaceId = parseInt(req.query.workspaceId as string);
+      if (!workspaceId) return res.status(400).json({ message: "workspaceId required" });
+      const reports = await storage.getSavedReports(workspaceId);
+      res.json(reports);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/saved-reports/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const report = await storage.getSavedReport(parseInt(req.params.id));
+      if (!report) return res.status(404).json({ message: "Not found" });
+      res.json(report);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/saved-reports", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const created = await storage.createSavedReport({ ...req.body, createdBy: userId });
+      res.status(201).json(created);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   return httpServer;
 }

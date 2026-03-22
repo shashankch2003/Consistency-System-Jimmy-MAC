@@ -32,6 +32,8 @@ import MessagesPage from "@/pages/dashboard/messages";
 import WikiPage from "@/pages/dashboard/wiki";
 import TimesheetsPage from "@/pages/dashboard/timesheets";
 import ProductivityDashboard from "@/pages/dashboard/productivity";
+import WorkloadPage from "@/pages/dashboard/workload";
+import ReportsPage from "@/pages/dashboard/reports";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -173,6 +175,16 @@ function Router() {
       <Route path="/dashboard/productivity">
         <DashboardLayout>
           <ProductivityDashboard />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/workload">
+        <DashboardLayout>
+          <WorkloadPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/reports">
+        <DashboardLayout>
+          <ReportsPage />
         </DashboardLayout>
       </Route>
 

@@ -40,6 +40,8 @@ import {
   FolderKanban,
   MessageSquare,
   BookMarked,
+  Scale,
+  FileBarChart,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -60,6 +62,8 @@ const menuItems = [
   { title: "Team Intelligence", icon: BarChart3, url: "/dashboard/team-intelligence" },
   { title: "Productivity", icon: BarChart3, url: "/dashboard/productivity" },
   { title: "Timesheets", icon: Clock, url: "/dashboard/timesheets" },
+  { title: "Workload", icon: Scale, url: "/dashboard/workload" },
+  { title: "Reports", icon: FileBarChart, url: "/dashboard/reports" },
   { title: "Projects", icon: FolderKanban, url: "/dashboard/projects" },
   { title: "Messages", icon: MessageSquare, url: "/dashboard/messages" },
   { title: "Wiki", icon: BookMarked, url: "/dashboard/wiki" },

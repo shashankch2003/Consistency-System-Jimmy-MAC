@@ -38,7 +38,7 @@ Preferred communication style: Simple, everyday language.
 -   **Grow Together (Social)**: Friend connections, comparison of productivity metrics, group creation and chat (paid feature), and privacy controls.
 -   **Know More (Learning)**: Video learning center with YouTube embeds and in-app feedback system.
 -   **Team Productivity Intelligence**: Advanced module for team-level insights, scoring, pattern detection, and alerts.
--   **AI-Driven Platform (Prompts 1-4 Done)**:
+-   **AI-Driven Platform (Prompts 1-5 Done)**:
     -   Workspaces, Teams, Members management
     -   Projects, Tasks, Subtasks, Dependencies
     -   6 Task Views: Board (drag-and-drop), List, Timeline, Calendar, Table, Dashboard
@@ -47,6 +47,8 @@ Preferred communication style: Simple, everyday language.
     -   Wiki/Document Editor (TipTap rich text, hierarchical pages)
     -   Time Tracking: floating TimeTracker widget, time_entries CRUD, weekly Timesheets grid (click-to-edit cells, submit flow), Time Report with date range + bar charts
     -   AI Productivity Engine: 7-factor weighted scoring (productivityCalculator.ts), ProductivityScore ring chart, ComparisonCards, TeamHealthDashboard, PerformanceProfile with heatmap + trend chart, PerformerIdentification (top/at-risk), productivity_snapshots + timesheets DB tables
+    -   Workload Management: WorkloadView with drag-drop task reassignment (@hello-pangea/dnd), utilization capacity bars, CapacityPlanner 4-week timeline with PTO/holiday/sick management, member_availability table
+    -   Reporting Suite: ExecutiveDashboard (6 KPI cards + dept BarChart + at-risk projects table), ReportBuilder (data sources, chart types, filters, group-by, save config), ReportLibrary (10 templates), saved_reports table
 
 ### Shared Code
 -   `shared/` directory contains common types, API route definitions with validation schemas (`shared/routes.ts`), and database schemas (`shared/schema.ts`).

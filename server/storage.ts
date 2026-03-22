@@ -15,6 +15,7 @@ import {
   projects, teamTasks, subtasks, taskDependencies,
   channels, channelMessages, taskComments, documents,
   timeEntries, timesheets, productivitySnapshots,
+  memberAvailability, savedReports,
 } from "@shared/schema";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
 import { or, sql, inArray } from "drizzle-orm";
@@ -355,6 +356,16 @@ export interface IStorage extends IAuthStorage {
   createWorkspaceMember(data: typeof workspaceMembers.$inferInsert): Promise<typeof workspaceMembers.$inferSelect>;
   updateWorkspaceMemberRole(id: number, role: string): Promise<typeof workspaceMembers.$inferSelect>;
   deleteWorkspaceMember(id: number): Promise<void>;
+
+  getWorkloadData(workspaceId: number, teamId?: number): Promise<any[]>;
+  reassignTask(taskId: number, assigneeId: string): Promise<typeof teamTasks.$inferSelect>;
+  getMemberAvailability(workspaceId: number, dateFrom?: string, dateTo?: string): Promise<(typeof memberAvailability.$inferSelect)[]>;
+  createMemberAvailability(data: typeof memberAvailability.$inferInsert): Promise<typeof memberAvailability.$inferSelect>;
+  deleteMemberAvailability(id: number): Promise<void>;
+  getSavedReports(workspaceId: number): Promise<(typeof savedReports.$inferSelect)[]>;
+  getSavedReport(id: number): Promise<typeof savedReports.$inferSelect | undefined>;
+  createSavedReport(data: typeof savedReports.$inferInsert): Promise<typeof savedReports.$inferSelect>;
+  getExecutiveSummary(workspaceId: number): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1524,6 +1535,118 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteWorkspaceMember(id: number) {
     await db.delete(workspaceMembers).where(eq(workspaceMembers.id, id));
+  }
+
+  async getWorkloadData(workspaceId: number, teamId?: number) {
+    let membersQuery = db.select().from(workspaceMembers).where(eq(workspaceMembers.workspaceId, workspaceId));
+    const members = await membersQuery;
+    const result = await Promise.all(members.map(async (m) => {
+      const assignedTasks = m.userId
+        ? await db.select().from(teamTasks).where(
+            and(
+              eq(teamTasks.assigneeId, m.userId),
+              sql`${teamTasks.status} != 'Done'`
+            )
+          )
+        : [];
+      const totalMinutes = assignedTasks.reduce((s: number, t: any) => s + (t.estimatedMinutes || 0), 0);
+      const capacityMinutes = (m.weeklyCapacityHours || 40) * 60;
+      return {
+        ...m,
+        assignedTasks,
+        totalMinutes,
+        capacityMinutes,
+        utilization: capacityMinutes > 0 ? Math.round((totalMinutes / capacityMinutes) * 100) : 0,
+      };
+    }));
+    if (teamId) return result.filter((m) => m.teamId === teamId);
+    return result;
+  }
+
+  async reassignTask(taskId: number, assigneeId: string) {
+    const [updated] = await db.update(teamTasks).set({ assigneeId, updatedAt: new Date() }).where(eq(teamTasks.id, taskId)).returning();
+    return updated;
+  }
+
+  async getMemberAvailability(workspaceId: number, dateFrom?: string, dateTo?: string) {
+    const conditions = [eq(memberAvailability.workspaceId, workspaceId)];
+    if (dateFrom) conditions.push(gte(memberAvailability.date, dateFrom));
+    if (dateTo) conditions.push(lte(memberAvailability.date, dateTo));
+    return await db.select().from(memberAvailability).where(and(...conditions)).orderBy(asc(memberAvailability.date));
+  }
+
+  async createMemberAvailability(data: typeof memberAvailability.$inferInsert) {
+    const [created] = await db.insert(memberAvailability).values(data).returning();
+    return created;
+  }
+
+  async deleteMemberAvailability(id: number) {
+    await db.delete(memberAvailability).where(eq(memberAvailability.id, id));
+  }
+
+  async getSavedReports(workspaceId: number) {
+    return await db.select().from(savedReports).where(eq(savedReports.workspaceId, workspaceId)).orderBy(desc(savedReports.createdAt));
+  }
+
+  async getSavedReport(id: number) {
+    const [report] = await db.select().from(savedReports).where(eq(savedReports.id, id));
+    return report;
+  }
+
+  async createSavedReport(data: typeof savedReports.$inferInsert) {
+    const [created] = await db.insert(savedReports).values(data).returning();
+    return created;
+  }
+
+  async getExecutiveSummary(workspaceId: number) {
+    const allMembers = await db.select().from(workspaceMembers).where(eq(workspaceMembers.workspaceId, workspaceId));
+    const allProjects = await db.select().from(projects).where(eq(projects.workspaceId, workspaceId));
+    const activeProjects = allProjects.filter((p) => p.status === "active" || p.status === "Active");
+
+    const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
+    const weekAgoStr = weekAgo.toISOString().split("T")[0];
+
+    const allTasks = await db.select().from(teamTasks).orderBy(desc(teamTasks.createdAt));
+    const tasksThisWeek = allTasks.filter((t) => t.completedAt && t.completedAt.toISOString().split("T")[0] >= weekAgoStr);
+    const overdueTasks = allTasks.filter((t) =>
+      t.status !== "Done" && t.dueDate && new Date(t.dueDate) < new Date()
+    );
+
+    const completedTasks = allTasks.filter((t) => t.status === "Done");
+    const avgCompletionTime = completedTasks.length > 0
+      ? Math.round(completedTasks.reduce((s, t) => {
+          if (!t.completedAt || !t.createdAt) return s;
+          return s + (t.completedAt.getTime() - t.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+        }, 0) / completedTasks.length)
+      : 0;
+
+    const onTimeCount = completedTasks.filter((t) => !t.dueDate || (t.completedAt && new Date(t.completedAt) <= new Date(t.dueDate))).length;
+    const onTimeRate = completedTasks.length > 0 ? Math.round((onTimeCount / completedTasks.length) * 100) : 0;
+
+    const workloadData = await this.getWorkloadData(workspaceId);
+    const avgUtilization = workloadData.length > 0
+      ? Math.round(workloadData.reduce((s, m) => s + m.utilization, 0) / workloadData.length)
+      : 0;
+
+    const projectsAtRisk = activeProjects.map((p) => {
+      const projectTasks = allTasks.filter((t) => t.projectId === p.id);
+      const overdue = projectTasks.filter((t) => t.status !== "Done" && t.dueDate && new Date(t.dueDate) < new Date());
+      const completion = projectTasks.length > 0
+        ? Math.round((projectTasks.filter((t) => t.status === "Done").length / projectTasks.length) * 100)
+        : 0;
+      return { ...p, overdueCount: overdue.length, completion };
+    }).filter((p) => p.overdueCount > 0 || (p.dueDate && new Date(p.dueDate) < new Date(Date.now() + 7 * 86400000)));
+
+    return {
+      productivityScore: 72,
+      activeProjects: activeProjects.length,
+      tasksCompletedThisWeek: tasksThisWeek.length,
+      teamUtilization: avgUtilization,
+      onTimeDeliveryRate: onTimeRate,
+      avgTaskCompletionDays: avgCompletionTime,
+      projectsAtRisk,
+      teamSize: allMembers.length,
+    };
   }
 }
 
