@@ -33,8 +33,10 @@ import {
   taskPredictions, taskSequences, workSessions, workPatterns, tasks, notes,
   aiCoachingMessages, teamMemberProfiles, delegationSuggestions, delegationRules,
   projectContexts, recordedWorkflows, dailyPlans, documentTemplatesAi, generatedDocuments,
+  schedulingPreferences, aiHabits, aiHabitCompletions, focusSessions, aiProductivityScores,
+  timeEntries,
 } from "../shared/schema";
-import { gt, gte, lte, like, count } from "drizzle-orm";
+import { gt, gte, lte, like, count, asc } from "drizzle-orm";
 
 const ADMIN_USER_ID = process.env.ADMIN_USER_ID || "";
 
@@ -4875,6 +4877,749 @@ For answer: just a message.`,
         success,
         error: errorMsg,
       }).catch(() => {});
+    }
+  });
+
+  // ============================================================
+  // SPRINT 3 — FEATURE 3: DAILY PLANNER
+  // ============================================================
+
+  // GET /api/daily-plan?date=2026-03-04
+  app.get("/api/daily-plan", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const date = z.string().parse(req.query.date);
+      const [plan] = await db
+        .select()
+        .from(dailyPlans)
+        .where(and(eq(dailyPlans.userId, userId), eq(dailyPlans.date, date)))
+        .limit(1);
+      return res.json(plan || null);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
+  });
+
+  // POST /api/daily-plan/generate
+  app.post("/api/daily-plan/generate", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const startTime = Date.now();
+      const { date: targetDate } = z.object({ date: z.string() }).parse(req.body);
+
+      const [prefs] = await db
+        .select()
+        .from(schedulingPreferences)
+        .where(eq(schedulingPreferences.userId, userId))
+        .limit(1);
+
+      const workingHours = (prefs?.workingHours as any) || { start: "09:00", end: "18:00" };
+      const lunchTime = (prefs?.lunchTime as any) || { start: "12:30", end: "13:30" };
+      const peakFocus = (prefs?.peakFocusWindow as any) || { start: "10:00", end: "12:00" };
+
+      const userTasks = await db
+        .select()
+        .from(tasks)
+        .where(and(eq(tasks.userId, userId), drizzleSql`${tasks.completionPercentage} < 100`))
+        .orderBy(desc(tasks.priority))
+        .limit(20);
+
+      const userHabits = await db
+        .select()
+        .from(aiHabits)
+        .where(and(eq(aiHabits.userId, userId), eq(aiHabits.isActive, true)));
+
+      const yesterday = new Date(targetDate);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split("T")[0];
+      const [yesterdayPlan] = await db
+        .select()
+        .from(dailyPlans)
+        .where(and(eq(dailyPlans.userId, userId), eq(dailyPlans.date, yesterdayStr)))
+        .limit(1);
+      const carryOverBlocks = yesterdayPlan
+        ? ((yesterdayPlan.timeBlocks as any[]) || []).filter(
+            (b: any) => !b.isCompleted && !b.isSkipped && b.taskId
+          )
+        : [];
+
+      const tasksForAI = userTasks.map(t => ({
+        id: t.id,
+        title: t.title,
+        date: t.date,
+        priority: t.priority || "medium",
+        estimatedMinutes: (t as any).time || 60,
+        completionPercentage: t.completionPercentage || 0,
+      }));
+      const habitsForAI = userHabits.map(h => ({
+        id: h.id,
+        name: h.name,
+        durationMinutes: h.durationMinutes,
+        preferredTimeRange: h.preferredTimeRange,
+        priority: h.priority,
+      }));
+
+      const aiResponse = await aiService.generateJSON<{
+        timeBlocks: Array<{
+          type: string; title: string; startTime: string; endTime: string;
+          durationMinutes: number; taskId?: number; habitId?: number;
+          priority: string; energyLevel: string; isFixed: boolean; aiReason: string;
+        }>;
+        summary: {
+          totalPlannedMinutes: number; focusMinutes: number; meetingMinutes: number;
+          mustDoCount: number; shouldDoCount: number; niceToDoCount: number;
+          topPriority: string; aiReasoning: string; completionLikelihood: number;
+        };
+      }>(
+        `Create an optimized daily schedule for ${targetDate}.
+
+WORKING HOURS: ${workingHours.start} to ${workingHours.end}
+LUNCH: ${lunchTime.start} to ${lunchTime.end}
+PEAK FOCUS WINDOW: ${peakFocus.start} to ${peakFocus.end}
+BUFFER BETWEEN MEETINGS: ${prefs?.bufferBetweenMeetings || 15} minutes
+
+TASKS TO SCHEDULE:
+${JSON.stringify(tasksForAI, null, 2)}
+
+HABITS TO INCLUDE:
+${JSON.stringify(habitsForAI, null, 2)}
+
+CARRY-OVER FROM YESTERDAY: ${carryOverBlocks.length} incomplete tasks
+
+RULES:
+1. Place MUST DO tasks (high priority) in peak focus window (${peakFocus.start}-${peakFocus.end})
+2. Place habits in their preferred time ranges
+3. Add 15-min breaks every 90 minutes
+4. Add morning planning block (15 min at start of day)
+5. Add evening review block (15 min at end of day)
+6. Add communication blocks (30 min morning + 30 min after lunch)
+7. Leave at least 30 min unscheduled as buffer
+8. Place SHOULD DO tasks in remaining good time slots
+9. Place NICE TO DO tasks in lower-energy afternoon slots
+10. Never overlap blocks
+11. MUST DO = high priority; SHOULD DO = medium; NICE TO DO = low
+
+Return JSON with timeBlocks array sorted by startTime and a summary object.
+Each block needs: type (task/meeting/focus/break/habit/communication/planning/buffer/custom),
+title, startTime (HH:MM), endTime (HH:MM), durationMinutes, taskId/habitId if applicable,
+priority (must_do/should_do/nice_to_do), energyLevel (high/medium/low), isFixed (bool), aiReason.`,
+        {
+          systemPrompt: "You are an expert productivity scheduler. Create optimal daily schedules that maximize deep work time and respect human energy patterns. Return ONLY valid JSON.",
+          temperature: 0.3,
+        }
+      );
+
+      const timeBlocks = aiResponse.timeBlocks.map((block) => ({
+        ...block,
+        id: crypto.randomUUID(),
+        isCompleted: false,
+        isSkipped: false,
+        scheduledByAI: true,
+      }));
+
+      const [plan] = await db
+        .insert(dailyPlans)
+        .values({
+          userId,
+          date: targetDate,
+          status: prefs?.planMode === "automatic" ? "active" : "generated",
+          timeBlocks: timeBlocks as any,
+          aiSummary: aiResponse.summary as any,
+        })
+        .onConflictDoUpdate({
+          target: [dailyPlans.userId, dailyPlans.date],
+          set: {
+            timeBlocks: timeBlocks as any,
+            aiSummary: aiResponse.summary as any,
+            status: "generated",
+          },
+        })
+        .returning();
+
+      await logAiUsage({
+        userId,
+        feature: "planner",
+        action: "generate_plan",
+        model: "gpt-4o",
+        inputTokens: 0,
+        outputTokens: 0,
+        durationMs: Date.now() - startTime,
+      });
+
+      return res.json(plan);
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // PATCH /api/daily-plan/:planId/blocks
+  app.patch("/api/daily-plan/:planId/blocks", isAuthenticated, async (req: any, res) => {
+    try {
+      const planId = z.number().int().parse(Number(req.params.planId));
+      const { timeBlocks } = z.object({ timeBlocks: z.array(z.any()) }).parse(req.body);
+
+      const [existing] = await db
+        .select()
+        .from(dailyPlans)
+        .where(eq(dailyPlans.id, planId))
+        .limit(1);
+      if (!existing) return res.status(404).json({ error: "Plan not found" });
+
+      const [updated] = await db
+        .update(dailyPlans)
+        .set({ timeBlocks: timeBlocks as any, modificationsCount: (existing.modificationsCount || 0) + 1 })
+        .where(eq(dailyPlans.id, planId))
+        .returning();
+
+      return res.json(updated);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
+  });
+
+  // POST /api/daily-plan/:planId/complete-block
+  app.post("/api/daily-plan/:planId/complete-block", isAuthenticated, async (req: any, res) => {
+    try {
+      const planId = z.number().int().parse(Number(req.params.planId));
+      const { blockId, actualDurationMinutes } = z.object({
+        blockId: z.string(),
+        actualDurationMinutes: z.number().optional(),
+      }).parse(req.body);
+
+      const [plan] = await db.select().from(dailyPlans).where(eq(dailyPlans.id, planId)).limit(1);
+      if (!plan) return res.status(404).json({ error: "Plan not found" });
+
+      const blocks = (plan.timeBlocks as any[]) || [];
+      const blockIndex = blocks.findIndex((b: any) => b.id === blockId);
+      if (blockIndex === -1) return res.status(404).json({ error: "Block not found" });
+
+      blocks[blockIndex].isCompleted = true;
+      blocks[blockIndex].completedAt = new Date().toISOString();
+      blocks[blockIndex].actualDurationMinutes = actualDurationMinutes;
+
+      const totalBlocks = blocks.filter((b: any) => b.type !== "break" && b.type !== "buffer");
+      const completedBlocks = totalBlocks.filter((b: any) => b.isCompleted);
+      const completionRate = totalBlocks.length > 0 ? completedBlocks.length / totalBlocks.length : 0;
+
+      const [updated] = await db
+        .update(dailyPlans)
+        .set({ timeBlocks: blocks, completionRate })
+        .where(eq(dailyPlans.id, planId))
+        .returning();
+
+      return res.json(updated);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
+  });
+
+  // POST /api/daily-plan/:planId/skip-block
+  app.post("/api/daily-plan/:planId/skip-block", isAuthenticated, async (req: any, res) => {
+    try {
+      const planId = z.number().int().parse(Number(req.params.planId));
+      const { blockId } = z.object({ blockId: z.string() }).parse(req.body);
+
+      const [plan] = await db.select().from(dailyPlans).where(eq(dailyPlans.id, planId)).limit(1);
+      if (!plan) return res.status(404).json({ error: "Plan not found" });
+
+      const blocks = (plan.timeBlocks as any[]) || [];
+      const blockIndex = blocks.findIndex((b: any) => b.id === blockId);
+      if (blockIndex === -1) return res.status(404).json({ error: "Block not found" });
+
+      blocks[blockIndex].isSkipped = true;
+
+      const [updated] = await db
+        .update(dailyPlans)
+        .set({ timeBlocks: blocks })
+        .where(eq(dailyPlans.id, planId))
+        .returning();
+
+      return res.json(updated);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
+  });
+
+  // POST /api/daily-plan/:planId/review
+  app.post("/api/daily-plan/:planId/review", isAuthenticated, async (req: any, res) => {
+    try {
+      const planId = z.number().int().parse(Number(req.params.planId));
+      const { reviewNote } = z.object({ reviewNote: z.string().optional() }).parse(req.body);
+
+      const [updated] = await db
+        .update(dailyPlans)
+        .set({ reviewNote, status: "completed" })
+        .where(eq(dailyPlans.id, planId))
+        .returning();
+
+      return res.json(updated);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
+  });
+
+  // GET /api/daily-plan/preferences
+  app.get("/api/daily-plan/preferences", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      let [prefs] = await db
+        .select()
+        .from(schedulingPreferences)
+        .where(eq(schedulingPreferences.userId, userId))
+        .limit(1);
+      if (!prefs) {
+        [prefs] = await db.insert(schedulingPreferences).values({ userId }).returning();
+      }
+      return res.json(prefs);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
+  });
+
+  // PATCH /api/daily-plan/preferences
+  app.patch("/api/daily-plan/preferences", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const input = z.object({
+        workingHours: z.any().optional(),
+        timezone: z.string().optional(),
+        workDays: z.array(z.number()).optional(),
+        lunchTime: z.any().optional(),
+        peakFocusWindow: z.any().optional(),
+        preferMeetingsIn: z.string().optional(),
+        minFocusBlockMinutes: z.number().optional(),
+        bufferBetweenMeetings: z.number().optional(),
+        autoScheduleEnabled: z.boolean().optional(),
+        morningPlanningEnabled: z.boolean().optional(),
+        morningPlanningTime: z.string().optional(),
+        eveningReviewEnabled: z.boolean().optional(),
+        eveningReviewTime: z.string().optional(),
+        planMode: z.string().optional(),
+      }).parse(req.body);
+
+      const [existing] = await db
+        .select()
+        .from(schedulingPreferences)
+        .where(eq(schedulingPreferences.userId, userId))
+        .limit(1);
+
+      if (!existing) {
+        const [created] = await db.insert(schedulingPreferences).values({ userId, ...input }).returning();
+        return res.json(created);
+      }
+
+      const [updated] = await db
+        .update(schedulingPreferences)
+        .set(input)
+        .where(eq(schedulingPreferences.userId, userId))
+        .returning();
+
+      return res.json(updated);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
+  });
+
+  // ============================================================
+  // SPRINT 3 — FEATURE 14: AI HABIT TRACKER
+  // ============================================================
+
+  // GET /api/habits
+  app.get("/api/habits", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const userHabits = await db
+        .select()
+        .from(aiHabits)
+        .where(and(eq(aiHabits.userId, userId), eq(aiHabits.isActive, true)))
+        .orderBy(asc(aiHabits.createdAt));
+
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const completions = await db
+        .select()
+        .from(aiHabitCompletions)
+        .where(
+          and(
+            eq(aiHabitCompletions.userId, userId),
+            gte(aiHabitCompletions.date, thirtyDaysAgo.toISOString().split("T")[0])
+          )
+        )
+        .orderBy(desc(aiHabitCompletions.date));
+
+      const habitsWithCompletions = userHabits.map(h => ({
+        ...h,
+        completions: completions.filter(c => c.habitId === h.id),
+      }));
+
+      return res.json(habitsWithCompletions);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
+  });
+
+  // POST /api/habits
+  app.post("/api/habits", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const input = z.object({
+        name: z.string().min(1).max(100),
+        icon: z.string().optional(),
+        color: z.string().optional(),
+        durationMinutes: z.number().min(5).max(480),
+        frequency: z.enum(["daily", "weekdays", "custom"]).default("daily"),
+        customDays: z.array(z.number().min(0).max(6)).optional(),
+        preferredTimeRange: z.object({ earliest: z.string(), latest: z.string() }).optional(),
+        priority: z.enum(["high", "medium", "low"]).default("medium"),
+        isFlexible: z.boolean().default(true),
+        isProtected: z.boolean().default(false),
+      }).parse(req.body);
+
+      const [habit] = await db.insert(aiHabits).values({ ...input, userId }).returning();
+      return res.json(habit);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
+  });
+
+  // PATCH /api/habits/:id
+  app.patch("/api/habits/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = z.number().int().parse(Number(req.params.id));
+      const input = z.object({
+        name: z.string().optional(),
+        icon: z.string().optional(),
+        color: z.string().optional(),
+        durationMinutes: z.number().optional(),
+        frequency: z.enum(["daily", "weekdays", "custom"]).optional(),
+        customDays: z.array(z.number()).optional(),
+        preferredTimeRange: z.any().optional(),
+        priority: z.enum(["high", "medium", "low"]).optional(),
+        isFlexible: z.boolean().optional(),
+        isProtected: z.boolean().optional(),
+        isActive: z.boolean().optional(),
+      }).parse(req.body);
+
+      const [updated] = await db.update(aiHabits).set(input).where(eq(aiHabits.id, id)).returning();
+      return res.json(updated);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
+  });
+
+  // POST /api/habits/:habitId/complete
+  app.post("/api/habits/:habitId/complete", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const habitId = z.number().int().parse(Number(req.params.habitId));
+      const { date } = z.object({ date: z.string() }).parse(req.body);
+
+      await db
+        .insert(aiHabitCompletions)
+        .values({ habitId, userId, date })
+        .onConflictDoNothing();
+
+      const recentCompletions = await db
+        .select()
+        .from(aiHabitCompletions)
+        .where(eq(aiHabitCompletions.habitId, habitId))
+        .orderBy(desc(aiHabitCompletions.date))
+        .limit(60);
+
+      let streak = 0;
+      const today = new Date();
+      for (let i = 0; i < 365; i++) {
+        const checkDate = new Date(today);
+        checkDate.setDate(checkDate.getDate() - i);
+        const dateStr = checkDate.toISOString().split("T")[0];
+        const completed = recentCompletions.some(
+          (c) => String(c.date).split("T")[0] === dateStr
+        );
+        if (completed) {
+          streak++;
+        } else if (i > 0) {
+          break;
+        }
+      }
+
+      const [habit] = await db.select().from(aiHabits).where(eq(aiHabits.id, habitId)).limit(1);
+      if (habit) {
+        await db
+          .update(aiHabits)
+          .set({ streakCurrent: streak, streakLongest: Math.max(streak, habit.streakLongest || 0) })
+          .where(eq(aiHabits.id, habitId));
+      }
+
+      return res.json({ success: true, streak });
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
+  });
+
+  // POST /api/habits/:habitId/uncomplete
+  app.post("/api/habits/:habitId/uncomplete", isAuthenticated, async (req: any, res) => {
+    try {
+      const habitId = z.number().int().parse(Number(req.params.habitId));
+      const { date } = z.object({ date: z.string() }).parse(req.body);
+
+      await db
+        .delete(aiHabitCompletions)
+        .where(and(eq(aiHabitCompletions.habitId, habitId), eq(aiHabitCompletions.date, date)));
+
+      return res.json({ success: true });
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
+  });
+
+  // DELETE /api/habits/:id
+  app.delete("/api/habits/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = z.number().int().parse(Number(req.params.id));
+      const [updated] = await db
+        .update(aiHabits)
+        .set({ isActive: false })
+        .where(eq(aiHabits.id, id))
+        .returning();
+      return res.json(updated);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
+  });
+
+  // ============================================================
+  // SPRINT 3 — FEATURE 9: AI FOCUS & PRODUCTIVITY COACH
+  // ============================================================
+
+  // POST /api/focus/start
+  app.post("/api/focus/start", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const input = z.object({
+        taskId: z.number().int().optional(),
+        title: z.string(),
+        plannedMinutes: z.number().min(5).max(480),
+      }).parse(req.body);
+
+      const [existing] = await db
+        .select()
+        .from(focusSessions)
+        .where(and(eq(focusSessions.userId, userId), eq(focusSessions.status, "active")))
+        .limit(1);
+
+      if (existing) {
+        return res.status(400).json({ error: "You already have an active focus session. End it first." });
+      }
+
+      const [session] = await db
+        .insert(focusSessions)
+        .values({
+          userId,
+          taskId: input.taskId,
+          title: input.title,
+          plannedMinutes: input.plannedMinutes,
+          startedAt: new Date(),
+          status: "active",
+          notificationsPaused: true,
+        })
+        .returning();
+
+      return res.json(session);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
+  });
+
+  // POST /api/focus/:sessionId/end
+  app.post("/api/focus/:sessionId/end", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const sessionId = z.number().int().parse(Number(req.params.sessionId));
+
+      const [session] = await db
+        .select()
+        .from(focusSessions)
+        .where(eq(focusSessions.id, sessionId))
+        .limit(1);
+
+      if (!session) return res.status(404).json({ error: "Session not found" });
+
+      const endedAt = new Date();
+      const actualMinutes = Math.max(
+        Math.round((endedAt.getTime() - new Date(session.startedAt).getTime()) / 60000) - (session.pausedMinutes || 0),
+        1
+      );
+
+      const [updated] = await db
+        .update(focusSessions)
+        .set({ endedAt, actualMinutes, status: "completed", notificationsPaused: false })
+        .where(eq(focusSessions.id, sessionId))
+        .returning();
+
+      if (session.taskId) {
+        const todayDate = new Date().toISOString().split("T")[0];
+        await db.insert(timeEntries).values({
+          userId,
+          taskId: session.taskId,
+          date: todayDate,
+          minutes: actualMinutes,
+          source: "focus_session",
+        });
+      }
+
+      const todayStr = new Date().toISOString().split("T")[0];
+      const [existingScore] = await db
+        .select()
+        .from(aiProductivityScores)
+        .where(and(eq(aiProductivityScores.userId, userId), eq(aiProductivityScores.date, todayStr)))
+        .limit(1);
+
+      if (existingScore) {
+        await db
+          .update(aiProductivityScores)
+          .set({ focusMinutes: (existingScore.focusMinutes || 0) + actualMinutes })
+          .where(eq(aiProductivityScores.id, existingScore.id));
+      } else {
+        await db.insert(aiProductivityScores).values({ userId, date: todayStr, focusMinutes: actualMinutes });
+      }
+
+      return res.json(updated);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
+  });
+
+  // POST /api/focus/:sessionId/toggle-pause
+  app.post("/api/focus/:sessionId/toggle-pause", isAuthenticated, async (req: any, res) => {
+    try {
+      const sessionId = z.number().int().parse(Number(req.params.sessionId));
+
+      const [session] = await db
+        .select()
+        .from(focusSessions)
+        .where(eq(focusSessions.id, sessionId))
+        .limit(1);
+      if (!session) return res.status(404).json({ error: "Session not found" });
+
+      const newStatus = session.status === "active" ? "paused" : "active";
+      const [updated] = await db
+        .update(focusSessions)
+        .set({ status: newStatus })
+        .where(eq(focusSessions.id, sessionId))
+        .returning();
+
+      return res.json(updated);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
+  });
+
+  // GET /api/focus/active
+  app.get("/api/focus/active", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [session] = await db
+        .select()
+        .from(focusSessions)
+        .where(
+          and(
+            eq(focusSessions.userId, userId),
+            drizzleSql`${focusSessions.status} IN ('active', 'paused')`
+          )
+        )
+        .limit(1);
+      return res.json(session || null);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
+  });
+
+  // GET /api/focus/productivity?startDate=...&endDate=...
+  app.get("/api/focus/productivity", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { startDate, endDate } = z.object({
+        startDate: z.string(),
+        endDate: z.string(),
+      }).parse(req.query);
+
+      const scores = await db
+        .select()
+        .from(aiProductivityScores)
+        .where(
+          and(
+            eq(aiProductivityScores.userId, userId),
+            gte(aiProductivityScores.date, startDate),
+            lte(aiProductivityScores.date, endDate)
+          )
+        )
+        .orderBy(asc(aiProductivityScores.date));
+
+      return res.json(scores);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
+  });
+
+  // POST /api/focus/coaching
+  app.post("/api/focus/coaching", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split("T")[0];
+
+      const scores = await db
+        .select()
+        .from(aiProductivityScores)
+        .where(and(eq(aiProductivityScores.userId, userId), gte(aiProductivityScores.date, thirtyDaysAgoStr)))
+        .orderBy(asc(aiProductivityScores.date));
+
+      const sessions = await db
+        .select()
+        .from(focusSessions)
+        .where(
+          and(
+            eq(focusSessions.userId, userId),
+            eq(focusSessions.status, "completed"),
+            gte(focusSessions.startedAt, thirtyDaysAgo)
+          )
+        );
+
+      const avgMinutes = sessions.length > 0
+        ? Math.round(sessions.reduce((sum, s) => sum + (s.actualMinutes || 0), 0) / sessions.length)
+        : 0;
+
+      if (scores.length === 0 && sessions.length === 0) {
+        return res.json({ insight: "Track a few focus sessions to see your personalized coaching insights. Start your first focus session to begin!" });
+      }
+
+      const result = await aiService.generateText(
+        `Analyze this user's productivity data and provide 2-3 actionable coaching tips.
+
+DAILY SCORES (last 30 days): ${JSON.stringify(
+  scores.map(s => ({
+    date: s.date,
+    focusMin: s.focusMinutes,
+    meetingMin: s.meetingMinutes,
+    tasksCompleted: s.tasksCompleted,
+    habitsCompleted: s.habitsCompleted,
+  }))
+)}
+
+FOCUS SESSIONS: ${sessions.length} total, avg ${avgMinutes} min each
+
+Provide specific, actionable insights. Be encouraging but honest.`,
+        {
+          systemPrompt: "You are a productivity coach. Analyze the data and give specific, personalized tips. Be warm and encouraging. Keep it to 2-3 short tips.",
+          maxTokens: 500,
+          temperature: 0.6,
+        }
+      );
+
+      return res.json({ insight: result.text });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message });
     }
   });
 

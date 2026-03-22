@@ -40,6 +40,9 @@ import ConnectPage from "@/pages/dashboard/connect";
 import AutopilotPanel from "@/pages/autopilot/AutopilotPanel";
 import TimeMachine from "@/pages/analytics/TimeMachine";
 import DailyPlanner from "@/pages/planner/DailyPlanner";
+import MyDayPage from "@/pages/dashboard/my-day";
+import AiHabitsPage from "@/pages/dashboard/ai-habits";
+import FocusCoachPage from "@/pages/dashboard/focus-coach";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -222,6 +225,21 @@ function Router() {
       <Route path="/dashboard/daily-planner">
         <DashboardLayout>
           <DailyPlanner />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/my-day">
+        <DashboardLayout>
+          <MyDayPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/ai-habits">
+        <DashboardLayout>
+          <AiHabitsPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/focus-coach">
+        <DashboardLayout>
+          <FocusCoachPage />
         </DashboardLayout>
       </Route>
 

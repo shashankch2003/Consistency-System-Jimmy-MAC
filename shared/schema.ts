@@ -1692,9 +1692,13 @@ export const dailyPlans = pgTable("daily_plans", {
   date: text("date").notNull(),
   status: text("status").notNull().default("draft"), // draft/active/completed/skipped
   generatedPlan: jsonb("generated_plan").$defaultFn(() => ({})),
+  timeBlocks: jsonb("time_blocks").$defaultFn(() => []),
+  aiSummary: jsonb("ai_summary"),
   userModifications: jsonb("user_modifications").$defaultFn(() => ({})),
+  modificationsCount: integer("modifications_count").default(0),
   completionRate: real("completion_rate"),
   reviewNotes: text("review_notes"),
+  reviewNote: text("review_note"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (t) => ({
@@ -1901,6 +1905,7 @@ export const schedulingPreferences = pgTable("scheduling_preferences", {
   minFocusBlockMinutes: integer("min_focus_block_minutes").default(60),
   bufferBetweenMeetings: integer("buffer_between_meetings").default(15),
   autoScheduleEnabled: boolean("auto_schedule_enabled").default(true),
+  morningPlanningEnabled: boolean("morning_planning_enabled").default(true),
   morningPlanningTime: text("morning_planning_time").default("08:30"),
   eveningReviewEnabled: boolean("evening_review_enabled").default(true),
   eveningReviewTime: text("evening_review_time").default("17:30"),

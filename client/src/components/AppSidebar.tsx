@@ -47,6 +47,7 @@ import {
   Search,
   Command,
   Calendar,
+  Flame,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
@@ -79,6 +80,9 @@ const menuItems = [
   { title: "AI Autopilot", icon: Zap, url: "/dashboard/autopilot" },
   { title: "Time Machine", icon: BarChart3, url: "/dashboard/time-machine" },
   { title: "Daily Planner", icon: Calendar, url: "/dashboard/daily-planner" },
+  { title: "My Day", icon: Clock, url: "/dashboard/my-day" },
+  { title: "AI Habits", icon: Flame, url: "/dashboard/ai-habits" },
+  { title: "Focus Coach", icon: Target, url: "/dashboard/focus-coach" },
   { title: "Workspace Setup", icon: Building2, url: "/dashboard/workspace-setup" },
   { title: "Team Management", icon: UsersRound, url: "/dashboard/team-management" },
   { title: "Members", icon: Users, url: "/dashboard/members" },
