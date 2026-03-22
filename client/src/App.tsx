@@ -27,6 +27,7 @@ import TeamIntelligenceSettingsPage from "@/pages/dashboard/team-intelligence-se
 import WorkspaceSetupPage from "@/pages/dashboard/workspace-setup";
 import TeamManagementPage from "@/pages/dashboard/team-management";
 import MembersPage from "@/pages/dashboard/members";
+import ProjectsPage from "@/pages/dashboard/projects";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -143,6 +144,11 @@ function Router() {
       <Route path="/dashboard/members">
         <DashboardLayout>
           <MembersPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/projects">
+        <DashboardLayout>
+          <ProjectsPage />
         </DashboardLayout>
       </Route>
 

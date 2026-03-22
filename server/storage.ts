@@ -12,6 +12,7 @@ import {
   growGroups, growGroupMembers, growGroupMessages,
   teamDailySnapshots, teamAiInsights, teamAiSettings, teamManagerAssignments, teamAlerts, teamOrgSettings,
   workspaces, teams, workspaceMembers,
+  projects, teamTasks, subtasks, taskDependencies,
 } from "@shared/schema";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
 import { or, sql, inArray } from "drizzle-orm";
@@ -276,6 +277,31 @@ export interface IStorage extends IAuthStorage {
   getManagerAssignments(workspaceId: string, managerUserId?: string): Promise<(typeof teamManagerAssignments.$inferSelect)[]>;
   createManagerAssignment(data: InsertTeamManagerAssignment): Promise<typeof teamManagerAssignments.$inferSelect>;
   softDeleteManagerAssignment(id: string): Promise<typeof teamManagerAssignments.$inferSelect>;
+
+  // Projects
+  getProjects(workspaceId: number): Promise<(typeof projects.$inferSelect)[]>;
+  getProject(id: number): Promise<(typeof projects.$inferSelect) | undefined>;
+  createProject(data: typeof projects.$inferInsert): Promise<typeof projects.$inferSelect>;
+  updateProject(id: number, data: Partial<typeof projects.$inferInsert>): Promise<typeof projects.$inferSelect>;
+  deleteProject(id: number): Promise<void>;
+
+  // Team Tasks
+  getTeamTasks(projectId: number): Promise<(typeof teamTasks.$inferSelect)[]>;
+  getTeamTask(id: number): Promise<(typeof teamTasks.$inferSelect) | undefined>;
+  createTeamTask(data: typeof teamTasks.$inferInsert): Promise<typeof teamTasks.$inferSelect>;
+  updateTeamTask(id: number, data: Partial<typeof teamTasks.$inferInsert>): Promise<typeof teamTasks.$inferSelect>;
+  deleteTeamTask(id: number): Promise<void>;
+
+  // Subtasks
+  getSubtasks(taskId: number): Promise<(typeof subtasks.$inferSelect)[]>;
+  createSubtask(data: typeof subtasks.$inferInsert): Promise<typeof subtasks.$inferSelect>;
+  updateSubtask(id: number, data: Partial<typeof subtasks.$inferInsert>): Promise<typeof subtasks.$inferSelect>;
+  deleteSubtask(id: number): Promise<void>;
+
+  // Task Dependencies
+  getTaskDependencies(taskId: number): Promise<(typeof taskDependencies.$inferSelect)[]>;
+  createTaskDependency(data: typeof taskDependencies.$inferInsert): Promise<typeof taskDependencies.$inferSelect>;
+  deleteTaskDependency(taskId: number, dependsOnTaskId: number): Promise<void>;
 
   // Workspace Platform
   getWorkspaces(userId: string): Promise<(typeof workspaces.$inferSelect)[]>;
@@ -1235,6 +1261,76 @@ export class DatabaseStorage implements IStorage {
       .where(eq(teamManagerAssignments.id, id))
       .returning();
     return updated;
+  }
+
+  // Projects
+  async getProjects(workspaceId: number) {
+    return await db.select().from(projects).where(eq(projects.workspaceId, workspaceId)).orderBy(desc(projects.createdAt));
+  }
+  async getProject(id: number) {
+    const [p] = await db.select().from(projects).where(eq(projects.id, id));
+    return p;
+  }
+  async createProject(data: typeof projects.$inferInsert) {
+    const [created] = await db.insert(projects).values(data).returning();
+    return created;
+  }
+  async updateProject(id: number, data: Partial<typeof projects.$inferInsert>) {
+    const [updated] = await db.update(projects).set({ ...data, updatedAt: new Date() }).where(eq(projects.id, id)).returning();
+    return updated;
+  }
+  async deleteProject(id: number) {
+    await db.delete(projects).where(eq(projects.id, id));
+  }
+
+  // Team Tasks
+  async getTeamTasks(projectId: number) {
+    return await db.select().from(teamTasks).where(eq(teamTasks.projectId, projectId)).orderBy(asc(teamTasks.sortOrder), asc(teamTasks.id));
+  }
+  async getTeamTask(id: number) {
+    const [t] = await db.select().from(teamTasks).where(eq(teamTasks.id, id));
+    return t;
+  }
+  async createTeamTask(data: typeof teamTasks.$inferInsert) {
+    const [created] = await db.insert(teamTasks).values(data).returning();
+    return created;
+  }
+  async updateTeamTask(id: number, data: Partial<typeof teamTasks.$inferInsert>) {
+    const [updated] = await db.update(teamTasks).set({ ...data, updatedAt: new Date() }).where(eq(teamTasks.id, id)).returning();
+    return updated;
+  }
+  async deleteTeamTask(id: number) {
+    await db.delete(subtasks).where(eq(subtasks.taskId, id));
+    await db.delete(taskDependencies).where(eq(taskDependencies.taskId, id));
+    await db.delete(teamTasks).where(eq(teamTasks.id, id));
+  }
+
+  // Subtasks
+  async getSubtasks(taskId: number) {
+    return await db.select().from(subtasks).where(eq(subtasks.taskId, taskId)).orderBy(asc(subtasks.sortOrder), asc(subtasks.id));
+  }
+  async createSubtask(data: typeof subtasks.$inferInsert) {
+    const [created] = await db.insert(subtasks).values(data).returning();
+    return created;
+  }
+  async updateSubtask(id: number, data: Partial<typeof subtasks.$inferInsert>) {
+    const [updated] = await db.update(subtasks).set(data).where(eq(subtasks.id, id)).returning();
+    return updated;
+  }
+  async deleteSubtask(id: number) {
+    await db.delete(subtasks).where(eq(subtasks.id, id));
+  }
+
+  // Task Dependencies
+  async getTaskDependencies(taskId: number) {
+    return await db.select().from(taskDependencies).where(eq(taskDependencies.taskId, taskId));
+  }
+  async createTaskDependency(data: typeof taskDependencies.$inferInsert) {
+    const [created] = await db.insert(taskDependencies).values(data).returning();
+    return created;
+  }
+  async deleteTaskDependency(taskId: number, dependsOnTaskId: number) {
+    await db.delete(taskDependencies).where(and(eq(taskDependencies.taskId, taskId), eq(taskDependencies.dependsOnTaskId, dependsOnTaskId)));
   }
 
   // Workspace Platform

@@ -2628,6 +2628,159 @@ export async function registerRoutes(
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  // ─── Projects & Tasks Routes ─────────────────────────────────────────────
+
+  // Projects
+  app.get("/api/projects", isAuthenticated, async (req: any, res) => {
+    try {
+      const workspaceId = parseInt(req.query.workspaceId as string);
+      if (!workspaceId) return res.status(400).json({ message: "workspaceId required" });
+      const list = await storage.getProjects(workspaceId);
+      res.json(list);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/projects", isAuthenticated, async (req: any, res) => {
+    try {
+      const { workspaceId, name, description, teamId, status, priority, startDate, dueDate, template, visibility } = req.body;
+      if (!name || !workspaceId) return res.status(400).json({ message: "name and workspaceId required" });
+      const project = await storage.createProject({
+        workspaceId, name, description, teamId: teamId || null, status: status || "Planning",
+        priority: priority || "Medium", startDate: startDate || null, dueDate: dueDate || null,
+        ownerId: req.user.claims.sub, template: template || null, visibility: visibility || "public",
+      });
+      res.status(201).json(project);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/projects/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const project = await storage.getProject(parseInt(req.params.id));
+      if (!project) return res.status(404).json({ message: "Project not found" });
+      res.json(project);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/projects/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const updated = await storage.updateProject(parseInt(req.params.id), req.body);
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/projects/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteProject(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Team Tasks
+  app.get("/api/team-tasks", isAuthenticated, async (req: any, res) => {
+    try {
+      const projectId = parseInt(req.query.projectId as string);
+      if (!projectId) return res.status(400).json({ message: "projectId required" });
+      const list = await storage.getTeamTasks(projectId);
+      res.json(list);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/team-tasks", isAuthenticated, async (req: any, res) => {
+    try {
+      const { projectId, title, description, status, priority, assigneeId, startDate, dueDate, estimatedMinutes, tags, sortOrder } = req.body;
+      if (!title || !projectId) return res.status(400).json({ message: "title and projectId required" });
+      const task = await storage.createTeamTask({
+        projectId, title, description, status: status || "Not Started", priority: priority || "Medium",
+        assigneeId: assigneeId || null, startDate: startDate || null, dueDate: dueDate || null,
+        estimatedMinutes: estimatedMinutes || null, tags: tags || [], sortOrder: sortOrder || 0,
+        createdBy: req.user.claims.sub,
+      });
+      res.status(201).json(task);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/team-tasks/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const task = await storage.getTeamTask(parseInt(req.params.id));
+      if (!task) return res.status(404).json({ message: "Task not found" });
+      res.json(task);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/team-tasks/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const data = { ...req.body };
+      if (data.status === "Completed" && !data.completedAt) data.completedAt = new Date();
+      const updated = await storage.updateTeamTask(parseInt(req.params.id), data);
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/team-tasks/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteTeamTask(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Subtasks
+  app.get("/api/subtasks", isAuthenticated, async (req: any, res) => {
+    try {
+      const taskId = parseInt(req.query.taskId as string);
+      if (!taskId) return res.status(400).json({ message: "taskId required" });
+      res.json(await storage.getSubtasks(taskId));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/subtasks", isAuthenticated, async (req: any, res) => {
+    try {
+      const { taskId, title, sortOrder } = req.body;
+      if (!taskId || !title) return res.status(400).json({ message: "taskId and title required" });
+      const sub = await storage.createSubtask({ taskId, title, sortOrder: sortOrder || 0 });
+      res.status(201).json(sub);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/subtasks/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const updated = await storage.updateSubtask(parseInt(req.params.id), req.body);
+      res.json(updated);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/subtasks/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteSubtask(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Task Dependencies
+  app.get("/api/task-dependencies", isAuthenticated, async (req: any, res) => {
+    try {
+      const taskId = parseInt(req.query.taskId as string);
+      if (!taskId) return res.status(400).json({ message: "taskId required" });
+      res.json(await storage.getTaskDependencies(taskId));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/task-dependencies", isAuthenticated, async (req: any, res) => {
+    try {
+      const { taskId, dependsOnTaskId } = req.body;
+      if (!taskId || !dependsOnTaskId) return res.status(400).json({ message: "taskId and dependsOnTaskId required" });
+      const dep = await storage.createTaskDependency({ taskId, dependsOnTaskId });
+      res.status(201).json(dep);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/task-dependencies", isAuthenticated, async (req: any, res) => {
+    try {
+      const { taskId, dependsOnTaskId } = req.body;
+      await storage.deleteTaskDependency(parseInt(taskId), parseInt(dependsOnTaskId));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   // ─── Workspace Platform Routes ────────────────────────────────────────────
 
   // Workspaces

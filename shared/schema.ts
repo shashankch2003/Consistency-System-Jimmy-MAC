@@ -861,6 +861,64 @@ export const teamAlerts = pgTable("team_alerts", {
   index("team_alerts_target_user_idx").on(t.targetUserId),
 ]);
 
+// ─── Projects & Tasks Tables ─────────────────────────────────────────────────
+
+export const projects = pgTable("projects", {
+  id: serial("id").primaryKey(),
+  workspaceId: integer("workspace_id").references(() => workspaces.id),
+  name: text("name").notNull(),
+  description: text("description"),
+  teamId: integer("team_id"),
+  status: text("status").default("Planning"),
+  priority: text("priority").default("Medium"),
+  startDate: date("start_date"),
+  dueDate: date("due_date"),
+  ownerId: text("owner_id"),
+  template: text("template"),
+  visibility: text("visibility").default("public"),
+  progress: integer("progress").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const teamTasks = pgTable("team_tasks", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").references(() => projects.id),
+  title: text("title").notNull(),
+  description: text("description"),
+  status: text("status").default("Not Started"),
+  priority: text("priority").default("Medium"),
+  assigneeId: text("assignee_id"),
+  startDate: date("start_date"),
+  dueDate: date("due_date"),
+  estimatedMinutes: integer("estimated_minutes"),
+  actualMinutes: integer("actual_minutes").default(0),
+  tags: jsonb("tags").$defaultFn(() => []),
+  sortOrder: integer("sort_order").default(0),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const subtasks = pgTable("subtasks", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id").references(() => teamTasks.id),
+  title: text("title").notNull(),
+  isCompleted: boolean("is_completed").default(false),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const taskDependencies = pgTable("task_dependencies", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id").references(() => teamTasks.id),
+  dependsOnTaskId: integer("depends_on_task_id").references(() => teamTasks.id),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  uniqueDep: uniqueIndex("unique_task_dep").on(table.taskId, table.dependsOnTaskId),
+}));
+
 // ─── Workspace Platform Tables ───────────────────────────────────────────────
 
 export const workspaces = pgTable("workspaces", {

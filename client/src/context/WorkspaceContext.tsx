@@ -12,6 +12,7 @@ interface Workspace {
 
 interface WorkspaceContextValue {
   activeWorkspace: Workspace | null;
+  workspaceId: number | null;
   setActiveWorkspace: (ws: Workspace | null) => void;
   workspaces: Workspace[];
   isLoading: boolean;
@@ -19,6 +20,7 @@ interface WorkspaceContextValue {
 
 const WorkspaceContext = createContext<WorkspaceContextValue>({
   activeWorkspace: null,
+  workspaceId: null,
   setActiveWorkspace: () => {},
   workspaces: [],
   isLoading: false,
@@ -45,7 +47,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <WorkspaceContext.Provider value={{ activeWorkspace, setActiveWorkspace, workspaces, isLoading }}>
+    <WorkspaceContext.Provider value={{ activeWorkspace, workspaceId: activeWorkspace?.id ?? null, setActiveWorkspace, workspaces, isLoading }}>
       {children}
     </WorkspaceContext.Provider>
   );

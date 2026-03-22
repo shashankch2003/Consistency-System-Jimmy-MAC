@@ -1,0 +1,108 @@
+PROMPT 3 OF 6 — TASK VIEWS & TEAM COLLABORATION
+■ REPLIT SETTINGS: AUTONOMOUS MODE → ECONOMY | App Testing: OFF | Code Optimization: OFF
+(Copy everything below this line into Replit)
+CONTEXT
+App: AI-driven team and workplace productivity platform. Feature being built: 6 task view layouts and team collaboration
+(messaging, comments, documents, wiki). Current state: Workspaces, Teams, Members, Projects, Tasks all working from
+Prompts 1-2. The task table is named team_tasks (not tasks). Goal: Build all views and collaboration — UI, interactions,
+database — in one pass.
+CRITICAL: INSTALL LIBRARIES — Before implementing, run: npm install @hello-pangea/dnd (Fix 11: Needed for
+Board View kanban drag-drop) npm install @tiptap/react @tiptap/starter-kit @tiptap/extension-link
+@tiptap/extension-image @tiptap/extension-underline @tiptap/extension-code-block (Fix 22: Needed for
+DocumentEditor rich text)
+WORKSPACE ID: Use const { workspaceId } = useWorkspace() from @/context/WorkspaceContext in all
+components. (Fix 19)
+Use Recharts (already installed v2.15.2) for all charts. Follow all critical instructions from Prompt 1.
+FILES TO CREATE
+(Fix 18: Page path uses client/src/pages/dashboard/)
+• client/src/components/views/ViewSwitcher.tsx
+• client/src/components/views/BoardView.tsx
+• client/src/components/views/ListView.tsx
+• client/src/components/views/TimelineView.tsx
+• client/src/components/views/CalendarView.tsx
+• client/src/components/views/TableView.tsx
+• client/src/components/views/DashboardView.tsx
+• client/src/pages/dashboard/messages.tsx
+• client/src/components/collab/ChannelList.tsx
+• client/src/components/collab/ChatWindow.tsx
+• client/src/components/collab/TaskComments.tsx
+• client/src/components/collab/DocumentEditor.tsx
+• client/src/components/collab/WikiPage.tsx
+PART A: TASK VIEWS
+All views read from the team_tasks table. Board drag-drop writes status changes.
+1. VIEW SWITCHER (ViewSwitcher.tsx)
+Horizontal tab bar below project header. 6 tabs with icons: Board, List, Timeline, Calendar, Table, Dashboard. Store
+selected view in React state. Default to Board.
+DATABASE: Add column preferred_view (text, default 'board') to workspace_members table. On view switch: save to
+DB via API. On page load: load and open saved view.
+After adding the preferred_view column, run: npx drizzle-kit push (Fix 16)
+2. BOARD VIEW — KANBAN (BoardView.tsx)
+Columns: 'Not Started', 'In Progress', 'In Review', 'Completed'. Each has header + task count + stacked cards. Task card:
+rounded 8px, shadow, title, priority dot, assignee avatar, due date. DRAG AND DROP using @hello-pangea/dnd: Drag
+cards between columns. Drop changes task status in team_tasks table immediately. Clicking card opens TaskDetailPanel.
+'Add task' at bottom of each column creates with that status.
+3. LIST VIEW (ListView.tsx)
+Grouped by status with collapsible headers (200ms animation). Task rows same as TaskList. Clicking opens
+TaskDetailPanel.
+4. TIMELINE VIEW — GANTT (TimelineView.tsx)
+Left: task names (200px). Right: horizontal time grid, 4 weeks, horizontal scroll. Colored bars (28px height) by status
+showing start-to-end span. Today = red dashed line.
+5. CALENDAR VIEW (CalendarView.tsx)
+Monthly grid. Navigation arrows. Task pills on due_date cells. Today = blue border. Clicking pill opens TaskDetailPanel.
+6. TABLE VIEW (TableView.tsx)
+Spreadsheet-style. Columns: Checkbox, Task Name, Status, Priority, Assignee, Due Date, Estimated Time, Tags,
+Progress. Sortable headers.
+7. DASHBOARD VIEW (DashboardView.tsx)
+4 summary cards (2x2 grid): 'Tasks by Status' — Recharts PieChart; 'Tasks by Priority' — Recharts BarChart (horizontal);
+'Upcoming Deadlines' — List of next 5 tasks by due date; 'Team Workload' — Recharts BarChart per assignee. (Fix 14:
+Using Recharts)
+PART B: TEAM COLLABORATION
+8. MESSAGES PAGE (messages.tsx)
+Two-column: channel list (240px) on left, chat window on right. Title 'Messages'.
+9. CHANNEL LIST (ChannelList.tsx)
+Sections: Project Channels (auto-created, '#' prefix), Direct Messages (avatar + name), Team Channels ('#' prefix). 'New
+Channel' link.
+10. CHAT WINDOW (ChatWindow.tsx)
+Header: channel name, member count. Scrollable messages (avatar, name, timestamp, text). Input at bottom (44px,
+rounded 22px). Enter or click sends. Saves to messages table.
+11. TASK COMMENTS (TaskComments.tsx)
+Section inside TaskDetailPanel below Activity header (replaces placeholder). Comment input, avatar + name + timestamp
++ text per comment. Saves to task_comments table.
+12. DOCUMENT EDITOR (DocumentEditor.tsx)
+Fix 22 — USE TIPTAP: Implement the editor using TipTap (@tiptap/react). Use useEditor hook with StarterKit,
+Underline, Link, Image, and CodeBlock extensions. The toolbar buttons each call
+editor.chain().focus().<command>().run() on the TipTap editor instance. Full page, toolbar
+(Bold/Italic/Underline/Heading/List/Code/Link/Image), title input, content area. Right sidebar: page info. Saves to
+documents table (debounced 2s).
+13. WIKI PAGE (WikiPage.tsx)
+Two-column: sidebar (240px) with page tree, content area. Expandable sub-pages. 'New Page' button. Uses documents
+table with is_wiki=true.
+14-17. DATABASE TABLES
+Create these tables (all with serial() PKs, text user FKs):
+• channels: id, workspaceId (int), name, type ('project'/'direct'/'team'), projectId (int, nullable), createdAt
+• messages: id, channelId (int), senderId (text — varchar user ID), content, createdAt
+• task_comments: id, taskId (int, references teamTasks), authorId (text — varchar user ID), content,
+parentCommentId (int, nullable), createdAt
+• documents: id, workspaceId (int), title, content, createdBy (text), isWiki (boolean, default false), parentDocumentId
+(int, nullable), sortOrder (int, default 0), createdAt, updatedAt
+18. AUTO-CREATE CHANNELS
+When a project is created (from Prompt 2's create project route), also create a project channel automatically in channels
+table.
+API ROUTES
+Add all routes to server/routes.ts. IStorage pattern. isAuthenticated middleware.
+• Channels: GET /api/channels?workspaceId=X, POST /api/channels
+• Messages: GET /api/messages?channelId=X, POST /api/messages
+• Task Comments: GET /api/task-comments?taskId=X, POST /api/task-comments
+• Documents: CRUD /api/documents
+• View preference: PATCH /api/workspace-members/me/preferred-view — uses req.user.claims.sub on the
+backend to find the record, no ID needed from frontend (Fix 27)
+PAGE REGISTRATION
+Fix 25 — EXPLICIT ROUTE: Register at route /dashboard/messages → Messages page.
+Fix 24 — SIDEBAR: Add 'Messages' to menuItems in AppSidebar.tsx with MessageSquare icon.
+AFTER ALL CODE CHANGES: Run npx drizzle-kit push
+BOUNDARIES
+✖ Build everything described: all 6 views + collaboration tools + database + API routes + page registration + sidebar
+✖ All views read from team_tasks table (not tasks)
+✖ Only modify these specific files from earlier prompts: (1) add preferred_view column to workspace_members in
+schema.ts, (2) add TaskComments into TaskDetailPanel, (3) auto-create channels in project creation route (Fix 13)
+✖ Do not add features from future prompts
