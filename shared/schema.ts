@@ -1026,8 +1026,13 @@ export const timeEntries = pgTable("time_entries", {
   userId: text("user_id").notNull(),
   taskId: integer("task_id"),
   projectId: integer("project_id"),
+  workspaceId: integer("workspace_id"),
   date: date("date").notNull(),
   minutes: integer("minutes").notNull(),
+  durationMinutes: integer("duration_minutes"),
+  description: text("description"),
+  startedAt: timestamp("started_at"),
+  endedAt: timestamp("ended_at"),
   notes: text("notes"),
   source: text("source").notNull().default("manual"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -2567,3 +2572,29 @@ export type TeamInsightSnapshot = typeof teamInsightSnapshots.$inferSelect;
 export type ExternalIntegration = typeof externalIntegrations.$inferSelect;
 export type OnboardingProgress = typeof onboardingProgress.$inferSelect;
 export type AiUsageLog = typeof aiUsageLogs.$inferSelect;
+
+// ============================================================
+// SPRINT 8-10: NEW TABLES
+// ============================================================
+
+export const calendarEvents = pgTable("calendar_events", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  title: text("title"),
+  description: text("description"),
+  startTime: timestamp("start_time"),
+  endTime: timestamp("end_time"),
+  allDay: boolean("all_day").default(false),
+  location: text("location"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// ============================================================
+// SPRINT 8-10: CONVENIENCE ALIASES (map route imports to tables)
+// ============================================================
+
+export const notificationItems = aiNotificationItems;
+export const templates = aiTemplates;
+export const habits = aiHabits;
+export const habitCompletions = aiHabitCompletions;
+export const productivityScores = aiProductivityScores;

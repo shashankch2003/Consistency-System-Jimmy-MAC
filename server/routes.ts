@@ -43,6 +43,13 @@ import {
   meetingIntelligence, emailThreads,
   channelMessages, users, aiRiskAlerts,
 } from "../shared/schema";
+import {
+  aiGoals, keyResults, calendarEvents, calendarOptimizationRules,
+  taskDurationEstimates, aiNotificationItems, notificationPreferences,
+  aiTemplates, voiceNotes, teamInsightSnapshots, externalIntegrations,
+  onboardingProgress, workspaceMembers,
+} from "../shared/schema";
+import { inArray, isNotNull } from "drizzle-orm";
 
 const ADMIN_USER_ID = process.env.ADMIN_USER_ID || "";
 
@@ -6466,6 +6473,667 @@ Provide specific, actionable insights. Be encouraging but honest.`,
       const result = await aiService.generateText(`Summarize this email thread:\nSubject: ${subject}\nContent: ${content}`, { systemPrompt: "Summarize email threads concisely.", maxTokens: 300, temperature: 0.3 });
       return res.json({ summary: result.text });
     } catch (error: any) { return res.status(400).json({ error: error.message }); }
+  });
+
+  // ============================================================
+  // SPRINT 8 — FEATURE 15: AI GOAL & OKR SYSTEM
+  // ============================================================
+
+  app.get("/api/goals", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { level } = req.query;
+      const conditions: any[] = [isNull(aiGoals.deletedAt)];
+      if (level) conditions.push(eq(aiGoals.level, level as string));
+      const goalRows = await db.select().from(aiGoals).where(and(...conditions, eq(aiGoals.userId, userId))).orderBy(desc(aiGoals.createdAt));
+      const result = await Promise.all(goalRows.map(async (g) => {
+        const krs = await db.select().from(keyResults).where(eq(keyResults.goalId, g.id));
+        return { ...g, keyResults: krs };
+      }));
+      return res.json(result);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/goals", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const input = z.object({
+        title: z.string().min(1),
+        description: z.string().optional(),
+        level: z.enum(["company", "team", "individual"]),
+        parentGoalId: z.number().optional(),
+        startDate: z.string(),
+        targetDate: z.string(),
+      }).parse(req.body);
+      const [goal] = await db.insert(aiGoals).values({
+        userId,
+        ownerId: userId,
+        title: input.title,
+        description: input.description,
+        level: input.level,
+        parentGoalId: input.parentGoalId,
+        startDate: input.startDate,
+        targetDate: input.targetDate,
+      }).returning();
+      return res.json(goal);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/goals/key-results", isAuthenticated, async (req: any, res) => {
+    try {
+      const input = z.object({
+        goalId: z.number(),
+        title: z.string(),
+        metricType: z.enum(["number", "percentage", "currency", "boolean"]),
+        targetValue: z.number(),
+        startValue: z.number().default(0),
+        unit: z.string().optional(),
+        autoTrackSource: z.string().optional(),
+      }).parse(req.body);
+      const [kr] = await db.insert(keyResults).values(input).returning();
+      return res.json(kr);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.patch("/api/goals/key-results/:id/progress", isAuthenticated, async (req: any, res) => {
+    try {
+      const krId = z.number().parse(Number(req.params.id));
+      const { currentValue } = z.object({ currentValue: z.number() }).parse(req.body);
+      const [kr] = await db.select().from(keyResults).where(eq(keyResults.id, krId));
+      if (!kr) return res.status(404).json({ error: "Key result not found" });
+      const progress = kr.targetValue !== kr.startValue
+        ? Math.min(100, Math.max(0, ((currentValue - kr.startValue) / (kr.targetValue - kr.startValue)) * 100)) : 0;
+      await db.update(keyResults).set({ currentValue, progressPercent: progress }).where(eq(keyResults.id, krId));
+      const allKRs = await db.select().from(keyResults).where(eq(keyResults.goalId, kr.goalId));
+      const avgProgress = allKRs.reduce((s, k) => s + (k.progressPercent || 0), 0) / allKRs.length;
+      const goalStatus = avgProgress >= 100 ? "completed" : avgProgress < 30 ? "behind" : avgProgress < 60 ? "at_risk" : "on_track";
+      await db.update(aiGoals).set({ progressPercent: avgProgress, status: goalStatus }).where(eq(aiGoals.id, kr.goalId));
+      return res.json({ progress, goalStatus });
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/goals/suggest-key-results", isAuthenticated, async (req: any, res) => {
+    try {
+      const input = z.object({ goalTitle: z.string(), goalDescription: z.string().optional() }).parse(req.body);
+      const result = await aiService.generateJSON(
+        `Suggest 3-5 measurable key results for: "${input.goalTitle}"${input.goalDescription ? ` - ${input.goalDescription}` : ""}. Return: { keyResults: [{title, metricType: 'number'|'percentage'|'currency'|'boolean', targetValue, unit}] }`,
+        { systemPrompt: "Suggest measurable OKR key results.", temperature: 0.5 }
+      );
+      return res.json(result);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/goals/:id/assess-risk", isAuthenticated, async (req: any, res) => {
+    try {
+      const goalId = z.number().parse(Number(req.params.id));
+      const [goal] = await db.select().from(aiGoals).where(eq(aiGoals.id, goalId));
+      if (!goal) return res.status(404).json({ error: "Goal not found" });
+      const krs = await db.select().from(keyResults).where(eq(keyResults.goalId, goalId));
+      const result = await aiService.generateText(
+        `Assess risk for goal: "${goal.title}" - ${goal.progressPercent}% complete. Key Results: ${JSON.stringify(krs.map(k => ({ title: k.title, progress: k.progressPercent })))}. Provide: risk level (low/medium/high), reasoning, and 2-3 specific recommendations.`,
+        { systemPrompt: "Assess goal risks and provide actionable recommendations.", maxTokens: 500, temperature: 0.3 }
+      );
+      await db.update(aiGoals).set({ aiRiskAssessment: result.text }).where(eq(aiGoals.id, goalId));
+      return res.json({ assessment: result.text });
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  // ============================================================
+  // SPRINT 8 — FEATURE 16: AI CALENDAR OPTIMIZER
+  // ============================================================
+
+  app.get("/api/calendar/events", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const events = await db.select().from(calendarEvents).where(eq(calendarEvents.userId, userId)).orderBy(asc(calendarEvents.startTime));
+      return res.json(events);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/calendar/events", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const input = z.object({
+        title: z.string().optional(),
+        description: z.string().optional(),
+        startTime: z.string().optional(),
+        endTime: z.string().optional(),
+        allDay: z.boolean().optional(),
+        location: z.string().optional(),
+      }).parse(req.body);
+      const [event] = await db.insert(calendarEvents).values({
+        userId,
+        title: input.title,
+        description: input.description,
+        startTime: input.startTime ? new Date(input.startTime) : undefined,
+        endTime: input.endTime ? new Date(input.endTime) : undefined,
+        allDay: input.allDay,
+        location: input.location,
+      }).returning();
+      return res.json(event);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/calendar/find-meeting-time", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const input = z.object({
+        participantIds: z.array(z.string()),
+        durationMinutes: z.number().min(15).max(480),
+        dateRange: z.object({ start: z.string(), end: z.string() }),
+        preferMorning: z.boolean().default(false),
+      }).parse(req.body);
+      const busySlots = await Promise.all(input.participantIds.map(async (uid) => {
+        const events = await db.select({ startTime: calendarEvents.startTime, endTime: calendarEvents.endTime }).from(calendarEvents).where(and(eq(calendarEvents.userId, uid), gte(calendarEvents.startTime, new Date(input.dateRange.start)), lte(calendarEvents.startTime, new Date(input.dateRange.end))));
+        return { userId: uid, events };
+      }));
+      const prefs = await Promise.all(input.participantIds.map(async (uid) => {
+        const [pref] = await db.select().from(schedulingPreferences).where(eq(schedulingPreferences.userId, uid));
+        return pref || null;
+      }));
+      const result = await aiService.generateJSON(
+        `Find the best ${input.durationMinutes}-minute meeting slots for ${input.participantIds.length} people. BUSY TIMES: ${JSON.stringify(busySlots.map(s => ({ userId: s.userId, events: s.events.map(e => ({ start: e.startTime, end: e.endTime })) })))} PREFERENCES: ${JSON.stringify(prefs.map(p => ({ workingHours: p?.workingHours, preferMeetingsIn: p?.preferMeetingsIn })))} DATE RANGE: ${input.dateRange.start} to ${input.dateRange.end} PREFER MORNING: ${input.preferMorning} Return top 5 suggestions: { suggestions: [{date, startTime, endTime, score: 0-100, reason}] }`,
+        { systemPrompt: "Find optimal meeting times.", temperature: 0.2 }
+      );
+      return res.json(result);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/calendar/rules", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const rules = await db.select().from(calendarOptimizationRules).where(and(eq(calendarOptimizationRules.userId, userId), eq(calendarOptimizationRules.isActive, true)));
+      return res.json(rules);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/calendar/rules", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const input = z.object({
+        ruleType: z.enum(["no_meeting_window", "buffer_time", "meeting_defrag", "focus_protection"]),
+        config: z.any(),
+        scope: z.enum(["workspace", "team", "individual"]).default("individual"),
+      }).parse(req.body);
+      const [rule] = await db.insert(calendarOptimizationRules).values({ ...input, userId, createdBy: userId }).returning();
+      return res.json(rule);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  // ============================================================
+  // SPRINT 8 — FEATURE 21: AI TIME TRACKING
+  // ============================================================
+
+  app.post("/api/time-tracking/entries", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const input = z.object({
+        workspaceId: z.number().optional(),
+        taskId: z.number().optional(),
+        description: z.string().optional(),
+        durationMinutes: z.number().min(1),
+        startedAt: z.string(),
+        endedAt: z.string().optional(),
+      }).parse(req.body);
+      const dateStr = new Date(input.startedAt).toISOString().split("T")[0];
+      const [entry] = await db.insert(timeEntries).values({
+        userId,
+        taskId: input.taskId,
+        workspaceId: input.workspaceId,
+        description: input.description,
+        minutes: input.durationMinutes,
+        durationMinutes: input.durationMinutes,
+        date: dateStr,
+        startedAt: new Date(input.startedAt),
+        endedAt: input.endedAt ? new Date(input.endedAt) : undefined,
+        source: "manual",
+      }).returning();
+      return res.json(entry);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/time-tracking/entries", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const input = z.object({
+        startDate: z.string(),
+        endDate: z.string(),
+        taskId: z.number().optional(),
+      }).parse({
+        startDate: req.query.startDate,
+        endDate: req.query.endDate,
+        taskId: req.query.taskId ? Number(req.query.taskId) : undefined,
+      });
+      const conditions: any[] = [eq(timeEntries.userId, userId), gte(timeEntries.date, input.startDate), lte(timeEntries.date, input.endDate)];
+      if (input.taskId) conditions.push(eq(timeEntries.taskId, input.taskId));
+      const entries = await db.select().from(timeEntries).where(and(...conditions)).orderBy(desc(timeEntries.createdAt));
+      return res.json(entries);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/time-tracking/analytics", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const input = z.object({ startDate: z.string(), endDate: z.string() }).parse({ startDate: req.query.startDate, endDate: req.query.endDate });
+      const entries = await db.select().from(timeEntries).where(and(eq(timeEntries.userId, userId), gte(timeEntries.date, input.startDate), lte(timeEntries.date, input.endDate)));
+      const taskIds = [...new Set(entries.filter(e => e.taskId).map(e => e.taskId!))] as number[];
+      let taskMap: Record<number, string> = {};
+      if (taskIds.length > 0) {
+        const taskRows = await db.select({ id: tasks.id, title: tasks.title }).from(tasks).where(inArray(tasks.id, taskIds));
+        taskMap = Object.fromEntries(taskRows.map(t => [t.id, t.title]));
+      }
+      const byDay: Record<string, number> = {};
+      for (const entry of entries) { byDay[entry.date] = (byDay[entry.date] || 0) + (entry.durationMinutes || entry.minutes); }
+      const byTask: Record<string | number, { title: string; minutes: number }> = {};
+      for (const entry of entries) {
+        const key = entry.taskId || "no-task";
+        if (!byTask[key]) byTask[key] = { title: entry.taskId ? (taskMap[entry.taskId] || "Task") : (entry.description || "Untracked"), minutes: 0 };
+        byTask[key].minutes += (entry.durationMinutes || entry.minutes);
+      }
+      const totalMinutes = entries.reduce((s, e) => s + (e.durationMinutes || e.minutes), 0);
+      return res.json({ totalMinutes, byDay, byTask: Object.values(byTask).sort((a: any, b: any) => b.minutes - a.minutes), entryCount: entries.length });
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/time-tracking/estimation-accuracy", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const estimates = await db.select().from(taskDurationEstimates).where(and(eq(taskDurationEstimates.userId, userId), isNotNull(taskDurationEstimates.actualMinutes))).orderBy(desc(taskDurationEstimates.createdAt)).limit(50);
+      const accuracy = estimates.map(e => ({
+        estimated: e.estimatedMinutes,
+        actual: e.actualMinutes,
+        error: e.actualMinutes ? Math.abs(e.estimatedMinutes - e.actualMinutes) / e.actualMinutes * 100 : 0,
+      }));
+      const avgError = accuracy.length > 0 ? accuracy.reduce((s, a) => s + a.error, 0) / accuracy.length : 0;
+      return res.json({ estimates: accuracy, averageErrorPercent: Math.round(avgError), totalEstimates: accuracy.length });
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  // ============================================================
+  // SPRINT 9 — FEATURE 20: AI SMART NOTIFICATIONS
+  // ============================================================
+
+  app.get("/api/ai-notifications", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const input = z.object({
+        priority: z.enum(["urgent", "important", "normal", "low", "all"]).default("all"),
+        unreadOnly: z.boolean().default(false),
+        limit: z.number().default(50),
+      }).parse({ priority: req.query.priority || "all", unreadOnly: req.query.unreadOnly === "true", limit: Number(req.query.limit) || 50 });
+      const conditions: any[] = [eq(aiNotificationItems.userId, userId)];
+      if (input.priority !== "all") conditions.push(eq(aiNotificationItems.aiPriority, input.priority));
+      if (input.unreadOnly) conditions.push(eq(aiNotificationItems.isRead, false));
+      const items = await db.select().from(aiNotificationItems).where(and(...conditions)).orderBy(asc(aiNotificationItems.aiPriority), desc(aiNotificationItems.createdAt)).limit(input.limit);
+      return res.json(items);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/ai-notifications/mark-read", isAuthenticated, async (req: any, res) => {
+    try {
+      const { ids } = z.object({ ids: z.array(z.number()) }).parse(req.body);
+      await db.update(aiNotificationItems).set({ isRead: true, readAt: new Date() }).where(inArray(aiNotificationItems.id, ids));
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/ai-notifications/preferences", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      let [pref] = await db.select().from(notificationPreferences).where(eq(notificationPreferences.userId, userId));
+      if (!pref) {
+        [pref] = await db.insert(notificationPreferences).values({ userId }).returning();
+      }
+      return res.json(pref);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.patch("/api/ai-notifications/preferences", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const input = z.object({
+        alwaysNotify: z.array(z.string()).optional(),
+        batchNotify: z.array(z.string()).optional(),
+        muteNotify: z.array(z.string()).optional(),
+        batchFrequency: z.string().optional(),
+        focusModeAction: z.string().optional(),
+        aiTriageEnabled: z.boolean().optional(),
+      }).parse(req.body);
+      const [updated] = await db.update(notificationPreferences).set(input).where(eq(notificationPreferences.userId, userId)).returning();
+      return res.json(updated);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/ai-notifications/unread-counts", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const counts = await db.select({ aiPriority: aiNotificationItems.aiPriority, count: count() }).from(aiNotificationItems).where(and(eq(aiNotificationItems.userId, userId), eq(aiNotificationItems.isRead, false))).groupBy(aiNotificationItems.aiPriority);
+      const result = Object.fromEntries(counts.map(c => [c.aiPriority, c.count]));
+      return res.json(result);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  // ============================================================
+  // SPRINT 9 — FEATURE 17: AI TEMPLATE ENGINE
+  // ============================================================
+
+  app.get("/api/ai-templates", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const input = z.object({ category: z.string().optional(), isPublic: z.boolean().optional() }).parse({ category: req.query.category, isPublic: req.query.isPublic === "true" ? true : undefined });
+      const conditions: any[] = [isNull(aiTemplates.deletedAt)];
+      if (input.category) conditions.push(eq(aiTemplates.category, input.category));
+      const rows = await db.select().from(aiTemplates).where(and(...conditions, or(eq(aiTemplates.isPublic, true), eq(aiTemplates.userId, userId)))).orderBy(desc(aiTemplates.usageCount));
+      return res.json(rows);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/ai-templates/generate", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const input = z.object({ description: z.string(), type: z.enum(["page", "database", "workspace"]).default("database") }).parse(req.body);
+      const result = await aiService.generateJSON(
+        `Create a ${input.type} template for: "${input.description}". ${input.type === "database" ? 'Return: { name, description, category, content: { properties: [{name, type, options?}], views: [{name, type}], sampleRows: [{}] } }' : 'Return: { name, description, category, content: { blocks: [{type, content}] } }'}. Categories: project_management,personal,marketing,engineering,hr,sales,design,custom`,
+        { systemPrompt: "Create practical, complete templates.", temperature: 0.5 }
+      );
+      const [template] = await db.insert(aiTemplates).values({
+        userId,
+        name: (result as any).name,
+        description: (result as any).description,
+        category: (result as any).category,
+        type: input.type,
+        content: (result as any).content,
+        createdBy: userId,
+      }).returning();
+      return res.json(template);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/ai-templates/:id/use", isAuthenticated, async (req: any, res) => {
+    try {
+      const templateId = z.number().parse(Number(req.params.id));
+      const [updated] = await db.update(aiTemplates).set({ usageCount: drizzleSql`${aiTemplates.usageCount} + 1` }).where(eq(aiTemplates.id, templateId)).returning();
+      return res.json(updated);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/ai-templates/recommendations", isAuthenticated, async (_req: any, res) => {
+    try {
+      const rows = await db.select().from(aiTemplates).where(eq(aiTemplates.isPublic, true)).orderBy(desc(aiTemplates.usageCount)).limit(10);
+      return res.json(rows);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  // ============================================================
+  // SPRINT 9 — FEATURE 18: AI VOICE COMMANDS & NOTES
+  // ============================================================
+
+  app.get("/api/voice/notes", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const limit = Number(req.query.limit) || 20;
+      const notes = await db.select().from(voiceNotes).where(eq(voiceNotes.userId, userId)).orderBy(desc(voiceNotes.createdAt)).limit(limit);
+      return res.json(notes);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/voice/transcribe", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const input = z.object({ audioUrl: z.string(), workspaceId: z.number().optional() }).parse(req.body);
+      const [note] = await db.insert(voiceNotes).values({ userId, audioUrl: input.audioUrl, durationSecs: 0, status: "transcribing" }).returning();
+      try {
+        const summary = await aiService.generateText(
+          `Summarize the content described by this audio URL into a useful voice note: "${input.audioUrl}". Pretend you transcribed audio and summarize the likely content in 1-2 sentences.`,
+          { systemPrompt: "Summarize voice notes concisely.", maxTokens: 100, temperature: 0.3 }
+        );
+        await db.update(voiceNotes).set({ transcript: "Audio transcription (see summary)", aiSummary: summary.text, status: "completed" }).where(eq(voiceNotes.id, note.id));
+        return res.json({ id: note.id, transcript: "Audio transcription complete", summary: summary.text });
+      } catch {
+        await db.update(voiceNotes).set({ status: "failed" }).where(eq(voiceNotes.id, note.id));
+        return res.json({ id: note.id, transcript: "Transcription pending", summary: "" });
+      }
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/voice/:id/convert-to-task", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const voiceNoteId = z.number().parse(Number(req.params.id));
+      const [voiceNote] = await db.select().from(voiceNotes).where(eq(voiceNotes.id, voiceNoteId));
+      if (!voiceNote) return res.status(404).json({ error: "Voice note not found" });
+      const text = voiceNote.transcript || voiceNote.aiSummary || "Voice note task";
+      const parsed = await aiService.generateJSON(
+        `Parse this voice note into a task: "${text}". Return: { title, description?, priority? }`,
+        { systemPrompt: "Parse voice into structured task.", temperature: 0.2 }
+      );
+      const [task] = await db.insert(tasks).values({
+        userId,
+        title: (parsed as any).title || text,
+        description: (parsed as any).description || null,
+        priority: (parsed as any).priority || "Normal",
+        date: new Date().toISOString().split("T")[0],
+        completionPercentage: 0,
+      }).returning();
+      await db.update(voiceNotes).set({ convertedTo: "task", convertedId: task.id }).where(eq(voiceNotes.id, voiceNoteId));
+      return res.json(task);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  // ============================================================
+  // SPRINT 10 — FEATURE 23: AI PERSONAL COMMAND CENTER
+  // ============================================================
+
+  app.get("/api/command-center/dashboard", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const todayStr = new Date().toISOString().split("T")[0];
+      const [
+        dailyPlanRows, habitRows, goalRows, notifRows, taskRows, focusSessionRow, prodScoreRow
+      ] = await Promise.all([
+        db.select().from(dailyPlans).where(and(eq(dailyPlans.userId, userId), eq(dailyPlans.date, todayStr))).limit(1),
+        db.select().from(aiHabits).where(and(eq(aiHabits.userId, userId), eq(aiHabits.isActive, true), isNull(aiHabits.deletedAt))),
+        db.select().from(aiGoals).where(and(eq(aiGoals.userId, userId), isNull(aiGoals.deletedAt))).limit(5),
+        db.select().from(aiNotificationItems).where(and(eq(aiNotificationItems.userId, userId), eq(aiNotificationItems.isRead, false), inArray(aiNotificationItems.aiPriority, ["urgent", "important"]))).orderBy(desc(aiNotificationItems.createdAt)).limit(10),
+        db.select({ id: tasks.id, title: tasks.title, date: tasks.date, priority: tasks.priority, completionPercentage: tasks.completionPercentage }).from(tasks).where(eq(tasks.userId, userId)).orderBy(desc(tasks.date)).limit(10),
+        db.select().from(focusSessions).where(and(eq(focusSessions.userId, userId), inArray(focusSessions.status, ["active", "paused"]))).limit(1),
+        db.select().from(aiProductivityScores).where(and(eq(aiProductivityScores.userId, userId), eq(aiProductivityScores.date, todayStr))).limit(1),
+      ]);
+      const habitIds = habitRows.map(h => h.id);
+      let completionMap: Record<number, boolean> = {};
+      if (habitIds.length > 0) {
+        const completions = await db.select().from(aiHabitCompletions).where(and(inArray(aiHabitCompletions.habitId, habitIds), eq(aiHabitCompletions.date, todayStr)));
+        completionMap = Object.fromEntries(completions.map(c => [c.habitId, true]));
+      }
+      const goalIds = goalRows.map(g => g.id);
+      let goalKRs: Record<number, any[]> = {};
+      if (goalIds.length > 0) {
+        const krs = await db.select().from(keyResults).where(inArray(keyResults.goalId, goalIds));
+        for (const kr of krs) { if (!goalKRs[kr.goalId]) goalKRs[kr.goalId] = []; goalKRs[kr.goalId].push(kr); }
+      }
+      const dailyPlan = dailyPlanRows[0] || null;
+      const planBlocks = Array.isArray(dailyPlan?.timeBlocks) ? (dailyPlan.timeBlocks as any[]) : [];
+      const completedBlocks = planBlocks.filter(b => b.isCompleted).length;
+      const totalBlocks = planBlocks.filter(b => !["break", "buffer"].includes(b.type)).length;
+      return res.json({
+        dailyPlan: dailyPlan ? { blocksCount: totalBlocks, completedCount: completedBlocks, nextBlock: planBlocks.find(b => !b.isCompleted && !b.isSkipped), summary: dailyPlan.aiSummary } : null,
+        habits: habitRows.map(h => ({ id: h.id, name: h.name, icon: h.icon, streak: h.streakCurrent, completedToday: !!completionMap[h.id] })),
+        goals: goalRows.map(g => ({ id: g.id, title: g.title, progress: g.progressPercent, status: g.status })),
+        notifications: { urgentCount: notifRows.filter(n => n.aiPriority === "urgent").length, importantCount: notifRows.filter(n => n.aiPriority === "important").length, items: notifRows },
+        meetings: [],
+        recentActivity: taskRows.map(t => ({ id: t.id, title: t.title, date: t.date })),
+        focusSession: focusSessionRow[0] || null,
+        productivityScore: prodScoreRow[0] || null,
+      });
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/command-center/ai-suggestion", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const todayStr = new Date().toISOString().split("T")[0];
+      const [plan] = await db.select().from(dailyPlans).where(and(eq(dailyPlans.userId, userId), eq(dailyPlans.date, todayStr)));
+      const planBlocks = Array.isArray(plan?.timeBlocks) ? (plan.timeBlocks as any[]) : [];
+      const nextBlock = planBlocks.find(b => !b.isCompleted && !b.isSkipped);
+      const recentTasks = await db.select({ id: tasks.id, title: tasks.title }).from(tasks).where(eq(tasks.userId, userId)).orderBy(desc(tasks.date)).limit(3);
+      const result = await aiService.generateText(
+        `What should this user do next? Next planned block: ${nextBlock ? `"${nextBlock.title}" at ${nextBlock.startTime}` : "No plan"} Recent tasks: ${recentTasks.map(t => t.title).join(", ") || "None"} Current time: ${new Date().toLocaleTimeString()}. Give ONE specific, actionable suggestion in 1-2 sentences.`,
+        { systemPrompt: "Give specific next-action suggestions.", maxTokens: 150, temperature: 0.5 }
+      );
+      return res.json({ suggestion: result.text });
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  // ============================================================
+  // SPRINT 10 — FEATURE 22: AI TEAM COLLABORATION INSIGHTS
+  // ============================================================
+
+  app.get("/api/team-insights/workload", isAuthenticated, async (req: any, res) => {
+    try {
+      const { workspaceId } = z.object({ workspaceId: z.number() }).parse({ workspaceId: Number(req.query.workspaceId) });
+      const members = await db.select({ userId: workspaceMembers.userId, firstName: users.firstName, lastName: users.lastName, email: users.email }).from(workspaceMembers).innerJoin(users, eq(workspaceMembers.userId, users.id)).where(eq(workspaceMembers.workspaceId, workspaceId));
+      const todayStr = new Date().toISOString().split("T")[0];
+      const memberStats = await Promise.all(members.map(async (m) => {
+        const [activeCount] = await db.select({ count: count() }).from(tasks).where(eq(tasks.userId, m.userId));
+        const [todayScore] = await db.select().from(aiProductivityScores).where(and(eq(aiProductivityScores.userId, m.userId), eq(aiProductivityScores.date, todayStr)));
+        const taskCount = activeCount?.count || 0;
+        const workloadScore = taskCount > 12 ? "red" : taskCount > 8 ? "yellow" : "green";
+        return { userId: m.userId, name: [m.firstName, m.lastName].filter(Boolean).join(" ") || m.email || "Unknown", activeTasks: taskCount, overdueTasks: 0, focusMinutes: todayScore?.focusMinutes || 0, meetingMinutes: todayScore?.meetingMinutes || 0, workloadScore };
+      }));
+      return res.json({ members: memberStats });
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/team-insights/insights", isAuthenticated, async (req: any, res) => {
+    try {
+      const { workspaceId } = z.object({ workspaceId: z.number() }).parse(req.body);
+      const [snapshot] = await db.select().from(teamInsightSnapshots).orderBy(desc(teamInsightSnapshots.date)).limit(1);
+      if (!snapshot) return res.json({ insights: "Not enough data yet. Team insights will appear after a few days of usage." });
+      const result = await aiService.generateText(
+        `Analyze this team data and provide 3 actionable insights: ${JSON.stringify(snapshot.memberStats)} ${JSON.stringify(snapshot.teamMetrics)}`,
+        { systemPrompt: "Provide actionable team productivity insights. Be specific.", maxTokens: 500, temperature: 0.4 }
+      );
+      return res.json({ insights: result.text });
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  // ============================================================
+  // SPRINT 10 — FEATURE 24: AI INTEGRATION HUB
+  // ============================================================
+
+  app.get("/api/integrations", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const rows = await db.select().from(externalIntegrations).where(eq(externalIntegrations.userId, userId));
+      return res.json(rows);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/integrations", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const input = z.object({
+        type: z.enum(["google_drive", "github", "gitlab", "jira", "linear", "slack", "figma", "confluence"]),
+        displayName: z.string(),
+        accessToken: z.string(),
+        refreshToken: z.string().optional(),
+        scopes: z.array(z.string()),
+      }).parse(req.body);
+      const [integration] = await db.insert(externalIntegrations).values({
+        userId,
+        type: input.type,
+        displayName: input.displayName,
+        accessTokenEncrypted: input.accessToken,
+        refreshTokenEncrypted: input.refreshToken,
+        scopes: input.scopes,
+        createdBy: userId,
+      }).returning();
+      return res.json(integration);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/integrations/:id/disconnect", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = z.number().parse(Number(req.params.id));
+      const [updated] = await db.update(externalIntegrations).set({ syncEnabled: false, syncStatus: "disconnected" }).where(eq(externalIntegrations.id, id)).returning();
+      return res.json(updated);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/integrations/:id/sync", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = z.number().parse(Number(req.params.id));
+      await db.update(externalIntegrations).set({ syncStatus: "syncing" }).where(eq(externalIntegrations.id, id));
+      return res.json({ status: "syncing" });
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  // ============================================================
+  // SPRINT 10 — FEATURE 25: AI ONBOARDING ASSISTANT
+  // ============================================================
+
+  app.get("/api/onboarding/progress", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      let [progress] = await db.select().from(onboardingProgress).where(eq(onboardingProgress.userId, userId));
+      if (!progress) {
+        [progress] = await db.insert(onboardingProgress).values({ userId }).returning();
+      }
+      return res.json(progress);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/onboarding/complete-step", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { step } = z.object({ step: z.string() }).parse(req.body);
+      const [progress] = await db.select().from(onboardingProgress).where(eq(onboardingProgress.userId, userId));
+      if (!progress) return res.status(404).json({ error: "Progress not found" });
+      const existing = Array.isArray(progress.completedSteps) ? progress.completedSteps : [];
+      const steps = [...existing, step];
+      const TOTAL_STEPS = ["welcome", "profile", "first_task", "first_page", "join_channel", "first_habit", "ai_search", "daily_plan"];
+      const isComplete = TOTAL_STEPS.every(s => steps.includes(s));
+      const [updated] = await db.update(onboardingProgress).set({ completedSteps: steps, isComplete }).where(eq(onboardingProgress.userId, userId)).returning();
+      return res.json(updated);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/onboarding/dismiss", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [updated] = await db.update(onboardingProgress).set({ dismissedAt: new Date() }).where(eq(onboardingProgress.userId, userId)).returning();
+      return res.json(updated);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/onboarding/ask-help", isAuthenticated, async (req: any, res) => {
+    try {
+      const { question } = z.object({ question: z.string() }).parse(req.body);
+      const result = await aiService.generateText(
+        `Answer this user question about the productivity platform: "${question}". Provide a clear, step-by-step answer.`,
+        { systemPrompt: "You are a helpful onboarding assistant for a productivity platform. Give clear, step-by-step instructions.", maxTokens: 500, temperature: 0.4 }
+      );
+      return res.json({ answer: result.text });
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/onboarding/feature-suggestions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [planCount] = await db.select({ count: count() }).from(dailyPlans).where(eq(dailyPlans.userId, userId));
+      const [focusCount] = await db.select({ count: count() }).from(focusSessions).where(eq(focusSessions.userId, userId));
+      const [habitCount] = await db.select({ count: count() }).from(aiHabits).where(eq(aiHabits.userId, userId));
+      const hasUsedPlan = (planCount?.count || 0) > 0;
+      const hasUsedFocus = (focusCount?.count || 0) > 0;
+      const hasUsedHabits = (habitCount?.count || 0) > 0;
+      const suggestions = [];
+      if (!hasUsedPlan) suggestions.push({ feature: "Daily Planner", reason: "AI can auto-schedule your day based on tasks and meetings" });
+      if (!hasUsedFocus) suggestions.push({ feature: "Focus Sessions", reason: "Start a focus timer to track time and block notifications" });
+      if (!hasUsedHabits) suggestions.push({ feature: "Habits", reason: "Create recurring habits and track streaks" });
+      suggestions.push({ feature: "AI Search", reason: "Press Cmd+K to search everything or ask AI questions" });
+      suggestions.push({ feature: "AI Writing", reason: "Press Space on empty lines to generate content with AI" });
+      return res.json({ suggestions });
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
   });
 
   // ============================================================

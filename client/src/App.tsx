@@ -52,6 +52,16 @@ import MeetingsPage from "@/pages/dashboard/meetings";
 import DocGeneratorPage from "@/pages/dashboard/doc-generator";
 import MessagingAiPage from "@/pages/dashboard/messaging-ai";
 import EmailPage from "@/pages/dashboard/email";
+import OkrSystemPage from "@/pages/dashboard/okr-system";
+import CalendarOptimizerPage from "@/pages/dashboard/calendar-optimizer";
+import TimeTrackingPage from "@/pages/dashboard/time-tracking";
+import NotificationsCenterPage from "@/pages/dashboard/notifications-center";
+import AiTemplateEnginePage from "@/pages/dashboard/ai-template-engine";
+import VoicePage from "@/pages/dashboard/voice";
+import CommandCenterPage from "@/pages/dashboard/command-center";
+import TeamInsightsPage from "@/pages/dashboard/team-insights";
+import IntegrationsPage from "@/pages/dashboard/integrations";
+import OnboardingPage from "@/pages/dashboard/onboarding";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -294,6 +304,56 @@ function Router() {
       <Route path="/dashboard/email">
         <DashboardLayout>
           <EmailPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/okr-system">
+        <DashboardLayout>
+          <OkrSystemPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/calendar-optimizer">
+        <DashboardLayout>
+          <CalendarOptimizerPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/time-tracking">
+        <DashboardLayout>
+          <TimeTrackingPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/notifications-center">
+        <DashboardLayout>
+          <NotificationsCenterPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/ai-template-engine">
+        <DashboardLayout>
+          <AiTemplateEnginePage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/voice">
+        <DashboardLayout>
+          <VoicePage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/command-center">
+        <DashboardLayout>
+          <CommandCenterPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/team-insights">
+        <DashboardLayout>
+          <TeamInsightsPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/integrations">
+        <DashboardLayout>
+          <IntegrationsPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/onboarding">
+        <DashboardLayout>
+          <OnboardingPage />
         </DashboardLayout>
       </Route>
 

@@ -54,6 +54,11 @@ import {
   Database,
   Video,
   Mail,
+  Bell,
+  Mic,
+  Plug,
+  Star,
+  TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
@@ -98,6 +103,16 @@ const menuItems = [
   { title: "Doc Generator", icon: FileText, url: "/dashboard/doc-generator" },
   { title: "Messaging AI", icon: MessageSquare, url: "/dashboard/messaging-ai" },
   { title: "Email", icon: Mail, url: "/dashboard/email" },
+  { title: "OKR System", icon: Target, url: "/dashboard/okr-system" },
+  { title: "Calendar Optimizer", icon: Calendar, url: "/dashboard/calendar-optimizer" },
+  { title: "Time Tracking", icon: Clock, url: "/dashboard/time-tracking" },
+  { title: "Smart Notifications", icon: Bell, url: "/dashboard/notifications-center" },
+  { title: "AI Templates", icon: Layout, url: "/dashboard/ai-template-engine" },
+  { title: "Voice Notes", icon: Mic, url: "/dashboard/voice" },
+  { title: "Command Center", icon: Command, url: "/dashboard/command-center" },
+  { title: "Team Insights", icon: TrendingUp, url: "/dashboard/team-insights" },
+  { title: "Integrations", icon: Plug, url: "/dashboard/integrations" },
+  { title: "Getting Started", icon: Star, url: "/dashboard/onboarding" },
   { title: "Workspace Setup", icon: Building2, url: "/dashboard/workspace-setup" },
   { title: "Team Management", icon: UsersRound, url: "/dashboard/team-management" },
   { title: "Members", icon: Users, url: "/dashboard/members" },
