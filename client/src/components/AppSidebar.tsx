@@ -37,6 +37,7 @@ import {
   Search,
   Command,
   Users,
+  BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
@@ -146,7 +147,7 @@ export function AppSidebar({ onOpenCommand, onOpenSearch, onOpenCoach }: AppSide
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel className="px-4 py-2 text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">
-            Menu
+            Personal Productivity
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -178,6 +179,29 @@ export function AppSidebar({ onOpenCommand, onOpenSearch, onOpenCoach }: AppSide
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* ─── TEAM INTELLIGENCE (6-Prompt Feature) ─────────────────────── */}
+        <SidebarGroup>
+          <SidebarGroupLabel className="px-4 py-2 text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">
+            Team Intelligence
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location.startsWith("/dashboard/team-intelligence")}
+                  className="data-[active=true]:bg-white/10 data-[active=true]:text-white"
+                >
+                  <Link href="/dashboard/team-intelligence" className="flex items-center gap-3 px-3 py-2">
+                    <BarChart3 className="w-4 h-4" />
+                    <span>Team Intelligence</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
