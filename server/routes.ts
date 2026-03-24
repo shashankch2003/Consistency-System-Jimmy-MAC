@@ -332,10 +332,76 @@ export async function registerRoutes(
   app.post(api.hourlyEntries.createOrUpdate.path, isAuthenticated, async (req: any, res) => {
     try {
       const input = api.hourlyEntries.createOrUpdate.input.parse(req.body);
-      const entry = await storage.upsertHourlyEntry({ ...input, userId: req.user.claims.sub });
+      const userId = req.user.claims.sub;
+      const entry = await storage.upsertHourlyEntry({ ...input, userId });
       res.json(entry);
+
+      // Auto-sync team intelligence snapshot from today's hourly entries (fire-and-forget)
+      syncTeamSnapshotFromHourly(userId, input.date).catch(() => {});
     } catch (e: any) { res.status(400).json({ message: e.message }); }
   });
+
+  async function syncTeamSnapshotFromHourly(userId: string, date: string) {
+    const dayEntries = await storage.getHourlyEntriesByDate(userId, date);
+    const scored = dayEntries.filter(e => e.productivityScore > 0);
+    if (scored.length === 0) return;
+
+    const deepFocusHours = scored.filter(e => e.sessionType === 'deep_focus').length;
+    const meetingHours = scored.filter(e => e.sessionType === 'meeting').length;
+    const shallowHours = scored.filter(e => ['shallow_work', 'daily_task', 'other'].includes(e.sessionType || 'other')).length;
+    const learningHours = scored.filter(e => e.sessionType === 'learning').length;
+    const breakHours = scored.filter(e => e.sessionType === 'break').length;
+    const activeHours = scored.filter(e => e.sessionType !== 'break').length;
+
+    const avgScore = scored.reduce((s, e) => s + e.productivityScore, 0) / scored.length;
+
+    // Count context switches (each session type change counts as a switch)
+    let contextSwitches = 0;
+    for (let i = 1; i < scored.length; i++) {
+      if (scored[i].sessionType !== scored[i - 1].sessionType) contextSwitches++;
+    }
+
+    // Find longest deep focus or uninterrupted same-type block in minutes
+    let longestFocus = 0;
+    let currentRun = 0;
+    let lastType = '';
+    for (const e of scored) {
+      if (e.sessionType === lastType && e.sessionType === 'deep_focus') {
+        currentRun += 60;
+        longestFocus = Math.max(longestFocus, currentRun);
+      } else {
+        currentRun = e.sessionType === 'deep_focus' ? 60 : 0;
+        longestFocus = Math.max(longestFocus, currentRun);
+      }
+      lastType = e.sessionType || 'other';
+    }
+
+    const productivityScore = Math.round(avgScore * 10);
+    const focusScore = deepFocusHours > 0 ? Math.min(100, Math.round((deepFocusHours / Math.max(activeHours, 1)) * 100 + avgScore * 5)) : 0;
+
+    await storage.upsertTeamSnapshot({
+      userId,
+      workspaceId: 'default',
+      date,
+      activeTimeMinutes: activeHours * 60,
+      deepWorkMinutes: deepFocusHours * 60,
+      shallowWorkMinutes: shallowHours * 60,
+      meetingTimeMinutes: meetingHours * 60,
+      focusSessionMinutes: (deepFocusHours + learningHours) * 60,
+      tasksAssigned: 0,
+      tasksCompleted: 0,
+      tasksOverdue: 0,
+      tasksInProgress: 0,
+      contextSwitches,
+      avgFocusSession: deepFocusHours > 0 ? Math.round((deepFocusHours * 60) / Math.max(1, Math.ceil(deepFocusHours))) : 0,
+      longestFocusSession: longestFocus,
+      productivityScore: productivityScore.toString(),
+      focusScore: focusScore.toString(),
+      consistencyScore: scored.length >= 6 ? '75' : Math.round((scored.length / 8) * 100).toString(),
+      executionScore: productivityScore.toString(),
+      collaborationScore: meetingHours > 0 ? '70' : '50',
+    });
+  }
 
   // Daily Score (computed from tasks, good habits, bad habits, hourly entries)
   app.get(api.dailyScore.get.path, isAuthenticated, async (req: any, res) => {

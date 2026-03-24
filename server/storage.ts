@@ -106,6 +106,7 @@ export interface IStorage extends IAuthStorage {
 
   getHourlyEntries(userId: string, date?: string): Promise<(typeof hourlyEntries.$inferSelect)[]>;
   getHourlyEntriesByMonth(userId: string, month: string): Promise<(typeof hourlyEntries.$inferSelect)[]>;
+  getHourlyEntriesByDate(userId: string, date: string): Promise<(typeof hourlyEntries.$inferSelect)[]>;
   upsertHourlyEntry(entry: InsertHourlyEntry): Promise<typeof hourlyEntries.$inferSelect>;
 
   createPayment(payment: InsertPayment): Promise<typeof payments.$inferSelect>;
@@ -269,6 +270,7 @@ export interface IStorage extends IAuthStorage {
 
   getTeamSnapshots(userId: string, workspaceId: string, from: string, to: string): Promise<(typeof teamDailySnapshots.$inferSelect)[]>;
   getTeamSnapshotsByWorkspace(workspaceId: string, from: string, to: string): Promise<(typeof teamDailySnapshots.$inferSelect)[]>;
+  upsertTeamSnapshot(data: Omit<typeof teamDailySnapshots.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>): Promise<typeof teamDailySnapshots.$inferSelect>;
   getAllUsers(): Promise<any[]>;
 
   getTeamInsights(userId: string, workspaceId: string, opts: { limit: number; offset: number; unreadOnly: boolean }): Promise<{ items: (typeof teamAiInsights.$inferSelect)[]; total: number }>;
@@ -619,11 +621,15 @@ export class DatabaseStorage implements IStorage {
   async upsertHourlyEntry(entry: InsertHourlyEntry) {
     const existing = await db.select().from(hourlyEntries).where(and(eq(hourlyEntries.userId, entry.userId), eq(hourlyEntries.date, entry.date), eq(hourlyEntries.hour, entry.hour)));
     if (existing.length > 0) {
-      const [updated] = await db.update(hourlyEntries).set({ taskDescription: entry.taskDescription, productivityScore: entry.productivityScore }).where(eq(hourlyEntries.id, existing[0].id)).returning();
+      const [updated] = await db.update(hourlyEntries).set({ taskDescription: entry.taskDescription, productivityScore: entry.productivityScore, sessionType: entry.sessionType ?? "other" }).where(eq(hourlyEntries.id, existing[0].id)).returning();
       return updated;
     }
     const [created] = await db.insert(hourlyEntries).values(entry).returning();
     return created;
+  }
+
+  async getHourlyEntriesByDate(userId: string, date: string) {
+    return await db.select().from(hourlyEntries).where(and(eq(hourlyEntries.userId, userId), eq(hourlyEntries.date, date)));
   }
 
   async createPayment(payment: InsertPayment) {
@@ -1291,6 +1297,32 @@ export class DatabaseStorage implements IStorage {
         lte(teamDailySnapshots.date, to),
       ))
       .orderBy(desc(teamDailySnapshots.date));
+  }
+
+  async upsertTeamSnapshot(data: Omit<typeof teamDailySnapshots.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>) {
+    const [result] = await db.insert(teamDailySnapshots)
+      .values({ ...data, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: [teamDailySnapshots.userId, teamDailySnapshots.workspaceId, teamDailySnapshots.date],
+        set: {
+          activeTimeMinutes: data.activeTimeMinutes,
+          deepWorkMinutes: data.deepWorkMinutes,
+          shallowWorkMinutes: data.shallowWorkMinutes,
+          meetingTimeMinutes: data.meetingTimeMinutes,
+          focusSessionMinutes: data.focusSessionMinutes,
+          contextSwitches: data.contextSwitches,
+          avgFocusSession: data.avgFocusSession,
+          longestFocusSession: data.longestFocusSession,
+          productivityScore: data.productivityScore,
+          focusScore: data.focusScore,
+          consistencyScore: data.consistencyScore,
+          executionScore: data.executionScore,
+          collaborationScore: data.collaborationScore,
+          updatedAt: new Date(),
+        }
+      })
+      .returning();
+    return result;
   }
 
   async getAllUsers() {
