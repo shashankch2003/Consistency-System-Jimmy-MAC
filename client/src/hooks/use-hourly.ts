@@ -44,12 +44,26 @@ export function useUpdateHourlyEntry() {
       return api.hourlyEntries.createOrUpdate.responses[200].parse(await res.json());
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ 
-        queryKey: [api.hourlyEntries.list.path, variables.date] 
+      queryClient.invalidateQueries({ queryKey: [api.hourlyEntries.list.path, variables.date] });
+      queryClient.invalidateQueries({ queryKey: [api.hourlyEntries.list.path, "month"] });
+    },
+  });
+}
+
+export function useDeleteHourlyEntry() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ date, hour }: { date: string; hour: number }) => {
+      const res = await fetch(`${api.hourlyEntries.createOrUpdate.path}?date=${date}&hour=${hour}`, {
+        method: "DELETE",
+        credentials: "include",
       });
-      queryClient.invalidateQueries({
-        queryKey: [api.hourlyEntries.list.path, "month"],
-      });
+      if (!res.ok) throw new Error("Failed to delete entry");
+      return { date, hour };
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [api.hourlyEntries.list.path, variables.date] });
+      queryClient.invalidateQueries({ queryKey: [api.hourlyEntries.list.path, "month"] });
     },
   });
 }

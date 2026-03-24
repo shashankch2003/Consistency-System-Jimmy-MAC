@@ -107,6 +107,8 @@ export const hourlyEntries = pgTable("hourly_entries", {
   taskDescription: text("task_description").notNull(),
   productivityScore: integer("productivity_score").notNull(),
   sessionType: text("session_type").default("other"), // deep_focus | meeting | shallow_work | learning | break | daily_task | other
+  startTime: text("start_time"), // HH:MM e.g. "09:15"
+  endTime: text("end_time"),     // HH:MM e.g. "09:45"
 });
 
 export const dailyReasons = pgTable("daily_reasons", {

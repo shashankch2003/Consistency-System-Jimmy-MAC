@@ -329,6 +329,17 @@ export async function registerRoutes(
       res.json(entries);
     }
   });
+  app.delete(api.hourlyEntries.createOrUpdate.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const date = req.query.date as string;
+      const hour = parseInt(req.query.hour as string);
+      if (!date || isNaN(hour)) return res.status(400).json({ message: "date and hour required" });
+      await storage.deleteHourlyEntry(userId, date, hour);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+
   app.post(api.hourlyEntries.createOrUpdate.path, isAuthenticated, async (req: any, res) => {
     try {
       const input = api.hourlyEntries.createOrUpdate.input.parse(req.body);

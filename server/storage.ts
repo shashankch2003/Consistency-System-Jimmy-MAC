@@ -108,6 +108,7 @@ export interface IStorage extends IAuthStorage {
   getHourlyEntriesByMonth(userId: string, month: string): Promise<(typeof hourlyEntries.$inferSelect)[]>;
   getHourlyEntriesByDate(userId: string, date: string): Promise<(typeof hourlyEntries.$inferSelect)[]>;
   upsertHourlyEntry(entry: InsertHourlyEntry): Promise<typeof hourlyEntries.$inferSelect>;
+  deleteHourlyEntry(userId: string, date: string, hour: number): Promise<void>;
 
   createPayment(payment: InsertPayment): Promise<typeof payments.$inferSelect>;
 
@@ -621,7 +622,13 @@ export class DatabaseStorage implements IStorage {
   async upsertHourlyEntry(entry: InsertHourlyEntry) {
     const existing = await db.select().from(hourlyEntries).where(and(eq(hourlyEntries.userId, entry.userId), eq(hourlyEntries.date, entry.date), eq(hourlyEntries.hour, entry.hour)));
     if (existing.length > 0) {
-      const [updated] = await db.update(hourlyEntries).set({ taskDescription: entry.taskDescription, productivityScore: entry.productivityScore, sessionType: entry.sessionType ?? "other" }).where(eq(hourlyEntries.id, existing[0].id)).returning();
+      const [updated] = await db.update(hourlyEntries).set({
+        taskDescription: entry.taskDescription,
+        productivityScore: entry.productivityScore,
+        sessionType: entry.sessionType ?? "other",
+        startTime: entry.startTime ?? null,
+        endTime: entry.endTime ?? null,
+      }).where(eq(hourlyEntries.id, existing[0].id)).returning();
       return updated;
     }
     const [created] = await db.insert(hourlyEntries).values(entry).returning();
@@ -630,6 +637,10 @@ export class DatabaseStorage implements IStorage {
 
   async getHourlyEntriesByDate(userId: string, date: string) {
     return await db.select().from(hourlyEntries).where(and(eq(hourlyEntries.userId, userId), eq(hourlyEntries.date, date)));
+  }
+
+  async deleteHourlyEntry(userId: string, date: string, hour: number) {
+    await db.delete(hourlyEntries).where(and(eq(hourlyEntries.userId, userId), eq(hourlyEntries.date, date), eq(hourlyEntries.hour, hour)));
   }
 
   async createPayment(payment: InsertPayment) {
