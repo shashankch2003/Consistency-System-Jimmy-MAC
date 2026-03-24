@@ -349,7 +349,7 @@ export interface IStorage extends IAuthStorage {
   // Productivity Snapshots
   getProductivitySnapshots(userId: string, workspaceId?: number): Promise<(typeof productivitySnapshots.$inferSelect)[]>;
   upsertProductivitySnapshot(data: typeof productivitySnapshots.$inferInsert): Promise<typeof productivitySnapshots.$inferSelect>;
-  getTeamSnapshots(workspaceId: number, date: string): Promise<(typeof productivitySnapshots.$inferSelect)[]>;
+  getProductivityTeamSnapshots(workspaceId: number, date: string): Promise<(typeof productivitySnapshots.$inferSelect)[]>;
 
   // Workspace Platform
   getWorkspaces(userId: string): Promise<(typeof workspaces.$inferSelect)[]>;
@@ -1583,7 +1583,7 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return result;
   }
-  async getTeamSnapshots(workspaceId: number, date: string) {
+  async getProductivityTeamSnapshots(workspaceId: number, date: string) {
     return await db.select().from(productivitySnapshots)
       .where(and(eq(productivitySnapshots.workspaceId, workspaceId), sql`${productivitySnapshots.date} = ${date}`));
   }

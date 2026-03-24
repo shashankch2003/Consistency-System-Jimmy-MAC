@@ -3007,7 +3007,7 @@ export async function registerRoutes(
       const workspaceId = parseInt(req.query.workspaceId as string) || 0;
       if (!workspaceId) return res.status(400).json({ message: "workspaceId required" });
       const today = new Date().toISOString().split("T")[0];
-      const teamSnaps = await storage.getTeamSnapshots(workspaceId, today);
+      const teamSnaps = await storage.getProductivityTeamSnapshots(workspaceId, today);
       res.json({ snapshots: teamSnaps, date: today });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
@@ -3016,7 +3016,7 @@ export async function registerRoutes(
     try {
       const workspaceId = parseInt(req.query.workspaceId as string) || 0;
       const today = new Date().toISOString().split("T")[0];
-      const snaps = workspaceId ? await storage.getTeamSnapshots(workspaceId, today) : [];
+      const snaps = workspaceId ? await storage.getProductivityTeamSnapshots(workspaceId, today) : [];
       const sorted = [...snaps].sort((a, b) => (b.overallScore ?? 0) - (a.overallScore ?? 0));
       res.json({ top: sorted.slice(0, 3), needsAttention: sorted.slice(-3).reverse() });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
