@@ -26,7 +26,6 @@ import {
   Lightbulb,
   Gauge,
   FileText,
-  Users,
   Shield,
   BookOpen,
   Trophy,
@@ -34,34 +33,17 @@ import {
   Wallet,
   PlayCircle,
   HeartHandshake,
-  BarChart3,
-  Building2,
-  UsersRound,
-  FolderKanban,
-  MessageSquare,
-  BookMarked,
-  Scale,
-  FileBarChart,
-  Zap,
   Sparkles,
   Search,
   Command,
-  Calendar,
-  Flame,
-  Bot,
-  Workflow,
-  Brain,
-  Database,
-  Video,
-  Mail,
-  Bell,
-  Mic,
-  Plug,
-  Star,
-  TrendingUp,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
+
+// ─── CURRENTLY VISIBLE MENU ITEMS ───────────────────────────────────────────
+// These are the core personal productivity features (Phase 1).
+// To reveal the next phase, move items from the hidden section below into this array.
 
 const menuItems = [
   { title: "Task Bank", icon: Lightbulb, url: "/dashboard/task-bank" },
@@ -78,47 +60,58 @@ const menuItems = [
   { title: "Money", icon: Wallet, url: "/dashboard/money" },
   { title: "Know More", icon: PlayCircle, url: "/dashboard/know-more" },
   { title: "Grow Together", icon: HeartHandshake, url: "/dashboard/grow-together" },
-  { title: "Team Intelligence", icon: BarChart3, url: "/dashboard/team-intelligence" },
-  { title: "Productivity", icon: BarChart3, url: "/dashboard/productivity" },
-  { title: "Timesheets", icon: Clock, url: "/dashboard/timesheets" },
-  { title: "Workload", icon: Scale, url: "/dashboard/workload" },
-  { title: "Reports", icon: FileBarChart, url: "/dashboard/reports" },
-  { title: "Projects", icon: FolderKanban, url: "/dashboard/projects" },
-  { title: "Messages", icon: MessageSquare, url: "/dashboard/messages" },
-  { title: "Wiki", icon: BookMarked, url: "/dashboard/wiki" },
-  { title: "Automations", icon: Zap, url: "/dashboard/automations" },
-  { title: "Connect", icon: MessageSquare, url: "/dashboard/connect" },
-  { title: "AI Autopilot", icon: Zap, url: "/dashboard/autopilot" },
-  { title: "Time Machine", icon: BarChart3, url: "/dashboard/time-machine" },
-  { title: "Daily Planner", icon: Calendar, url: "/dashboard/daily-planner" },
-  { title: "My Day", icon: Clock, url: "/dashboard/my-day" },
-  { title: "AI Habits", icon: Flame, url: "/dashboard/ai-habits" },
-  { title: "Focus Coach", icon: Target, url: "/dashboard/focus-coach" },
-  { title: "AI Agents", icon: Bot, url: "/dashboard/ai-agents" },
-  { title: "AI Workflows", icon: Workflow, url: "/dashboard/ai-workflows" },
-  { title: "Project Manager", icon: BarChart3, url: "/dashboard/project-manager" },
-  { title: "Task Intelligence", icon: Brain, url: "/dashboard/task-intel" },
-  { title: "Database AI", icon: Database, url: "/dashboard/database-ai" },
-  { title: "Meetings", icon: Video, url: "/dashboard/meetings" },
-  { title: "Doc Generator", icon: FileText, url: "/dashboard/doc-generator" },
-  { title: "Messaging AI", icon: MessageSquare, url: "/dashboard/messaging-ai" },
-  { title: "Email", icon: Mail, url: "/dashboard/email" },
-  { title: "OKR System", icon: Target, url: "/dashboard/okr-system" },
-  { title: "Calendar Optimizer", icon: Calendar, url: "/dashboard/calendar-optimizer" },
-  { title: "Time Tracking", icon: Clock, url: "/dashboard/time-tracking" },
-  { title: "Smart Notifications", icon: Bell, url: "/dashboard/notifications-center" },
-  { title: "AI Templates", icon: Layout, url: "/dashboard/ai-template-engine" },
-  { title: "Voice Notes", icon: Mic, url: "/dashboard/voice" },
-  { title: "Command Center", icon: Command, url: "/dashboard/command-center" },
-  { title: "Team Insights", icon: TrendingUp, url: "/dashboard/team-insights" },
-  { title: "Integrations", icon: Plug, url: "/dashboard/integrations" },
-  { title: "Getting Started", icon: Star, url: "/dashboard/onboarding" },
-  { title: "Workspace Setup", icon: Building2, url: "/dashboard/workspace-setup" },
-  { title: "Team Management", icon: UsersRound, url: "/dashboard/team-management" },
-  { title: "Members", icon: Users, url: "/dashboard/members" },
   { title: "Community", icon: Users, url: "/dashboard/community" },
   { title: "Settings", icon: Settings, url: "/dashboard/settings" },
 ];
+
+// ─── HIDDEN MENU ITEMS (NOT DELETED — JUST HIDDEN) ──────────────────────────
+// Phase 2 — Team Features:
+//   { title: "Team Intelligence", icon: BarChart3, url: "/dashboard/team-intelligence" },
+//   { title: "Productivity", icon: BarChart3, url: "/dashboard/productivity" },
+//   { title: "Timesheets", icon: Clock, url: "/dashboard/timesheets" },
+//   { title: "Workload", icon: Scale, url: "/dashboard/workload" },
+//   { title: "Reports", icon: FileBarChart, url: "/dashboard/reports" },
+//   { title: "Projects", icon: FolderKanban, url: "/dashboard/projects" },
+//   { title: "Team Management", icon: UsersRound, url: "/dashboard/team-management" },
+//   { title: "Members", icon: Users, url: "/dashboard/members" },
+//   { title: "Workspace Setup", icon: Building2, url: "/dashboard/workspace-setup" },
+//   { title: "Team Insights", icon: TrendingUp, url: "/dashboard/team-insights" },
+//
+// Phase 3 — Slack-Like Messaging Features:
+//   { title: "Messages", icon: MessageSquare, url: "/dashboard/messages" },
+//   { title: "Connect", icon: MessageSquare, url: "/dashboard/connect" },
+//   { title: "Messaging AI", icon: MessageSquare, url: "/dashboard/messaging-ai" },
+//
+// Phase 4 — Notion-Like Features:
+//   { title: "Wiki", icon: BookMarked, url: "/dashboard/wiki" },
+//   { title: "Doc Generator", icon: FileText, url: "/dashboard/doc-generator" },
+//   { title: "Automations", icon: Zap, url: "/dashboard/automations" },
+//
+// Phase 5 — 25 Competitor AI Features:
+//   { title: "AI Autopilot", icon: Zap, url: "/dashboard/autopilot" },
+//   { title: "Time Machine", icon: BarChart3, url: "/dashboard/time-machine" },
+//   { title: "Daily Planner", icon: Calendar, url: "/dashboard/daily-planner" },
+//   { title: "My Day", icon: Clock, url: "/dashboard/my-day" },
+//   { title: "AI Habits", icon: Flame, url: "/dashboard/ai-habits" },
+//   { title: "Focus Coach", icon: Target, url: "/dashboard/focus-coach" },
+//   { title: "AI Agents", icon: Bot, url: "/dashboard/ai-agents" },
+//   { title: "AI Workflows", icon: Workflow, url: "/dashboard/ai-workflows" },
+//   { title: "Project Manager", icon: BarChart3, url: "/dashboard/project-manager" },
+//   { title: "Task Intelligence", icon: Brain, url: "/dashboard/task-intel" },
+//   { title: "Database AI", icon: Database, url: "/dashboard/database-ai" },
+//   { title: "Meetings", icon: Video, url: "/dashboard/meetings" },
+//   { title: "Email", icon: Mail, url: "/dashboard/email" },
+//
+// Phase 6 — Sprint 8-10 AI Features:
+//   { title: "OKR System", icon: Target, url: "/dashboard/okr-system" },
+//   { title: "Calendar Optimizer", icon: Calendar, url: "/dashboard/calendar-optimizer" },
+//   { title: "Time Tracking", icon: Clock, url: "/dashboard/time-tracking" },
+//   { title: "Smart Notifications", icon: Bell, url: "/dashboard/notifications-center" },
+//   { title: "AI Templates", icon: Layout, url: "/dashboard/ai-template-engine" },
+//   { title: "Voice Notes", icon: Mic, url: "/dashboard/voice" },
+//   { title: "Command Center", icon: Command, url: "/dashboard/command-center" },
+//   { title: "Integrations", icon: Plug, url: "/dashboard/integrations" },
+//   { title: "Getting Started", icon: Star, url: "/dashboard/onboarding" },
 
 interface AppSidebarProps {
   onOpenCommand?: () => void;
@@ -191,7 +184,6 @@ export function AppSidebar({ onOpenCommand, onOpenSearch, onOpenCoach }: AppSide
       </SidebarContent>
 
       <SidebarFooter className="p-4 border-t border-border/50">
-        {/* AI Shortcut buttons */}
         <div className="flex items-center gap-2 mb-3">
           <Button
             variant="outline"
@@ -228,7 +220,6 @@ export function AppSidebar({ onOpenCommand, onOpenSearch, onOpenCoach }: AppSide
           AI Coach
         </Button>
 
-        {/* User info */}
         <div className="flex items-center gap-3 px-2 mb-3">
           <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center">
             {user?.profileImageUrl ? (
