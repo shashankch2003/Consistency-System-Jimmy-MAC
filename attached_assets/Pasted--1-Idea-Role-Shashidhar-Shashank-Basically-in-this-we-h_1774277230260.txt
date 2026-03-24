@@ -1,0 +1,44 @@
+### 1. Idea
+
+Role : Shashidhar & Shashank 
+
+- Basically in this we had a particular idea. We got a thought of the idea of the feature which we want to include so this is a first stage. So after we discuss and after we finalize that particular idea, then we will try to move to the next steps.
+
+### 2. In english words
+
+Role : Shashidhar & Shashank 
+
+- So after we had a clear idea of the particular feature, then what I will be doing is that we will try to normally write down in depth in English what is that idea and in depth about what is a problem that that particular feature will be solving. We'll also try to share all the vision and also clear the step-by-step process on how the particular feature will be looking in our app. This will be totally in English but it is not proper structure; it's just a draft idea of how it needs to make sure to look okay.
+- So basically after we both discussed the particular feature, we will discuss it in the meet. After we discuss the particular feature, we will try to create a proper structure on how it needs to be looked at in depth, for all the things after we have done research with that. We will come to a point on what is your input on that particular feature, how it needs to be looked at, ok.
+
+### 3. Claude Prompt
+
+Role : Shashank 
+
+- Claude Prompt
+- So now in this cloud prompt step after we have created proper English words, the future is how you need to make sure to do. You will create a proper prompt on a cloud. Basically I will even try to create a project. In that project you will try to create a prompt where that prompt, after we are done with that particular feature mentioned, we will try to paste that prompt in there. After we paste the prompt and the feature we are looking at, it will try to create that prompt in a way that is going to help us to save the credits. That is a basic plan and this role you will be doing this role, creating of the prompt.
+
+### 4. Replit plan mode [ Finding Mistakes ]
+
+Role : Shashank 
+
+Mode : Plan 
+
+- Replit Mistakes Finding Prompt
+- So after you are done with that, creating of that prompt, then what will happen is that basically there will be some mistakes in that prompt. Because of those mistakes, what will happen is that Replit takes a lot of credits and it will be confused. First of all we need to make sure to find the mistakes in that prompt. Later what are the mistakes which have been shared by Replit, then we need to make sure that we go to the next process and need to make sure to find all the mistakes. In this step a Replit plan mode, we will share that prompt to Replit and we will queue the prompt, the mistake prompt, for Replit to find the mistakes. Then it will find some mistakes.
+
+### 5. Resloving Mistakes Through claude
+
+Role : Shashank 
+
+- Mistakes Resloving Prompt
+- So in the previous step Replit has found the mistakes. After Replit has found the mistakes then we will take those mistakes and what is your prompt PDF, which we have. We will paste that prompt PDF, which has been created by Claude, and what are the mistakes which have been created by Replit. We will paste that PDF of the prompt and also the mistakes and also the mistake-resolving prompt in Claude so it will try to correct those mistakes. It will be sharing a prompt because of this prompt it will use very less credits for us.
+
+### 6. Replit Bulid Mode Economy
+
+Role : Shashank 
+
+Mode : Economy 
+
+- Buliding The feature Prompt
+- So basically in this it is a final step. After we resolve all the mistakes then we will share this prompt, the final prompt to this replit, the prompt which contains all the features. We will share that PDF prompt to replit and with that prompt PDF we will share building the feature. From you'll share both so it will create in a proper manner.
