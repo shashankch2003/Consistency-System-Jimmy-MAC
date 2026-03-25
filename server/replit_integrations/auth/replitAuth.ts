@@ -35,6 +35,7 @@ export function getSession() {
     cookie: {
       httpOnly: true,
       secure: true,
+      sameSite: "none",
       maxAge: sessionTtl,
     },
   });
@@ -104,6 +105,12 @@ export async function setupAuth(app: Express) {
 
   app.get("/api/login", (req, res, next) => {
     ensureStrategy(req.hostname);
+    // Save returnTo so we can redirect back after login
+    if (req.query.returnTo && typeof req.query.returnTo === "string") {
+      (req.session as any).returnTo = req.query.returnTo;
+    } else if (!(req.session as any).returnTo) {
+      (req.session as any).returnTo = "/dashboard";
+    }
     passport.authenticate(`replitauth:${req.hostname}`, {
       prompt: "login consent",
       scope: ["openid", "email", "profile", "offline_access"],
@@ -113,7 +120,7 @@ export async function setupAuth(app: Express) {
   app.get("/api/callback", (req, res, next) => {
     ensureStrategy(req.hostname);
     passport.authenticate(`replitauth:${req.hostname}`, {
-      successReturnToOrRedirect: "/",
+      successReturnToOrRedirect: "/dashboard",
       failureRedirect: "/api/login",
     })(req, res, next);
   });

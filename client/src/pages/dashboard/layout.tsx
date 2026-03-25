@@ -44,7 +44,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (!isLoading && !user) {
-      window.location.href = "/api/login";
+      // If running inside an iframe (canvas preview), do NOT auto-redirect —
+      // the OAuth flow won't work inside an iframe. Instead we show the Sign In screen.
+      const isInIframe = window.self !== window.top;
+      if (!isInIframe) {
+        const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.href = `/api/login?returnTo=${returnTo}`;
+      }
     }
   }, [user, isLoading]);
 
@@ -72,10 +78,35 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  if (isLoading || !user) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background">
+        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <p className="text-muted-foreground text-sm">Loading Consistency System…</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    const isInIframe = window.self !== window.top;
+    const returnTo = encodeURIComponent(window.location.pathname);
+    const loginUrl = `/api/login?returnTo=${returnTo}`;
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-background">
+        <div className="text-center space-y-2">
+          <h2 className="text-xl font-semibold text-foreground">Session Expired</h2>
+          <p className="text-muted-foreground text-sm">
+            {isInIframe ? "Please open the app in a new tab to sign in." : "You need to sign in to continue."}
+          </p>
+        </div>
+        <a
+          href={loginUrl}
+          target={isInIframe ? "_blank" : "_self"}
+          rel="noreferrer"
+          className="px-6 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition-opacity"
+        >
+          {isInIframe ? "Open App & Sign In" : "Sign In"}
+        </a>
       </div>
     );
   }
