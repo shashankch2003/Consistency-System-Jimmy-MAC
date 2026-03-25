@@ -43,6 +43,7 @@ function formatDate(dateStr: string) {
 
 export default function ManagerDashboard({ workspaceId = "default" }: { workspaceId?: string }) {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [selectedMember, setSelectedMember] = useState<TeamMemberSummary | null>(null);
 
   const { data, isLoading } = useQuery<ManagerDashboardData>({
     queryKey: [`/api/team-intelligence/team-dashboard?workspaceId=${workspaceId}`],
@@ -151,7 +152,7 @@ export default function ManagerDashboard({ workspaceId = "default" }: { workspac
             <Card
               key={m.userId}
               className="bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer"
-              onClick={() => setSelectedEmployeeId(m.userId)}
+              onClick={() => { setSelectedEmployeeId(m.userId); setSelectedMember(m); }}
               data-testid={`card-member-${m.userId}`}
             >
               <CardContent className="p-4 flex items-center gap-4">
@@ -335,8 +336,11 @@ export default function ManagerDashboard({ workspaceId = "default" }: { workspac
       <EmployeeDetailPanel
         workspaceId={workspaceId}
         employeeUserId={selectedEmployeeId || ""}
+        memberName={selectedMember?.name}
+        memberRole={selectedMember?.role}
+        memberAvatar={selectedMember?.avatar}
         isOpen={!!selectedEmployeeId}
-        onClose={() => setSelectedEmployeeId(null)}
+        onClose={() => { setSelectedEmployeeId(null); setSelectedMember(null); }}
       />
     </div>
   );
