@@ -23,7 +23,7 @@ export function AICoach({ open, onClose }: AICoachProps) {
 
   const { data: tasks = [] } = useQuery<any[]>({
     queryKey: ["/api/team-tasks-coach"],
-    queryFn: () => fetch("/api/team-tasks?status=In Progress").then((r) => r.json()),
+    queryFn: () => fetch("/api/team-tasks?status=In Progress").then((r) => r.json()).then((d) => Array.isArray(d) ? d : []),
     enabled: !!workspaceId,
   });
 

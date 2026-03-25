@@ -77,7 +77,7 @@ export default function TimesheetsPage() {
 
   const { data: tasks = [] } = useQuery<TeamTask[]>({
     queryKey: ["/api/team-tasks-all-timesheets"],
-    queryFn: () => fetch("/api/team-tasks?status=In Progress").then((r) => r.json()),
+    queryFn: () => fetch("/api/team-tasks?status=In Progress").then((r) => r.json()).then((d) => Array.isArray(d) ? d : []),
     enabled: !!workspaceId,
   });
 
