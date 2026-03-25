@@ -3336,6 +3336,109 @@ export async function registerRoutes(
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  // ── SEED DEMO TEAM DATA ───────────────────────────────────────────────────
+  app.post("/api/seed-team-demo", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub as string;
+      const ws = await storage.createWorkspace({ name: "TechNova Solutions", industry: "Technology", companySize: "51-200", createdBy: userId });
+      const wsId = ws.id;
+
+      const teamDefs = [
+        { name: "Engineering", teamType: "Engineering", department: "Technology", description: "Core product engineering — backend, frontend, and infrastructure", memberCount: 15 },
+        { name: "Product", teamType: "Product", department: "Product", description: "Product strategy, roadmap, and user research", memberCount: 8 },
+        { name: "Design", teamType: "Design", department: "Product", description: "UX/UI design, brand, and design systems", memberCount: 6 },
+        { name: "Marketing", teamType: "Marketing", department: "Marketing", description: "Growth, content, and brand marketing", memberCount: 7 },
+        { name: "Sales", teamType: "Sales", department: "Revenue", description: "Enterprise and SMB sales, account management", memberCount: 8 },
+        { name: "Operations", teamType: "Operations", department: "Operations", description: "Infrastructure, logistics, and internal tools", memberCount: 4 },
+        { name: "HR & Finance", teamType: "HR", department: "People & Finance", description: "People operations, talent acquisition, and finance", memberCount: 2 },
+      ];
+      const createdTeams: any[] = [];
+      for (const t of teamDefs) {
+        const team = await storage.createTeam({ workspaceId: wsId, createdBy: userId, parentTeamId: null, ...t });
+        createdTeams.push(team);
+      }
+
+      const memberList = [
+        { name: "Priya Sharma", email: "priya.sharma@technova.io", role: "Owner", teamIdx: 0 },
+        { name: "James Okafor", email: "james.okafor@technova.io", role: "Admin", teamIdx: 1 },
+        { name: "Sofia Reyes", email: "sofia.reyes@technova.io", role: "Manager", teamIdx: 2 },
+        { name: "Liam Chen", email: "liam.chen@technova.io", role: "Manager", teamIdx: 0 },
+        { name: "Amara Diallo", email: "amara.diallo@technova.io", role: "Manager", teamIdx: 3 },
+        { name: "Tom Keller", email: "tom.keller@technova.io", role: "Manager", teamIdx: 4 },
+        { name: "Neha Patel", email: "neha.patel@technova.io", role: "Manager", teamIdx: 5 },
+        { name: "Carlos Mendez", email: "carlos.mendez@technova.io", role: "Member", teamIdx: 0 },
+        { name: "Fatima Al-Rashid", email: "fatima.rashid@technova.io", role: "Member", teamIdx: 0 },
+        { name: "Oliver Schmidt", email: "oliver.schmidt@technova.io", role: "Member", teamIdx: 0 },
+        { name: "Yara Nwosu", email: "yara.nwosu@technova.io", role: "Member", teamIdx: 0 },
+        { name: "Dmitri Volkov", email: "dmitri.volkov@technova.io", role: "Member", teamIdx: 0 },
+        { name: "Mei Lin", email: "mei.lin@technova.io", role: "Member", teamIdx: 0 },
+        { name: "Arjun Kapoor", email: "arjun.kapoor@technova.io", role: "Member", teamIdx: 0 },
+        { name: "Isabelle Dupont", email: "isabelle.dupont@technova.io", role: "Member", teamIdx: 0 },
+        { name: "Kofi Mensah", email: "kofi.mensah@technova.io", role: "Member", teamIdx: 0 },
+        { name: "Aiko Tanaka", email: "aiko.tanaka@technova.io", role: "Member", teamIdx: 0 },
+        { name: "Ryan Torres", email: "ryan.torres@technova.io", role: "Member", teamIdx: 0 },
+        { name: "Zara Ahmed", email: "zara.ahmed@technova.io", role: "Member", teamIdx: 0 },
+        { name: "Lucas Ferreira", email: "lucas.ferreira@technova.io", role: "Member", teamIdx: 0 },
+        { name: "Emma Johansson", email: "emma.johansson@technova.io", role: "Member", teamIdx: 1 },
+        { name: "Noah Kim", email: "noah.kim@technova.io", role: "Member", teamIdx: 1 },
+        { name: "Mia Osei", email: "mia.osei@technova.io", role: "Member", teamIdx: 1 },
+        { name: "Ethan Park", email: "ethan.park@technova.io", role: "Member", teamIdx: 1 },
+        { name: "Ava Rodriguez", email: "ava.rodriguez@technova.io", role: "Member", teamIdx: 1 },
+        { name: "Jack Williams", email: "jack.williams@technova.io", role: "Member", teamIdx: 1 },
+        { name: "Lily Chang", email: "lily.chang@technova.io", role: "Member", teamIdx: 1 },
+        { name: "Marcus Johnson", email: "marcus.johnson@technova.io", role: "Member", teamIdx: 2 },
+        { name: "Chloe Martin", email: "chloe.martin@technova.io", role: "Member", teamIdx: 2 },
+        { name: "David Müller", email: "david.muller@technova.io", role: "Member", teamIdx: 2 },
+        { name: "Hannah Lee", email: "hannah.lee@technova.io", role: "Member", teamIdx: 2 },
+        { name: "Finn O'Brien", email: "finn.obrien@technova.io", role: "Member", teamIdx: 2 },
+        { name: "Sara Lindqvist", email: "sara.lindqvist@technova.io", role: "Member", teamIdx: 3 },
+        { name: "Ben Nakamura", email: "ben.nakamura@technova.io", role: "Member", teamIdx: 3 },
+        { name: "Grace Adeyemi", email: "grace.adeyemi@technova.io", role: "Member", teamIdx: 3 },
+        { name: "Oscar Petrov", email: "oscar.petrov@technova.io", role: "Member", teamIdx: 3 },
+        { name: "Nina Hernandez", email: "nina.hernandez@technova.io", role: "Member", teamIdx: 3 },
+        { name: "Max Weber", email: "max.weber@technova.io", role: "Member", teamIdx: 4 },
+        { name: "Leila Moradi", email: "leila.moradi@technova.io", role: "Member", teamIdx: 4 },
+        { name: "Samuel Nduka", email: "samuel.nduka@technova.io", role: "Member", teamIdx: 4 },
+        { name: "Julia Blanc", email: "julia.blanc@technova.io", role: "Member", teamIdx: 4 },
+        { name: "Chris Sato", email: "chris.sato@technova.io", role: "Member", teamIdx: 4 },
+        { name: "Diana Popescu", email: "diana.popescu@technova.io", role: "Member", teamIdx: 4 },
+        { name: "Kai Anderson", email: "kai.anderson@technova.io", role: "Member", teamIdx: 5 },
+        { name: "Ana Gutierrez", email: "ana.gutierrez@technova.io", role: "Member", teamIdx: 5 },
+        { name: "Felix Braun", email: "felix.braun@technova.io", role: "Member", teamIdx: 5 },
+        { name: "Rania Hassan", email: "rania.hassan@technova.io", role: "Member", teamIdx: 6 },
+        { name: "Ian Clarke", email: "ian.clarke@technova.io", role: "Observer", teamIdx: 6 },
+        { name: "Tanya Singh", email: "tanya.singh@technova.io", role: "Guest", teamIdx: 1 },
+        { name: "Victor Okonkwo", email: "victor.okonkwo@technova.io", role: "Guest", teamIdx: 4 },
+      ];
+      for (const m of memberList) {
+        await storage.createWorkspaceMember({ workspaceId: wsId, email: m.email, displayName: m.name, role: m.role, teamId: createdTeams[m.teamIdx].id, status: "active", invitedBy: userId });
+      }
+
+      const projectDefs = [
+        { name: "Mobile App Redesign", description: "Complete UI/UX overhaul of the iOS and Android apps with new design system", status: "Active", priority: "High", progress: 65, teamIdx: 2, dueDate: "2026-05-15" },
+        { name: "Platform Infrastructure Migration", description: "Migrate all services to Kubernetes with zero-downtime deployment pipeline", status: "Active", priority: "Critical", progress: 40, teamIdx: 0, dueDate: "2026-06-30" },
+        { name: "Q2 Marketing Campaign", description: "Integrated digital marketing campaign targeting SMB segment in APAC and EMEA", status: "Active", priority: "High", progress: 85, teamIdx: 3, dueDate: "2026-04-30" },
+        { name: "Customer Self-Service Portal", description: "New portal allowing customers to manage their accounts, billing, and support tickets", status: "Planning", priority: "Medium", progress: 10, teamIdx: 1, dueDate: "2026-08-01" },
+        { name: "API v3.0 — GraphQL Migration", description: "Replace REST endpoints with GraphQL API layer, improve developer experience", status: "Active", priority: "High", progress: 55, teamIdx: 0, dueDate: "2026-07-15" },
+        { name: "Sales Intelligence Dashboard", description: "Real-time pipeline visibility and AI-driven lead scoring for the sales team", status: "Completed", priority: "Medium", progress: 100, teamIdx: 4, dueDate: "2026-03-01" },
+        { name: "HR System Integration", description: "Integrate BambooHR with internal tools for automated onboarding workflows", status: "On Hold", priority: "Low", progress: 30, teamIdx: 6, dueDate: "2026-09-01" },
+        { name: "User Analytics Platform", description: "Build internal analytics to track engagement, retention, and feature adoption", status: "Planning", priority: "Medium", progress: 5, teamIdx: 1, dueDate: "2026-10-01" },
+        { name: "SEO & Content Optimisation", description: "Restructure website content architecture and implement technical SEO improvements", status: "Active", priority: "Medium", progress: 70, teamIdx: 3, dueDate: "2026-04-15" },
+        { name: "Annual Security Audit", description: "Comprehensive SOC2 Type II audit and penetration testing across all systems", status: "Completed", priority: "Critical", progress: 100, teamIdx: 5, dueDate: "2026-03-10" },
+        { name: "Data Pipeline & Warehouse", description: "Build real-time event streaming pipeline feeding into Snowflake data warehouse", status: "Active", priority: "High", progress: 25, teamIdx: 0, dueDate: "2026-09-30" },
+        { name: "Design System 2.0", description: "Unified component library and brand guidelines across all product surfaces", status: "Active", priority: "Medium", progress: 50, teamIdx: 2, dueDate: "2026-06-01" },
+      ];
+      for (const p of projectDefs) {
+        await storage.createProject({ workspaceId: wsId, name: p.name, description: p.description, status: p.status, priority: p.priority, progress: p.progress, teamId: createdTeams[p.teamIdx].id, dueDate: p.dueDate, ownerId: userId, visibility: "team" });
+      }
+
+      res.json({ success: true, workspaceId: wsId, workspaceName: ws.name });
+    } catch (e: any) {
+      console.error("Seed error:", e);
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   // ── WORKLOAD ──────────────────────────────────────────────────────────────
   app.get("/api/workload", isAuthenticated, async (req: any, res) => {
     try {
