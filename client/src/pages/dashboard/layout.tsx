@@ -1,12 +1,13 @@
 import { AppSidebar } from "@/components/AppSidebar";
 import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/use-auth";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { WorkspaceProvider } from "@/context/WorkspaceContext";
 import { TimeTracker } from "@/components/time/TimeTracker";
 import { AICommandBar } from "@/components/ai/AICommandBar";
 import { AICoach } from "@/components/ai/AICoach";
 import { SmartSearch } from "@/components/ai/SmartSearch";
+import { useEffect } from "react";
 
 function DashboardContent({
   children,
@@ -22,7 +23,7 @@ function DashboardContent({
   const { state } = useSidebar();
 
   return (
-    <main className="flex-1 overflow-y-auto overflow-x-hidden relative">
+    <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden relative">
       {state === "collapsed" && (
         <div className="fixed top-2 left-1 z-20">
           <SidebarTrigger
@@ -42,47 +43,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [searchOpen, setSearchOpen] = useState(false);
   const [coachOpen, setCoachOpen] = useState(false);
 
-  useEffect(() => {
-    if (!isLoading && !user) {
-      // If running inside an iframe (canvas preview), do NOT auto-redirect —
-      // the OAuth flow won't work inside an iframe. Instead we show the Sign In screen.
-      const isInIframe = window.self !== window.top;
-      if (!isInIframe) {
-        const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
-        window.location.href = `/api/login?returnTo=${returnTo}`;
-      }
-    }
-  }, [user, isLoading]);
-
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const ctrl = e.ctrlKey || e.metaKey;
-
-      // Ctrl+K → AI Command Bar
       if (ctrl && e.key === "k" && !e.shiftKey) {
         e.preventDefault();
         setCommandOpen((prev) => !prev);
         return;
       }
-
-      // Ctrl+Shift+F → Smart Search
       if (ctrl && e.shiftKey && (e.key === "f" || e.key === "F")) {
         e.preventDefault();
         setSearchOpen((prev) => !prev);
         return;
       }
     };
-
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background">
-        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-        <p className="text-muted-foreground text-sm">Loading Consistency System…</p>
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px", background: "#0a0a0a", color: "#fafafa" }}>
+        <div style={{ width: 40, height: 40, border: "4px solid #666", borderTopColor: "#fafafa", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+        <p style={{ color: "#888", fontSize: 14 }}>Loading Consistency System…</p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
@@ -92,20 +77,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const returnTo = encodeURIComponent(window.location.pathname);
     const loginUrl = `/api/login?returnTo=${returnTo}`;
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-background">
-        <div className="text-center space-y-2">
-          <h2 className="text-xl font-semibold text-foreground">Session Expired</h2>
-          <p className="text-muted-foreground text-sm">
-            {isInIframe ? "Please open the app in a new tab to sign in." : "You need to sign in to continue."}
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "24px", background: "#0a0a0a", color: "#fafafa" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>🔒</div>
+          <h2 style={{ fontSize: 22, fontWeight: 600, margin: "0 0 8px" }}>Sign In Required</h2>
+          <p style={{ color: "#888", fontSize: 14, margin: 0 }}>
+            {isInIframe ? "Please open the app in a new tab to sign in." : "Please sign in to access your dashboard."}
           </p>
         </div>
         <a
           href={loginUrl}
           target={isInIframe ? "_blank" : "_self"}
           rel="noreferrer"
-          className="px-6 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition-opacity"
+          style={{ padding: "10px 28px", background: "#fafafa", color: "#0a0a0a", borderRadius: 8, fontWeight: 600, fontSize: 15, textDecoration: "none", display: "inline-block" }}
         >
-          {isInIframe ? "Open App & Sign In" : "Sign In"}
+          {isInIframe ? "Open App & Sign In" : "Sign In with Replit"}
         </a>
       </div>
     );
@@ -114,7 +100,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <WorkspaceProvider>
       <SidebarProvider>
-        <div className="flex min-h-screen w-full bg-background">
+        <div className="flex h-screen w-full bg-background overflow-hidden">
           <AppSidebar
             onOpenCommand={() => setCommandOpen(true)}
             onOpenSearch={() => setSearchOpen(true)}

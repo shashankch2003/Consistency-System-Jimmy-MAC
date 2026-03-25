@@ -112,15 +112,6 @@ export async function registerRoutes(
   await setupAuth(app);
   registerAuthRoutes(app);
 
-  // Server-side guard: redirect unauthenticated users away from /dashboard before React loads
-  app.get(["/dashboard", "/dashboard/*path"], (req: any, res, next) => {
-    if (!req.isAuthenticated() || !req.user) {
-      const returnTo = encodeURIComponent(req.path);
-      return res.redirect(`/api/login?returnTo=${returnTo}`);
-    }
-    next();
-  });
-
   // Yearly Goals
   app.get(api.yearlyGoals.list.path, isAuthenticated, async (req: any, res) => {
     const year = req.query.year ? parseInt(req.query.year as string) : undefined;
