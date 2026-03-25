@@ -38,6 +38,10 @@ import {
   Command,
   Users,
   BarChart3,
+  FolderKanban,
+  UsersRound,
+  Building2,
+  TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
@@ -183,25 +187,34 @@ export function AppSidebar({ onOpenCommand, onOpenSearch, onOpenCoach }: AppSide
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* ─── TEAM INTELLIGENCE (6-Prompt Feature) ─────────────────────── */}
+        {/* ─── TEAM FEATURES ──────────────────────────────────────────────── */}
         <SidebarGroup>
           <SidebarGroupLabel className="px-4 py-2 text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">
-            Team Intelligence
+            Team Features
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={location.startsWith("/dashboard/team-intelligence")}
-                  className="data-[active=true]:bg-white/10 data-[active=true]:text-white"
-                >
-                  <Link href="/dashboard/team-intelligence" className="flex items-center gap-3 px-3 py-2">
-                    <BarChart3 className="w-4 h-4" />
-                    <span>Team Intelligence</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              {[
+                { title: "Team Intelligence", icon: BarChart3, url: "/dashboard/team-intelligence", startsWith: true },
+                { title: "Projects", icon: FolderKanban, url: "/dashboard/projects" },
+                { title: "Team Management", icon: UsersRound, url: "/dashboard/team-management" },
+                { title: "Members", icon: UsersRound, url: "/dashboard/members" },
+                { title: "Workspace Setup", icon: Building2, url: "/dashboard/workspace-setup" },
+                { title: "Team Insights", icon: TrendingUp, url: "/dashboard/team-insights" },
+              ].map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={item.startsWith ? location.startsWith(item.url) : location === item.url}
+                    className="data-[active=true]:bg-white/10 data-[active=true]:text-white"
+                  >
+                    <Link href={item.url} className="flex items-center gap-3 px-3 py-2">
+                      <item.icon className="w-4 h-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
