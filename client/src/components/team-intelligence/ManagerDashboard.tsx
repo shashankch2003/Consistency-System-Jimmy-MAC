@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Legend,
+  Legend, BarChart, Bar, Cell, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
 } from "recharts";
 import MetricCard from "./shared/MetricCard";
 import ScoreCircle from "./shared/ScoreCircle";
@@ -24,9 +24,9 @@ import ComparisonDrawer from "./shared/ComparisonDrawer";
 import type { ManagerDashboardData, TeamMemberSummary } from "@shared/lib/team-intelligence/types";
 
 /* ─── Types & constants ────────────────────────────────────────────────── */
-type SectionId = "overview" | "members" | "alerts" | "workload" | "team-trend" | "ai-brief";
+type SectionId = "overview" | "members" | "member-ranking" | "alerts" | "workload" | "velocity-gauge" | "team-trend" | "team-radar" | "ai-brief";
 
-const DEFAULT_SECTIONS: SectionId[] = ["overview", "members", "alerts", "workload", "team-trend", "ai-brief"];
+const DEFAULT_SECTIONS: SectionId[] = ["overview", "members", "member-ranking", "alerts", "workload", "velocity-gauge", "team-trend", "team-radar", "ai-brief"];
 
 interface ColorSettings { memberScoreColors: boolean; workloadBarColors: boolean; trendLineColors: boolean; alertColors: boolean; }
 const DEFAULT_COLORS: ColorSettings = { memberScoreColors: true, workloadBarColors: true, trendLineColors: true, alertColors: true };
@@ -72,7 +72,13 @@ function memberTrendPoints(userId: string, currentScore: number) {
 /* ─── Component ───────────────────────────────────────────────────────── */
 export default function ManagerDashboard({ workspaceId = "default" }: { workspaceId?: string }) {
   /* — Persistent state — */
-  const [sectionOrder, _setSectionOrder] = useState<SectionId[]>(() => lsGet("ti-mgr-sections", DEFAULT_SECTIONS));
+  const [sectionOrder, _setSectionOrder] = useState<SectionId[]>(() => {
+    const stored = lsGet<string[]>("ti-mgr-sections", []);
+    const allIds = DEFAULT_SECTIONS as string[];
+    const valid = stored.filter(s => allIds.includes(s)) as SectionId[];
+    const missing = DEFAULT_SECTIONS.filter(s => !stored.includes(s));
+    return valid.length > 0 ? [...valid, ...missing] : DEFAULT_SECTIONS;
+  });
   const [colors, _setColors] = useState<ColorSettings>(() => lsGet("ti-mgr-colors", DEFAULT_COLORS));
   const [memberOrder, _setMemberOrder] = useState<string[]>(() => lsGet("ti-mgr-members", []));
   const [history, _setHistory] = useState<HistorySnapshot[]>(() => lsGet("ti-mgr-history", []));
@@ -475,6 +481,148 @@ export default function ManagerDashboard({ workspaceId = "default" }: { workspac
                     </div>
                   )}
                 </>
+              );
+            })()}
+          </CardContent>
+        </Card>
+      </div>
+    ),
+
+    "member-ranking": (
+      <div>
+        <SLabel>Member Score Ranking</SLabel>
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-4">
+            {members.length === 0 ? (
+              <p className="text-sm text-zinc-500 text-center py-6">No member data yet.</p>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={Math.max(members.length * 44, 120)}>
+                  <BarChart
+                    layout="vertical"
+                    data={[...members].sort((a, b) => b.productivityScore - a.productivityScore).map(m => ({ name: m.name, score: m.productivityScore }))}
+                    margin={{ left: 8, right: 30, top: 4, bottom: 4 }}
+                  >
+                    <XAxis type="number" domain={[0, 100]} tick={{ fill: "#71717A", fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis type="category" dataKey="name" tick={{ fill: "#D1D5DB", fontSize: 12 }} axisLine={false} tickLine={false} width={90} />
+                    <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#27272A" />
+                    <Tooltip contentStyle={{ backgroundColor: "#18181B", border: "1px solid #3F3F46", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [v, "Score"]} />
+                    <Bar dataKey="score" radius={[0, 4, 4, 0]}>
+                      {[...members].sort((a, b) => b.productivityScore - a.productivityScore).map((m, i) => (
+                        <Cell key={i} fill={colors.memberScoreColors ? (m.productivityScore >= 75 ? "#22C55E" : m.productivityScore >= 50 ? "#EAB308" : "#EF4444") : "#52525B"} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                <div className="flex items-center gap-4 justify-end mt-2">
+                  {[["#22C55E","≥75"],["#EAB308","50–74"],["#EF4444","<50"]].map(([c,l]) => (
+                    <div key={l} className="flex items-center gap-1.5">
+                      <div className="w-2.5 h-2.5 rounded-sm" style={{ background: c }} />
+                      <span className="text-[10px] text-zinc-500">{l}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    ),
+
+    "team-radar": (
+      <div>
+        <SLabel>Team Performance Dimensions</SLabel>
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-4">
+            {members.length === 0 ? (
+              <p className="text-sm text-zinc-500 text-center py-6">No team data yet.</p>
+            ) : (() => {
+              const avg = (fn: (m: typeof members[0]) => number) =>
+                Math.round(members.reduce((s, m) => s + fn(m), 0) / members.length);
+              const total = data?.totalTasksCompleted ?? 0;
+              const overdue = data?.totalOverdue ?? 0;
+              const completionRate = total > 0 ? Math.round(total / (total + overdue) * 100) : 0;
+              const teamRadarData = [
+                { metric: "Score", value: data?.teamScore ?? 0 },
+                { metric: "Completion", value: completionRate },
+                { metric: "Focus", value: avg(m => Math.min(Math.round((m.focusTimeMinutes ?? 0) / 360 * 100), 100)) },
+                { metric: "On Track", value: Math.round(members.filter(m => m.riskLevel !== "at_risk").length / members.length * 100) },
+                { metric: "Activity", value: avg(m => Math.min(m.productivityScore + 10, 100)) },
+              ];
+              return (
+                <div className="flex flex-col md:flex-row items-center gap-4">
+                  <ResponsiveContainer width="100%" height={240}>
+                    <RadarChart data={teamRadarData} margin={{ top: 10, right: 20, left: 20, bottom: 10 }}>
+                      <PolarGrid stroke="#3F3F46" />
+                      <PolarAngleAxis dataKey="metric" tick={{ fill: "#9CA3AF", fontSize: 11 }} />
+                      <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+                      <Radar dataKey="value" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.15} strokeWidth={2} />
+                      <Tooltip contentStyle={{ backgroundColor: "#18181B", border: "1px solid #3F3F46", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [`${v}`, "Team Avg"]} />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                  <div className="flex flex-col gap-2 min-w-[140px]">
+                    {teamRadarData.map(d => (
+                      <div key={d.metric} className="flex items-center justify-between gap-4">
+                        <span className="text-xs text-zinc-400">{d.metric}</span>
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                            <div className="h-full bg-blue-500 rounded-full" style={{ width: `${d.value}%` }} />
+                          </div>
+                          <span className="text-xs text-zinc-300 font-mono w-7 text-right">{d.value}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+          </CardContent>
+        </Card>
+      </div>
+    ),
+
+    "velocity-gauge": (
+      <div>
+        <SLabel>Task Velocity</SLabel>
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-4">
+            {(() => {
+              const total = data?.totalTasksCompleted ?? 0;
+              const overdue = data?.totalOverdue ?? 0;
+              const velocity = total + overdue > 0 ? Math.round(total / (total + overdue) * 100) : 0;
+              const angle = (velocity / 100) * 180;
+              const R = 90; const cx = 110; const cy = 105;
+              const toRad = (deg: number) => (deg - 180) * Math.PI / 180;
+              const needleX = cx + R * 0.72 * Math.cos(toRad(angle));
+              const needleY = cy + R * 0.72 * Math.sin(toRad(angle));
+              const arcPath = (from: number, to: number, color: string) => {
+                const s = { x: cx + R * Math.cos(toRad(from)), y: cy + R * Math.sin(toRad(from)) };
+                const e = { x: cx + R * Math.cos(toRad(to)), y: cy + R * Math.sin(toRad(to)) };
+                return <path d={`M ${s.x} ${s.y} A ${R} ${R} 0 0 1 ${e.x} ${e.y}`} stroke={color} strokeWidth={14} fill="none" strokeLinecap="round" />;
+              };
+              const label = velocity >= 80 ? "Excellent" : velocity >= 60 ? "Good" : velocity >= 40 ? "Moderate" : "Needs Focus";
+              const labelColor = velocity >= 80 ? "text-green-400" : velocity >= 60 ? "text-blue-400" : velocity >= 40 ? "text-yellow-400" : "text-red-400";
+              return (
+                <div className="flex flex-col items-center gap-2">
+                  <svg width={220} height={120} viewBox="0 0 220 120">
+                    {arcPath(0, 60, "#27272A")}
+                    {arcPath(60, 120, "#27272A")}
+                    {arcPath(120, 180, "#27272A")}
+                    {velocity > 0 && arcPath(0, Math.min(angle, 60), "#EF4444")}
+                    {velocity > 33 && arcPath(60, Math.min(angle, 120), "#EAB308")}
+                    {velocity > 67 && arcPath(120, Math.min(angle, 180), "#22C55E")}
+                    <line x1={cx} y1={cy} x2={needleX} y2={needleY} stroke="#F4F4F5" strokeWidth={2.5} strokeLinecap="round" />
+                    <circle cx={cx} cy={cy} r={5} fill="#F4F4F5" />
+                    <text x={cx} y={cy - 16} textAnchor="middle" fill="#F4F4F5" fontSize={22} fontWeight="bold">{velocity}%</text>
+                    <text x={25} y={cy + 18} fill="#71717A" fontSize={9}>Low</text>
+                    <text x={185} y={cy + 18} fill="#71717A" fontSize={9} textAnchor="end">High</text>
+                  </svg>
+                  <p className={`text-sm font-semibold -mt-2 ${labelColor}`}>{label}</p>
+                  <div className="flex gap-6 text-xs text-zinc-500 mt-1">
+                    <span><span className="text-zinc-300 font-medium">{total}</span> completed</span>
+                    <span><span className="text-zinc-300 font-medium">{overdue}</span> overdue</span>
+                  </div>
+                </div>
               );
             })()}
           </CardContent>

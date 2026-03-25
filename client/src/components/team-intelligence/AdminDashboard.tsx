@@ -19,7 +19,8 @@ import {
 } from "lucide-react";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer,
+  Tooltip, ResponsiveContainer, ScatterChart, Scatter, ZAxis, Cell,
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
 } from "recharts";
 import MetricCard from "./shared/MetricCard";
 import ScoreCircle from "./shared/ScoreCircle";
@@ -27,11 +28,11 @@ import EmployeeDetailPanel from "./shared/EmployeeDetailPanel";
 import type { AdminDashboardData } from "@shared/lib/team-intelligence/types";
 
 /* ─── Types ─────────────────────────────────────────────────────────────── */
-type SectionId = "overview" | "org-trend" | "teams-table" | "team-bar-chart" | "risk-distribution" | "top-performers" | "recent-activity" | "ai-brief";
+type SectionId = "overview" | "org-gauge" | "org-trend" | "teams-table" | "team-heatmap" | "team-bar-chart" | "team-scatter" | "risk-distribution" | "top-performers" | "recent-activity" | "ai-brief";
 
 const DEFAULT_SECTIONS: SectionId[] = [
-  "overview", "org-trend", "teams-table", "team-bar-chart",
-  "risk-distribution", "top-performers", "recent-activity", "ai-brief",
+  "overview", "org-gauge", "org-trend", "teams-table", "team-heatmap",
+  "team-bar-chart", "team-scatter", "risk-distribution", "top-performers", "recent-activity", "ai-brief",
 ];
 
 interface ColorSettings { riskCardBorders: boolean; scoreCellColors: boolean; activityIcons: boolean; }
@@ -178,7 +179,13 @@ function TeamDetailSheet({ team, isOpen, onClose }: { team: typeof DEMO_TEAMS[0]
 /* ─── Main component ─────────────────────────────────────────────────────── */
 export default function AdminDashboard({ workspaceId = "default" }: { workspaceId?: string }) {
   /* — Persistent state — */
-  const [sectionOrder, _setSectionOrder] = useState<SectionId[]>(() => lsGet("ti-admin-sections", DEFAULT_SECTIONS));
+  const [sectionOrder, _setSectionOrder] = useState<SectionId[]>(() => {
+    const stored = lsGet<string[]>("ti-admin-sections", []);
+    const allIds = DEFAULT_SECTIONS as string[];
+    const valid = stored.filter(s => allIds.includes(s)) as SectionId[];
+    const missing = DEFAULT_SECTIONS.filter(s => !stored.includes(s));
+    return valid.length > 0 ? [...valid, ...missing] : DEFAULT_SECTIONS;
+  });
   const [colors, _setColors] = useState<ColorSettings>(() => lsGet("ti-admin-colors", DEFAULT_COLORS));
   const [history, _setHistory] = useState<HistorySnapshot[]>(() => lsGet("ti-admin-history", []));
 
@@ -231,7 +238,7 @@ export default function AdminDashboard({ workspaceId = "default" }: { workspaceI
   const hasRealData = !isLoading && data?.teams && data.teams.length > 0;
   const isDemo = !isLoading && !hasRealData;
 
-  /* — Sort teams — */
+  /* — Sort teamsToShow — */
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(prev => prev === "asc" ? "desc" : "asc");
     else { setSortKey(key); setSortDir("desc"); }
@@ -562,6 +569,191 @@ export default function AdminDashboard({ workspaceId = "default" }: { workspaceI
                 See more ({DEMO_BRIEF.length - briefShown} more points)
               </Button>
             )}
+          </CardContent>
+        </Card>
+      </div>
+    ),
+
+    "org-gauge": (
+      <div>
+        <SLabel>Org Health Gauge</SLabel>
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-4 flex flex-col md:flex-row items-center gap-6">
+            {(() => {
+              const score = orgScore;
+              const angle = (score / 100) * 180;
+              const R = 90; const cx = 110; const cy = 105;
+              const toRad = (deg: number) => (deg - 180) * Math.PI / 180;
+              const needleX = cx + R * 0.72 * Math.cos(toRad(angle));
+              const needleY = cy + R * 0.72 * Math.sin(toRad(angle));
+              const arcPath = (from: number, to: number, color: string) => {
+                const s = { x: cx + R * Math.cos(toRad(from)), y: cy + R * Math.sin(toRad(from)) };
+                const e = { x: cx + R * Math.cos(toRad(to)), y: cy + R * Math.sin(toRad(to)) };
+                return <path d={`M ${s.x} ${s.y} A ${R} ${R} 0 0 1 ${e.x} ${e.y}`} stroke={color} strokeWidth={16} fill="none" strokeLinecap="round" />;
+              };
+              const label = score >= 80 ? "Excellent" : score >= 65 ? "Good" : score >= 45 ? "Moderate" : "Needs Attention";
+              const labelColor = score >= 80 ? "text-green-400" : score >= 65 ? "text-blue-400" : score >= 45 ? "text-yellow-400" : "text-red-400";
+              return (
+                <div className="flex flex-col items-center">
+                  <svg width={220} height={125} viewBox="0 0 220 125">
+                    {arcPath(0, 60, "#27272A")} {arcPath(60, 120, "#27272A")} {arcPath(120, 180, "#27272A")}
+                    {score > 0 && arcPath(0, Math.min(angle, 60), "#EF4444")}
+                    {score > 33 && arcPath(60, Math.min(angle, 120), "#EAB308")}
+                    {score > 67 && arcPath(120, Math.min(angle, 180), "#22C55E")}
+                    <line x1={cx} y1={cy} x2={needleX} y2={needleY} stroke="#F4F4F5" strokeWidth={3} strokeLinecap="round" />
+                    <circle cx={cx} cy={cy} r={6} fill="#F4F4F5" />
+                    <text x={cx} y={cy - 18} textAnchor="middle" fill="#F4F4F5" fontSize={24} fontWeight="bold">{score}</text>
+                    <text x={cx} y={cy - 4} textAnchor="middle" fill="#71717A" fontSize={10}>/ 100</text>
+                    <text x={22} y={cy + 20} fill="#71717A" fontSize={9}>Low</text>
+                    <text x={190} y={cy + 20} fill="#71717A" fontSize={9} textAnchor="end">High</text>
+                  </svg>
+                  <p className={`text-sm font-semibold -mt-1 ${labelColor}`}>{label}</p>
+                </div>
+              );
+            })()}
+            <div className="flex flex-col gap-3 flex-1 min-w-0">
+              {[
+                { label: "Org Score", value: `${orgScore}`, sub: "overall health" },
+                { label: "On Track", value: `${riskDist.onTrack}`, sub: "members", color: "text-green-400" },
+                { label: "Needs Attention", value: `${riskDist.needsAttention}`, sub: "members", color: "text-yellow-400" },
+                { label: "At Risk", value: `${riskDist.atRisk}`, sub: "members", color: "text-red-400" },
+              ].map(item => (
+                <div key={item.label} className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-zinc-500">{item.label}</p>
+                    <p className={`text-lg font-bold ${item.color ?? "text-white"}`}>{item.value}</p>
+                  </div>
+                  <span className="text-xs text-zinc-600">{item.sub}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    ),
+
+    "team-heatmap": (
+      <div>
+        <SLabel>Team Performance Matrix</SLabel>
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-4 overflow-x-auto">
+            {(() => {
+              const metrics = ["Score", "Velocity", "Overdue%", "Members"];
+              const getVal = (t: typeof teamsToShow[0], metric: string): number => {
+                if (metric === "Score") return t.score ?? 0;
+                if (metric === "Velocity") return t.velocity ?? 0;
+                if (metric === "Overdue%") return t.overduePercent ?? 0;
+                if (metric === "Members") return t.memberCount ?? 0;
+                return 0;
+              };
+              const maxes: Record<string, number> = {};
+              metrics.forEach(m => { maxes[m] = Math.max(...teamsToShow.map(t => getVal(t, m)), 1); });
+              const cellBg = (val: number, max: number, invert = false) => {
+                const pct = val / max;
+                const adj = invert ? 1 - pct : pct;
+                if (adj < 0.2) return "#27272A";
+                if (adj < 0.4) return "#166534";
+                if (adj < 0.6) return "#15803D";
+                if (adj < 0.8) return "#16A34A";
+                return "#22C55E";
+              };
+              return (
+                <table className="w-full text-xs border-separate border-spacing-1">
+                  <thead>
+                    <tr>
+                      <th className="text-left text-zinc-500 pr-3 pb-1 font-normal w-24">Team</th>
+                      {metrics.map(m => <th key={m} className="text-zinc-500 pb-1 font-normal text-center px-1">{m}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {teamsToShow.slice(0, 10).map((t, i) => (
+                      <tr key={i}>
+                        <td className="text-zinc-300 pr-3 py-0.5 truncate max-w-[80px]">{t.teamName}</td>
+                        {metrics.map(m => {
+                          const val = getVal(t, m);
+                          const bg = cellBg(val, maxes[m], m === "Overdue%");
+                          return (
+                            <td key={m} className="text-center py-0.5 px-1">
+                              <div className="rounded px-1.5 py-1 text-white text-[11px] font-mono" style={{ backgroundColor: bg, minWidth: 36 }} title={`${t.teamName} – ${m}: ${val}`}>
+                                {val}
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              );
+            })()}
+            <div className="flex items-center justify-end gap-2 mt-3">
+              <span className="text-[10px] text-zinc-600">Low</span>
+              {["#27272A","#166534","#15803D","#16A34A","#22C55E"].map((c, i) => (
+                <div key={i} className="w-3.5 h-3.5 rounded-sm" style={{ background: c }} />
+              ))}
+              <span className="text-[10px] text-zinc-600">High</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    ),
+
+    "team-scatter": (
+      <div>
+        <SLabel>Risk vs Performance — Team View</SLabel>
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-4">
+            {teamsToShow.length === 0 ? (
+              <p className="text-sm text-zinc-500 text-center py-6">No team data yet.</p>
+            ) : (() => {
+              const scatterData = teamsToShow.map(t => ({
+                name: t.teamName,
+                score: t.score ?? 0,
+                overdue: t.overduePercent ?? 0,
+                size: (t.memberCount ?? 5) * 40,
+              }));
+              const COLORS_SCATTER = ["#22C55E","#3B82F6","#EAB308","#F97316","#A855F7","#EC4899","#14B8A6"];
+              return (
+                <>
+                  <ResponsiveContainer width="100%" height={260}>
+                    <ScatterChart margin={{ top: 10, right: 20, left: 0, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#27272A" />
+                      <XAxis dataKey="score" name="Score" type="number" domain={[0, 100]} tick={{ fill: "#71717A", fontSize: 10 }} axisLine={false} tickLine={false} label={{ value: "Score →", position: "insideBottomRight", offset: -5, fill: "#52525B", fontSize: 10 }} />
+                      <YAxis dataKey="overdue" name="Overdue%" type="number" domain={[0, 100]} tick={{ fill: "#71717A", fontSize: 10 }} axisLine={false} tickLine={false} label={{ value: "Overdue% ↑", angle: -90, position: "insideLeft", fill: "#52525B", fontSize: 10 }} />
+                      <ZAxis dataKey="size" range={[40, 400]} />
+                      <Tooltip
+                        cursor={{ strokeDasharray: "3 3", stroke: "#3F3F46" }}
+                        contentStyle={{ backgroundColor: "#18181B", border: "1px solid #3F3F46", borderRadius: 8, fontSize: 12 }}
+                        content={({ payload }) => {
+                          if (!payload?.length) return null;
+                          const d = payload[0].payload;
+                          return (
+                            <div className="p-2 text-xs">
+                              <p className="font-semibold text-white mb-1">{d.name}</p>
+                              <p className="text-zinc-400">Score: <span className="text-white">{d.score}</span></p>
+                              <p className="text-zinc-400">Overdue: <span className="text-white">{d.overdue}%</span></p>
+                            </div>
+                          );
+                        }}
+                      />
+                      <Scatter data={scatterData} shape={(props: any) => {
+                        const idx = scatterData.findIndex(d => d.name === props.name);
+                        return <circle cx={props.cx} cy={props.cy} r={Math.sqrt(props.size / Math.PI)} fill={COLORS_SCATTER[idx % COLORS_SCATTER.length]} fillOpacity={0.8} stroke="#18181B" strokeWidth={1} />;
+                      }} />
+                    </ScatterChart>
+                  </ResponsiveContainer>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {scatterData.map((d, i) => (
+                      <div key={d.name} className="flex items-center gap-1">
+                        <div className="w-2 h-2 rounded-full" style={{ background: COLORS_SCATTER[i % COLORS_SCATTER.length] }} />
+                        <span className="text-[10px] text-zinc-500">{d.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-zinc-600 mt-2">Bubble size = team size. High score + low overdue = top-right quadrant.</p>
+                </>
+              );
+            })()}
           </CardContent>
         </Card>
       </div>

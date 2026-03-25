@@ -18,6 +18,7 @@ import {
 import {
   PieChart, Pie, Cell, Tooltip as ReTooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, Tooltip,
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
 } from "recharts";
 import ScoreCircle from "./shared/ScoreCircle";
 import MetricCard from "./shared/MetricCard";
@@ -27,20 +28,24 @@ import { useAuth } from "@/hooks/use-auth";
 import type { EmployeeDashboardData, DailySnapshotData } from "@shared/lib/team-intelligence/types";
 
 /* ─── Types ─────────────────────────────────────────────────────────────── */
-type SectionId = "morning-brief" | "score-overview" | "time-distribution" | "task-performance" | "productivity-trend" | "compare-periods" | "ai-insights";
+type SectionId = "morning-brief" | "score-overview" | "score-radar" | "time-distribution" | "task-performance" | "productivity-trend" | "week-comparison" | "compare-periods" | "consistency-heatmap" | "ai-insights";
 
 const DEFAULT_SECTIONS: SectionId[] = [
-  "morning-brief", "score-overview", "time-distribution",
-  "task-performance", "productivity-trend", "compare-periods", "ai-insights",
+  "morning-brief", "score-overview", "score-radar", "time-distribution",
+  "task-performance", "productivity-trend", "week-comparison",
+  "compare-periods", "consistency-heatmap", "ai-insights",
 ];
 
 const SECTION_LABELS: Record<SectionId, string> = {
   "morning-brief": "Morning Brief",
   "score-overview": "Score Overview",
+  "score-radar": "Productivity Dimensions",
   "time-distribution": "Time Distribution",
   "task-performance": "Task Performance",
   "productivity-trend": "Productivity Trend",
+  "week-comparison": "This Week vs Last Week",
   "compare-periods": "Compare Periods",
+  "consistency-heatmap": "Consistency Heatmap",
   "ai-insights": "AI Insights",
 };
 
@@ -93,8 +98,11 @@ export default function EmployeeDashboard({ workspaceId = "default" }: { workspa
 
   /* — Persistent state (localStorage) — */
   const [sectionOrder, _setSectionOrder] = useState<SectionId[]>(() => {
-    const stored = lsGet<SectionId[]>("ti-emp-sections", DEFAULT_SECTIONS);
-    return stored.length === DEFAULT_SECTIONS.length ? stored : DEFAULT_SECTIONS;
+    const stored = lsGet<string[]>("ti-emp-sections", []);
+    const allIds = DEFAULT_SECTIONS as string[];
+    const valid = stored.filter(s => allIds.includes(s)) as SectionId[];
+    const missing = DEFAULT_SECTIONS.filter(s => !stored.includes(s));
+    return valid.length > 0 ? [...valid, ...missing] : DEFAULT_SECTIONS;
   });
   const [colors, _setColors] = useState<ColorSettings>(() => lsGet("ti-emp-colors", DEFAULT_COLORS));
   const [briefOpen, _setBriefOpen] = useState<boolean>(() => lsGet("ti-emp-brief-open", true));
@@ -239,6 +247,60 @@ export default function EmployeeDashboard({ workspaceId = "default" }: { workspa
     const overdue = taskDataSlice.reduce((s, d) => s + d.tasksOverdue, 0);
     return assigned > 0 ? Math.round(((assigned - overdue) / assigned) * 100) : 100;
   }, [taskDataSlice]);
+
+  /* ─── New visual computed values ─────────────────────────────────────── */
+  const radarData = useMemo(() => {
+    const taskRate = today
+      ? Math.round(Math.min((today.tasksCompleted / Math.max(today.tasksAssigned, 1)) * 100, 100))
+      : 0;
+    const deepWorkScore = Math.round(Math.min(focusHours / 6 * 100, 100));
+    const streakScore = Math.min(streak * 5, 100);
+    return [
+      { metric: "Focus", value: scores?.focus ?? Math.round(focusHours / 6 * 80) },
+      { metric: "Tasks", value: taskRate || (totalScore > 0 ? Math.round(totalScore * 0.85) : 0) },
+      { metric: "Deadline", value: deadlineAdherence },
+      { metric: "Streak", value: streakScore || (totalScore > 0 ? Math.min(totalScore, 75) : 0) },
+      { metric: "Deep Work", value: deepWorkScore || (totalScore > 0 ? Math.round(totalScore * 0.7) : 0) },
+      { metric: "Score", value: totalScore },
+    ];
+  }, [scores, today, deadlineAdherence, streak, focusHours, totalScore]);
+
+  const heatmapData = useMemo(() => {
+    const scoreMap: Record<string, number> = {};
+    recent.forEach(s => { scoreMap[s.date] = s.productivityScore; });
+    return Array.from({ length: 70 }, (_, i) => {
+      const d = new Date(); d.setDate(d.getDate() - (69 - i));
+      const dateStr = d.toISOString().split("T")[0];
+      return { date: dateStr, score: scoreMap[dateStr] ?? 0 };
+    });
+  }, [recent]);
+
+  const weekCompData = useMemo(() => {
+    const now = new Date();
+    const dow = now.getDay();
+    const thisMon = new Date(now); thisMon.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1));
+    const lastMon = new Date(thisMon); lastMon.setDate(thisMon.getDate() - 7);
+    const lastSun = new Date(thisMon); lastSun.setDate(thisMon.getDate() - 1);
+    const thisMondayStr = thisMon.toISOString().split("T")[0];
+    const lastMondayStr = lastMon.toISOString().split("T")[0];
+    const lastSundayStr = lastSun.toISOString().split("T")[0];
+    const thisW = recent.filter(s => s.date >= thisMondayStr);
+    const lastW = recent.filter(s => s.date >= lastMondayStr && s.date <= lastSundayStr);
+    const sum = (arr: DailySnapshotData[], key: keyof DailySnapshotData) =>
+      arr.reduce((s, d) => s + (Number(d[key]) || 0), 0);
+    const avg = (arr: DailySnapshotData[], key: keyof DailySnapshotData) =>
+      arr.length ? Math.round(sum(arr, key) / arr.length) : 0;
+    return [
+      { label: "Avg Score", this: avg(thisW, "productivityScore"), last: avg(lastW, "productivityScore"), unit: "", invert: false },
+      { label: "Tasks Done", this: sum(thisW, "tasksCompleted"), last: sum(lastW, "tasksCompleted"), unit: "", invert: false },
+      { label: "Focus Hours", this: Math.round(sum(thisW, "deepWorkMinutes") / 60 * 10) / 10, last: Math.round(sum(lastW, "deepWorkMinutes") / 60 * 10) / 10, unit: "h", invert: false },
+      { label: "Overdue", this: sum(thisW, "tasksOverdue"), last: sum(lastW, "tasksOverdue"), unit: "", invert: true },
+    ].map(m => {
+      const delta = m.last > 0 ? Math.round(((m.this - m.last) / m.last) * 100) : (m.this > 0 ? 100 : 0);
+      const better = m.invert ? delta < 0 : delta >= 0;
+      return { ...m, delta, better };
+    });
+  }, [recent]);
 
   /* ─── Drag-to-reorder handlers ───────────────────────────────────────── */
   const handleDragStart = (idx: number) => setDragIdx(idx);
@@ -552,6 +614,97 @@ export default function EmployeeDashboard({ workspaceId = "default" }: { workspa
             </Button>
           </CardContent>
         </Card>
+      </div>
+    ),
+
+    "score-radar": (
+      <div>
+        <SectionLabel>Productivity Dimensions</SectionLabel>
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-4">
+            <div className="flex flex-col md:flex-row items-center gap-4">
+              <ResponsiveContainer width="100%" height={260}>
+                <RadarChart data={radarData} margin={{ top: 10, right: 20, left: 20, bottom: 10 }}>
+                  <PolarGrid stroke="#3F3F46" />
+                  <PolarAngleAxis dataKey="metric" tick={{ fill: "#9CA3AF", fontSize: 11 }} />
+                  <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+                  <Radar dataKey="value" stroke="#22C55E" fill="#22C55E" fillOpacity={0.15} strokeWidth={2} />
+                  <Tooltip contentStyle={{ backgroundColor: "#18181B", border: "1px solid #3F3F46", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [`${v}`, "Score"]} />
+                </RadarChart>
+              </ResponsiveContainer>
+              <div className="flex flex-col gap-2 min-w-[140px]">
+                {radarData.map(d => (
+                  <div key={d.metric} className="flex items-center justify-between gap-4">
+                    <span className="text-xs text-zinc-400">{d.metric}</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-green-500 rounded-full" style={{ width: `${d.value}%` }} />
+                      </div>
+                      <span className="text-xs text-zinc-300 font-mono w-7 text-right">{d.value}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    ),
+
+    "consistency-heatmap": (
+      <div>
+        <SectionLabel>Consistency — Last 10 Weeks</SectionLabel>
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-4">
+            <div className="flex gap-1 flex-wrap">
+              {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => (
+                <div key={d} className="text-[9px] text-zinc-600 w-7 text-center">{d}</div>
+              ))}
+            </div>
+            <div className="grid gap-0.5 mt-1" style={{ gridTemplateColumns: "repeat(7, 1fr)" }}>
+              {heatmapData.map((cell, i) => {
+                const score = cell.score;
+                const bg = score === 0 ? "bg-zinc-800" : score < 25 ? "bg-green-900/60" : score < 50 ? "bg-green-800/70" : score < 70 ? "bg-green-700/80" : score < 85 ? "bg-green-600" : "bg-green-400";
+                return (
+                  <div
+                    key={i}
+                    className={`${bg} rounded-sm aspect-square cursor-default transition-colors`}
+                    title={`${cell.date}: ${score > 0 ? score + " / 100" : "No data"}`}
+                    data-testid={`heatmap-cell-${cell.date}`}
+                  />
+                );
+              })}
+            </div>
+            <div className="flex items-center justify-end gap-2 mt-3">
+              <span className="text-[10px] text-zinc-600">Less</span>
+              {["bg-zinc-800","bg-green-900/60","bg-green-800/70","bg-green-600","bg-green-400"].map((c, i) => (
+                <div key={i} className={`w-3 h-3 rounded-sm ${c}`} />
+              ))}
+              <span className="text-[10px] text-zinc-600">More</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    ),
+
+    "week-comparison": (
+      <div>
+        <SectionLabel>This Week vs Last Week</SectionLabel>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {weekCompData.map(m => (
+            <Card key={m.label} className="bg-zinc-900 border-zinc-800" data-testid={`weekcomp-${m.label.toLowerCase().replace(/\s+/g,"-")}`}>
+              <CardContent className="p-4">
+                <p className="text-xs text-zinc-500 mb-2">{m.label}</p>
+                <p className="text-2xl font-bold text-white">{m.this}{m.unit}</p>
+                <div className={`flex items-center gap-1 mt-1.5 text-xs font-medium ${m.better ? "text-green-400" : "text-red-400"}`}>
+                  <span>{m.delta > 0 ? "↑" : m.delta < 0 ? "↓" : "→"}</span>
+                  <span>{Math.abs(m.delta)}% vs last week</span>
+                </div>
+                <p className="text-xs text-zinc-600 mt-0.5">Last: {m.last}{m.unit}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     ),
 
