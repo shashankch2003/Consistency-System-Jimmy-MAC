@@ -8,28 +8,38 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { UsersRound, Plus, Users, ChevronRight, Building2, Code2, Megaphone, ShoppingCart, Settings, HeartHandshake, PenTool, Layers } from "lucide-react";
+import { UsersRound, Plus, Users, ChevronRight, Building2, Code2, Megaphone, ShoppingCart, Settings, HeartHandshake, PenTool, Layers, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const TEAM_TYPES = ["Engineering", "Product", "Design", "Marketing", "Sales", "Operations", "HR", "Finance", "Support", "Other"];
 
 const TEAM_TYPE_CONFIG: Record<string, { color: string; bg: string; icon: any }> = {
   Engineering: { color: "text-blue-400", bg: "bg-blue-500/10", icon: Code2 },
-  Product: { color: "text-purple-400", bg: "bg-purple-500/10", icon: Layers },
-  Design: { color: "text-pink-400", bg: "bg-pink-500/10", icon: PenTool },
-  Marketing: { color: "text-orange-400", bg: "bg-orange-500/10", icon: Megaphone },
-  Sales: { color: "text-green-400", bg: "bg-green-500/10", icon: ShoppingCart },
-  Operations: { color: "text-cyan-400", bg: "bg-cyan-500/10", icon: Settings },
-  HR: { color: "text-yellow-400", bg: "bg-yellow-500/10", icon: HeartHandshake },
-  Finance: { color: "text-emerald-400", bg: "bg-emerald-500/10", icon: Building2 },
-  Support: { color: "text-rose-400", bg: "bg-rose-500/10", icon: HeartHandshake },
-  Other: { color: "text-gray-400", bg: "bg-gray-500/10", icon: Users },
+  Product:     { color: "text-purple-400", bg: "bg-purple-500/10", icon: Layers },
+  Design:      { color: "text-pink-400", bg: "bg-pink-500/10", icon: PenTool },
+  Marketing:   { color: "text-orange-400", bg: "bg-orange-500/10", icon: Megaphone },
+  Sales:       { color: "text-green-400", bg: "bg-green-500/10", icon: ShoppingCart },
+  Operations:  { color: "text-cyan-400", bg: "bg-cyan-500/10", icon: Settings },
+  HR:          { color: "text-yellow-400", bg: "bg-yellow-500/10", icon: HeartHandshake },
+  Finance:     { color: "text-emerald-400", bg: "bg-emerald-500/10", icon: Building2 },
+  Support:     { color: "text-rose-400", bg: "bg-rose-500/10", icon: HeartHandshake },
+  Other:       { color: "text-gray-400", bg: "bg-gray-500/10", icon: Users },
 };
 
 interface Team {
   id: number; workspaceId: number; name: string; teamType: string;
   department?: string; description?: string; parentTeamId?: number; memberCount: number; createdAt?: string;
 }
+
+const DEMO_TEAMS: Team[] = [
+  { id: 1, workspaceId: 1, name: "Engineering", teamType: "Engineering", department: "Technology", description: "Core product engineering — backend, frontend, and infrastructure", memberCount: 15 },
+  { id: 2, workspaceId: 1, name: "Product", teamType: "Product", department: "Product", description: "Product strategy, roadmap, and user research", memberCount: 8 },
+  { id: 3, workspaceId: 1, name: "Design", teamType: "Design", department: "Product", description: "UX/UI design, brand identity, and design systems", memberCount: 6 },
+  { id: 4, workspaceId: 1, name: "Marketing", teamType: "Marketing", department: "Marketing", description: "Growth, content strategy, and brand marketing", memberCount: 7 },
+  { id: 5, workspaceId: 1, name: "Sales", teamType: "Sales", department: "Revenue", description: "Enterprise and SMB sales, account management", memberCount: 8 },
+  { id: 6, workspaceId: 1, name: "Operations", teamType: "Operations", department: "Operations", description: "Infrastructure, logistics, and internal tools", memberCount: 4 },
+  { id: 7, workspaceId: 1, name: "HR & Finance", teamType: "HR", department: "People & Finance", description: "People operations, talent acquisition, and finance", memberCount: 2 },
+];
 
 function CreateTeamModal({ workspaceId, teams, onClose }: { workspaceId: number; teams: Team[]; onClose: () => void }) {
   const { toast } = useToast();
@@ -103,66 +113,57 @@ function TeamCard({ team, subTeams }: { team: Team; subTeams: Team[] }) {
   const cfg = TEAM_TYPE_CONFIG[team.teamType] ?? TEAM_TYPE_CONFIG.Other;
   const Icon = cfg.icon;
   return (
-    <div className="space-y-2" data-testid={`card-team-${team.id}`}>
-      <Card className="hover:border-primary/40 transition-all hover:shadow-sm">
-        <CardContent className="p-5">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <div className={`h-11 w-11 rounded-xl ${cfg.bg} flex items-center justify-center`}>
-                <Icon className={`h-5 w-5 ${cfg.color}`} />
-              </div>
-              <div>
-                <div className="font-semibold text-base">{team.name}</div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <Badge variant="outline" className={`text-xs ${cfg.color}`}>{team.teamType}</Badge>
-                  {team.department && <span className="text-xs text-muted-foreground">{team.department}</span>}
-                </div>
-              </div>
+    <Card className="hover:border-primary/40 transition-all hover:shadow-sm" data-testid={`card-team-${team.id}`}>
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`h-11 w-11 rounded-xl ${cfg.bg} flex items-center justify-center`}>
+              <Icon className={`h-5 w-5 ${cfg.color}`} />
             </div>
-            <div className="text-right">
-              <div className="text-xl font-bold">{team.memberCount ?? 0}</div>
-              <div className="text-xs text-muted-foreground">members</div>
+            <div>
+              <div className="font-semibold text-base">{team.name}</div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <Badge variant="outline" className={`text-xs ${cfg.color}`}>{team.teamType}</Badge>
+                {team.department && <span className="text-xs text-muted-foreground">{team.department}</span>}
+              </div>
             </div>
           </div>
-          {team.description && (
-            <p className="text-sm text-muted-foreground mt-3 leading-relaxed">{team.description}</p>
-          )}
-          {subTeams.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-border/50">
-              <p className="text-xs text-muted-foreground mb-1">{subTeams.length} sub-team{subTeams.length > 1 ? "s" : ""}</p>
-              <div className="flex flex-wrap gap-1">
-                {subTeams.map(s => <Badge key={s.id} variant="secondary" className="text-xs">{s.name}</Badge>)}
-              </div>
+          <div className="text-right">
+            <div className="text-xl font-bold">{team.memberCount ?? 0}</div>
+            <div className="text-xs text-muted-foreground">members</div>
+          </div>
+        </div>
+        {team.description && (
+          <p className="text-sm text-muted-foreground mt-3 leading-relaxed">{team.description}</p>
+        )}
+        {subTeams.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-border/50">
+            <p className="text-xs text-muted-foreground mb-1">{subTeams.length} sub-team{subTeams.length > 1 ? "s" : ""}</p>
+            <div className="flex flex-wrap gap-1">
+              {subTeams.map(s => <Badge key={s.id} variant="secondary" className="text-xs">{s.name}</Badge>)}
             </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
 export default function TeamManagementPage() {
-  const { activeWorkspace } = useWorkspace();
+  const { activeWorkspace, isSeeding } = useWorkspace();
   const [showCreate, setShowCreate] = useState(false);
   const [typeFilter, setTypeFilter] = useState("All");
 
-  const { data: allTeams = [], isLoading } = useQuery<Team[]>({
+  const { data: dbTeams = [], isLoading } = useQuery<Team[]>({
     queryKey: ["/api/teams", activeWorkspace?.id],
     queryFn: () => fetch(`/api/teams?workspaceId=${activeWorkspace?.id}`).then(r => r.json()),
     enabled: !!activeWorkspace?.id,
   });
 
-  if (!activeWorkspace) {
-    return (
-      <div className="p-6 flex flex-col items-center justify-center h-64 gap-4 text-center">
-        <Building2 className="h-12 w-12 text-muted-foreground" />
-        <div>
-          <p className="font-medium text-lg">No workspace selected</p>
-          <p className="text-muted-foreground">Go to Workspace Setup to create or select a workspace first.</p>
-        </div>
-      </div>
-    );
-  }
+  // Use real DB data if workspace active, otherwise show demo data
+  const allTeams = activeWorkspace ? dbTeams : DEMO_TEAMS;
+  const displayName = activeWorkspace?.name ?? "TechNova Solutions (Demo)";
+  const isDemo = !activeWorkspace;
 
   const types = ["All", ...Array.from(new Set(allTeams.map(t => t.teamType)))];
   const rootTeams = allTeams.filter(t => !t.parentTeamId && (typeFilter === "All" || t.teamType === typeFilter));
@@ -183,11 +184,17 @@ export default function TeamManagementPage() {
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <UsersRound className="h-6 w-6 text-primary" /> Team Management
           </h1>
-          <p className="text-muted-foreground mt-1">{activeWorkspace.name}</p>
+          <p className="text-muted-foreground mt-1 flex items-center gap-2">
+            {displayName}
+            {isSeeding && <span className="flex items-center gap-1 text-primary text-xs"><Loader2 className="h-3 w-3 animate-spin" /> Loading live data…</span>}
+            {isDemo && !isSeeding && <Badge variant="secondary" className="text-xs">Demo Preview</Badge>}
+          </p>
         </div>
-        <Button onClick={() => setShowCreate(true)} data-testid="button-new-team">
-          <Plus className="h-4 w-4 mr-2" /> New Team
-        </Button>
+        {activeWorkspace && (
+          <Button onClick={() => setShowCreate(true)} data-testid="button-new-team">
+            <Plus className="h-4 w-4 mr-2" /> New Team
+          </Button>
+        )}
       </div>
 
       {/* Summary stats */}
@@ -199,7 +206,7 @@ export default function TeamManagementPage() {
         ].map(({ label, value, icon: Icon, color }) => (
           <Card key={label}>
             <CardContent className="p-4 flex items-center gap-3">
-              <div className={`h-10 w-10 rounded-lg bg-muted flex items-center justify-center`}>
+              <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
                 <Icon className={`h-5 w-5 ${color}`} />
               </div>
               <div>
@@ -212,30 +219,19 @@ export default function TeamManagementPage() {
       </div>
 
       {/* Type filter */}
-      {allTeams.length > 0 && (
-        <div className="flex gap-2 flex-wrap">
-          {types.map(t => (
-            <Button key={t} size="sm" variant={typeFilter === t ? "default" : "outline"}
-              onClick={() => setTypeFilter(t)} data-testid={`filter-type-${t}`}>
-              {t}
-            </Button>
-          ))}
-        </div>
-      )}
+      <div className="flex gap-2 flex-wrap">
+        {types.map(t => (
+          <Button key={t} size="sm" variant={typeFilter === t ? "default" : "outline"}
+            onClick={() => setTypeFilter(t)} data-testid={`filter-type-${t}`}>
+            {t}
+          </Button>
+        ))}
+      </div>
 
       {/* Teams by department */}
       {isLoading ? (
         <div className="space-y-3">{[1, 2, 3].map(i => <Card key={i} className="animate-pulse h-28" />)}</div>
-      ) : allTeams.length === 0 ? (
-        <Card className="text-center py-16">
-          <CardContent>
-            <UsersRound className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-lg font-medium">No teams yet</p>
-            <p className="text-muted-foreground mb-4">Create your first team or load a demo company from Workspace Setup</p>
-            <Button onClick={() => setShowCreate(true)}><Plus className="h-4 w-4 mr-2" /> Create Team</Button>
-          </CardContent>
-        </Card>
-      ) : Object.keys(deptGroups).length > 0 ? (
+      ) : (
         <div className="space-y-6">
           {Object.entries(deptGroups).map(([dept, teams]) => (
             <div key={dept}>
@@ -251,13 +247,11 @@ export default function TeamManagementPage() {
             </div>
           ))}
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {rootTeams.map(team => <TeamCard key={team.id} team={team} subTeams={subTeams(team.id)} />)}
-        </div>
       )}
 
-      {showCreate && <CreateTeamModal workspaceId={activeWorkspace.id} teams={allTeams} onClose={() => setShowCreate(false)} />}
+      {showCreate && activeWorkspace && (
+        <CreateTeamModal workspaceId={activeWorkspace.id} teams={allTeams} onClose={() => setShowCreate(false)} />
+      )}
     </div>
   );
 }

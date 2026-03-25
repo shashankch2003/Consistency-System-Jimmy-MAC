@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FolderKanban, Plus, Building2, Search } from "lucide-react";
+import { FolderKanban, Plus, Building2, Search, Loader2 } from "lucide-react";
 import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
 import { ProjectHeader } from "@/components/projects/ProjectHeader";
 import { TaskList } from "@/components/tasks/TaskList";
@@ -50,8 +50,30 @@ const STATUS_COLORS: Record<string, string> = {
   Completed: "bg-gray-500/20 text-gray-400 border-gray-500/30",
 };
 
+const PRIORITY_COLORS: Record<string, string> = {
+  Critical: "text-red-400",
+  High: "text-orange-400",
+  Medium: "text-yellow-400",
+  Low: "text-gray-400",
+};
+
+const DEMO_PROJECTS: Project[] = [
+  { id: 1, workspaceId: 1, name: "Mobile App Redesign", description: "Complete UI/UX overhaul of the iOS and Android apps with new design system", status: "Active", priority: "High", progress: 65, teamId: 3, dueDate: "2026-05-15" },
+  { id: 2, workspaceId: 1, name: "Platform Infrastructure Migration", description: "Migrate all services to Kubernetes with zero-downtime deployment pipeline", status: "Active", priority: "Critical", progress: 40, teamId: 1, dueDate: "2026-06-30" },
+  { id: 3, workspaceId: 1, name: "Q2 Marketing Campaign", description: "Integrated digital marketing campaign targeting SMB segment in APAC and EMEA", status: "Active", priority: "High", progress: 85, teamId: 4, dueDate: "2026-04-30" },
+  { id: 4, workspaceId: 1, name: "Customer Self-Service Portal", description: "New portal allowing customers to manage accounts, billing, and support tickets", status: "Planning", priority: "Medium", progress: 10, teamId: 2, dueDate: "2026-08-01" },
+  { id: 5, workspaceId: 1, name: "API v3.0 — GraphQL Migration", description: "Replace REST endpoints with GraphQL API layer, improve developer experience", status: "Active", priority: "High", progress: 55, teamId: 1, dueDate: "2026-07-15" },
+  { id: 6, workspaceId: 1, name: "Sales Intelligence Dashboard", description: "Real-time pipeline visibility and AI-driven lead scoring for the sales team", status: "Completed", priority: "Medium", progress: 100, teamId: 5, dueDate: "2026-03-01" },
+  { id: 7, workspaceId: 1, name: "HR System Integration", description: "Integrate BambooHR with internal tools for automated onboarding workflows", status: "On Hold", priority: "Low", progress: 30, teamId: 7, dueDate: "2026-09-01" },
+  { id: 8, workspaceId: 1, name: "User Analytics Platform", description: "Build internal analytics to track engagement, retention, and feature adoption", status: "Planning", priority: "Medium", progress: 5, teamId: 2, dueDate: "2026-10-01" },
+  { id: 9, workspaceId: 1, name: "SEO & Content Optimisation", description: "Restructure website content architecture and implement technical SEO improvements", status: "Active", priority: "Medium", progress: 70, teamId: 4, dueDate: "2026-04-15" },
+  { id: 10, workspaceId: 1, name: "Annual Security Audit", description: "Comprehensive SOC2 Type II audit and penetration testing across all systems", status: "Completed", priority: "Critical", progress: 100, teamId: 6, dueDate: "2026-03-10" },
+  { id: 11, workspaceId: 1, name: "Data Pipeline & Warehouse", description: "Build real-time event streaming pipeline feeding into Snowflake data warehouse", status: "Active", priority: "High", progress: 25, teamId: 1, dueDate: "2026-09-30" },
+  { id: 12, workspaceId: 1, name: "Design System 2.0", description: "Unified component library and brand guidelines across all product surfaces", status: "Active", priority: "Medium", progress: 50, teamId: 3, dueDate: "2026-06-01" },
+];
+
 export default function ProjectsPage() {
-  const { activeWorkspace, workspaceId } = useWorkspace();
+  const { activeWorkspace, workspaceId, isSeeding } = useWorkspace();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -60,7 +82,7 @@ export default function ProjectsPage() {
   const [sortBy, setSortBy] = useState<"name" | "dueDate" | "status">("name");
   const [activeView, setActiveView] = useState<ViewType>("board");
 
-  const { data: projects = [], isLoading } = useQuery<Project[]>({
+  const { data: dbProjects = [], isLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects", workspaceId],
     queryFn: () => fetch(`/api/projects?workspaceId=${workspaceId}`).then((r) => r.json()),
     enabled: !!workspaceId,
@@ -71,6 +93,10 @@ export default function ProjectsPage() {
     queryFn: () => fetch(`/api/workspace-members?workspaceId=${workspaceId}`).then((r) => r.json()),
     enabled: !!workspaceId,
   });
+
+  // Use real data when workspace is set, demo data otherwise
+  const projects = workspaceId ? dbProjects : DEMO_PROJECTS;
+  const isDemo = !activeWorkspace;
 
   const filtered = projects
     .filter((p) => {
@@ -84,18 +110,6 @@ export default function ProjectsPage() {
       if (sortBy === "status") return a.status.localeCompare(b.status);
       return 0;
     });
-
-  if (!activeWorkspace) {
-    return (
-      <div className="p-6 flex flex-col items-center justify-center h-64 gap-4 text-center">
-        <Building2 className="h-12 w-12 text-muted-foreground" />
-        <div>
-          <p className="font-medium text-lg">No workspace selected</p>
-          <p className="text-muted-foreground">Go to Workspace Setup to create or select a workspace first.</p>
-        </div>
-      </div>
-    );
-  }
 
   // Project detail view
   if (selectedProject) {
@@ -125,11 +139,17 @@ export default function ProjectsPage() {
             <FolderKanban className="h-6 w-6 text-primary" />
             Projects
           </h1>
-          <p className="text-muted-foreground mt-1">Manage all your team projects</p>
+          <p className="text-muted-foreground mt-1 flex items-center gap-2">
+            {isDemo ? "TechNova Solutions (Demo)" : activeWorkspace?.name} · {projects.length} projects
+            {isSeeding && <span className="flex items-center gap-1 text-primary text-xs"><Loader2 className="h-3 w-3 animate-spin" /> Loading live data…</span>}
+            {isDemo && !isSeeding && <Badge variant="secondary" className="text-xs">Demo Preview</Badge>}
+          </p>
         </div>
-        <Button onClick={() => setShowCreate(true)} data-testid="button-new-project">
-          <Plus className="h-4 w-4 mr-2" />New Project
-        </Button>
+        {activeWorkspace && (
+          <Button onClick={() => setShowCreate(true)} data-testid="button-new-project">
+            <Plus className="h-4 w-4 mr-2" />New Project
+          </Button>
+        )}
       </div>
 
       {/* Filters row */}
@@ -218,7 +238,7 @@ export default function ProjectsPage() {
               </div>
 
               <div className="text-sm text-muted-foreground">
-                {project.teamId ? `Team #${project.teamId}` : "—"}
+                {project.teamId ? ({1:"Engineering",2:"Product",3:"Design",4:"Marketing",5:"Sales",6:"Operations",7:"HR & Finance"} as Record<number,string>)[project.teamId] ?? `Team #${project.teamId}` : "—"}
               </div>
 
               <div className="flex items-center gap-2">

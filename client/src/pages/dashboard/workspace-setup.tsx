@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Plus, CheckCircle2, Users, FolderKanban, Layers, Sparkles, Globe, Briefcase } from "lucide-react";
+import { Building2, Plus, CheckCircle2, Users, FolderKanban, Layers, Sparkles, Globe, Briefcase, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const INDUSTRIES = [
@@ -25,15 +25,16 @@ const INDUSTRY_ICONS: Record<string, string> = {
 interface Workspace { id: number; name: string; industry?: string; companySize?: string; createdAt?: string; }
 
 export default function WorkspaceSetupPage() {
-  const { activeWorkspace, setActiveWorkspace } = useWorkspace();
+  const { activeWorkspace, setActiveWorkspace, isSeeding } = useWorkspace();
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [industry, setIndustry] = useState("");
   const [companySize, setCompanySize] = useState("");
-  const [seeding, setSeeding] = useState(false);
+  const [manualSeeding, setManualSeeding] = useState(false);
 
   const { data: workspaces = [], isLoading } = useQuery<Workspace[]>({ queryKey: ["/api/workspaces"] });
+  const seeding = isSeeding || manualSeeding;
 
   const createMutation = useMutation({
     mutationFn: (data: { name: string; industry: string; companySize: string }) =>
@@ -49,21 +50,21 @@ export default function WorkspaceSetupPage() {
   });
 
   const seedDemo = async () => {
-    setSeeding(true);
+    setManualSeeding(true);
     try {
       const res = await apiRequest("POST", "/api/seed-team-demo", {});
       const data = await res.json();
-      queryClient.invalidateQueries({ queryKey: ["/api/workspaces"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/workspace-members"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/workspaces"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/workspace-members"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       const wsList = await fetch("/api/workspaces").then(r => r.json());
       const found = wsList.find((w: Workspace) => w.id === data.workspaceId);
       if (found) setActiveWorkspace(found);
       toast({ title: "✓ TechNova Solutions loaded — 50 people, 7 teams, 12 projects" });
     } catch {
       toast({ title: "Failed to load demo data", variant: "destructive" });
-    } finally { setSeeding(false); }
+    } finally { setManualSeeding(false); }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -169,10 +170,20 @@ export default function WorkspaceSetupPage() {
       ) : workspaces.length === 0 ? (
         <Card className="text-center py-16">
           <CardContent>
-            <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-lg font-medium">No workspaces yet</p>
-            <p className="text-muted-foreground mb-4">Create a workspace or load the demo company above</p>
-            <Button onClick={() => setShowForm(true)}><Plus className="h-4 w-4 mr-2" /> Create Workspace</Button>
+            {seeding ? (
+              <>
+                <Loader2 className="h-12 w-12 text-primary mx-auto mb-4 animate-spin" />
+                <p className="text-lg font-medium">Setting up TechNova Solutions…</p>
+                <p className="text-muted-foreground">Creating 50 employees, 7 teams, and 12 projects. Just a moment.</p>
+              </>
+            ) : (
+              <>
+                <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-lg font-medium">No workspaces yet</p>
+                <p className="text-muted-foreground mb-4">Create a workspace or load the demo company above</p>
+                <Button onClick={() => setShowForm(true)}><Plus className="h-4 w-4 mr-2" /> Create Workspace</Button>
+              </>
+            )}
           </CardContent>
         </Card>
       ) : (

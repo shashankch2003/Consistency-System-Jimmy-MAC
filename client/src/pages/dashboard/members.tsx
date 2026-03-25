@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Users, Plus, Trash2, Building2, Mail, Shield, Search, Crown, UserCog, User, Eye } from "lucide-react";
+import { Users, Plus, Trash2, Building2, Mail, Shield, Search, Crown, UserCog, User, Eye, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const WORKSPACE_ROLES = ["Owner", "Admin", "Manager", "Member", "Guest", "Observer"];
@@ -38,8 +38,60 @@ function getAvatarColor(name: string) {
 interface WorkspaceMember {
   id: number; workspaceId: number; userId?: string; email: string;
   displayName?: string; role: string; teamId?: number; status?: string;
-  invitedAt?: string; joinedAt?: string;
 }
+
+const DEMO_MEMBERS: WorkspaceMember[] = [
+  { id: 1, workspaceId: 1, email: "priya.sharma@technova.io", displayName: "Priya Sharma", role: "Owner", status: "active" },
+  { id: 2, workspaceId: 1, email: "james.okafor@technova.io", displayName: "James Okafor", role: "Admin", status: "active" },
+  { id: 3, workspaceId: 1, email: "liam.chen@technova.io", displayName: "Liam Chen", role: "Manager", status: "active" },
+  { id: 4, workspaceId: 1, email: "sofia.reyes@technova.io", displayName: "Sofia Reyes", role: "Manager", status: "active" },
+  { id: 5, workspaceId: 1, email: "amara.diallo@technova.io", displayName: "Amara Diallo", role: "Manager", status: "active" },
+  { id: 6, workspaceId: 1, email: "tom.keller@technova.io", displayName: "Tom Keller", role: "Manager", status: "active" },
+  { id: 7, workspaceId: 1, email: "neha.patel@technova.io", displayName: "Neha Patel", role: "Manager", status: "active" },
+  { id: 8, workspaceId: 1, email: "carlos.mendez@technova.io", displayName: "Carlos Mendez", role: "Member", status: "active" },
+  { id: 9, workspaceId: 1, email: "fatima.rashid@technova.io", displayName: "Fatima Al-Rashid", role: "Member", status: "active" },
+  { id: 10, workspaceId: 1, email: "oliver.schmidt@technova.io", displayName: "Oliver Schmidt", role: "Member", status: "active" },
+  { id: 11, workspaceId: 1, email: "yara.nwosu@technova.io", displayName: "Yara Nwosu", role: "Member", status: "active" },
+  { id: 12, workspaceId: 1, email: "dmitri.volkov@technova.io", displayName: "Dmitri Volkov", role: "Member", status: "active" },
+  { id: 13, workspaceId: 1, email: "mei.lin@technova.io", displayName: "Mei Lin", role: "Member", status: "active" },
+  { id: 14, workspaceId: 1, email: "arjun.kapoor@technova.io", displayName: "Arjun Kapoor", role: "Member", status: "active" },
+  { id: 15, workspaceId: 1, email: "isabelle.dupont@technova.io", displayName: "Isabelle Dupont", role: "Member", status: "active" },
+  { id: 16, workspaceId: 1, email: "kofi.mensah@technova.io", displayName: "Kofi Mensah", role: "Member", status: "active" },
+  { id: 17, workspaceId: 1, email: "aiko.tanaka@technova.io", displayName: "Aiko Tanaka", role: "Member", status: "active" },
+  { id: 18, workspaceId: 1, email: "ryan.torres@technova.io", displayName: "Ryan Torres", role: "Member", status: "active" },
+  { id: 19, workspaceId: 1, email: "zara.ahmed@technova.io", displayName: "Zara Ahmed", role: "Member", status: "active" },
+  { id: 20, workspaceId: 1, email: "lucas.ferreira@technova.io", displayName: "Lucas Ferreira", role: "Member", status: "active" },
+  { id: 21, workspaceId: 1, email: "emma.johansson@technova.io", displayName: "Emma Johansson", role: "Member", status: "active" },
+  { id: 22, workspaceId: 1, email: "noah.kim@technova.io", displayName: "Noah Kim", role: "Member", status: "active" },
+  { id: 23, workspaceId: 1, email: "mia.osei@technova.io", displayName: "Mia Osei", role: "Member", status: "active" },
+  { id: 24, workspaceId: 1, email: "ethan.park@technova.io", displayName: "Ethan Park", role: "Member", status: "active" },
+  { id: 25, workspaceId: 1, email: "ava.rodriguez@technova.io", displayName: "Ava Rodriguez", role: "Member", status: "active" },
+  { id: 26, workspaceId: 1, email: "jack.williams@technova.io", displayName: "Jack Williams", role: "Member", status: "active" },
+  { id: 27, workspaceId: 1, email: "lily.chang@technova.io", displayName: "Lily Chang", role: "Member", status: "active" },
+  { id: 28, workspaceId: 1, email: "marcus.johnson@technova.io", displayName: "Marcus Johnson", role: "Member", status: "active" },
+  { id: 29, workspaceId: 1, email: "chloe.martin@technova.io", displayName: "Chloe Martin", role: "Member", status: "active" },
+  { id: 30, workspaceId: 1, email: "david.muller@technova.io", displayName: "David Müller", role: "Member", status: "active" },
+  { id: 31, workspaceId: 1, email: "hannah.lee@technova.io", displayName: "Hannah Lee", role: "Member", status: "active" },
+  { id: 32, workspaceId: 1, email: "finn.obrien@technova.io", displayName: "Finn O'Brien", role: "Member", status: "active" },
+  { id: 33, workspaceId: 1, email: "sara.lindqvist@technova.io", displayName: "Sara Lindqvist", role: "Member", status: "active" },
+  { id: 34, workspaceId: 1, email: "ben.nakamura@technova.io", displayName: "Ben Nakamura", role: "Member", status: "active" },
+  { id: 35, workspaceId: 1, email: "grace.adeyemi@technova.io", displayName: "Grace Adeyemi", role: "Member", status: "active" },
+  { id: 36, workspaceId: 1, email: "oscar.petrov@technova.io", displayName: "Oscar Petrov", role: "Member", status: "active" },
+  { id: 37, workspaceId: 1, email: "nina.hernandez@technova.io", displayName: "Nina Hernandez", role: "Member", status: "active" },
+  { id: 38, workspaceId: 1, email: "max.weber@technova.io", displayName: "Max Weber", role: "Member", status: "active" },
+  { id: 39, workspaceId: 1, email: "leila.moradi@technova.io", displayName: "Leila Moradi", role: "Member", status: "active" },
+  { id: 40, workspaceId: 1, email: "samuel.nduka@technova.io", displayName: "Samuel Nduka", role: "Member", status: "active" },
+  { id: 41, workspaceId: 1, email: "julia.blanc@technova.io", displayName: "Julia Blanc", role: "Member", status: "active" },
+  { id: 42, workspaceId: 1, email: "chris.sato@technova.io", displayName: "Chris Sato", role: "Member", status: "active" },
+  { id: 43, workspaceId: 1, email: "diana.popescu@technova.io", displayName: "Diana Popescu", role: "Member", status: "active" },
+  { id: 44, workspaceId: 1, email: "kai.anderson@technova.io", displayName: "Kai Anderson", role: "Member", status: "active" },
+  { id: 45, workspaceId: 1, email: "ana.gutierrez@technova.io", displayName: "Ana Gutierrez", role: "Member", status: "active" },
+  { id: 46, workspaceId: 1, email: "felix.braun@technova.io", displayName: "Felix Braun", role: "Member", status: "active" },
+  { id: 47, workspaceId: 1, email: "rania.hassan@technova.io", displayName: "Rania Hassan", role: "Member", status: "active" },
+  { id: 48, workspaceId: 1, email: "ian.clarke@technova.io", displayName: "Ian Clarke", role: "Observer", status: "active" },
+  { id: 49, workspaceId: 1, email: "tanya.singh@technova.io", displayName: "Tanya Singh", role: "Guest", status: "active" },
+  { id: 50, workspaceId: 1, email: "victor.okonkwo@technova.io", displayName: "Victor Okonkwo", role: "Guest", status: "active" },
+];
 
 function InviteMemberModal({ workspaceId, onClose }: { workspaceId: number; onClose: () => void }) {
   const { toast } = useToast();
@@ -76,13 +128,7 @@ function InviteMemberModal({ workspaceId, onClose }: { workspaceId: number; onCl
               <Select value={role} onValueChange={setRole}>
                 <SelectTrigger data-testid="select-member-role"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {WORKSPACE_ROLES.map(r => (
-                    <SelectItem key={r} value={r}>
-                      <div className="flex flex-col">
-                        <span>{r}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
+                  {WORKSPACE_ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
@@ -113,13 +159,13 @@ function initials(m: WorkspaceMember) {
 }
 
 export default function MembersPage() {
-  const { activeWorkspace } = useWorkspace();
+  const { activeWorkspace, isSeeding } = useWorkspace();
   const { toast } = useToast();
   const [showInvite, setShowInvite] = useState(false);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("All");
 
-  const { data: members = [], isLoading } = useQuery<WorkspaceMember[]>({
+  const { data: dbMembers = [], isLoading } = useQuery<WorkspaceMember[]>({
     queryKey: ["/api/workspace-members", activeWorkspace?.id],
     queryFn: () => fetch(`/api/workspace-members?workspaceId=${activeWorkspace?.id}`).then(r => r.json()),
     enabled: !!activeWorkspace?.id,
@@ -137,17 +183,10 @@ export default function MembersPage() {
     onError: () => toast({ title: "Failed to remove member", variant: "destructive" }),
   });
 
-  if (!activeWorkspace) {
-    return (
-      <div className="p-6 flex flex-col items-center justify-center h-64 gap-4 text-center">
-        <Building2 className="h-12 w-12 text-muted-foreground" />
-        <div>
-          <p className="font-medium text-lg">No workspace selected</p>
-          <p className="text-muted-foreground">Go to Workspace Setup to create or select a workspace first.</p>
-        </div>
-      </div>
-    );
-  }
+  // Show demo data if no active workspace (still loading/seeding)
+  const members = activeWorkspace ? dbMembers : DEMO_MEMBERS;
+  const isDemo = !activeWorkspace;
+  const displayName = activeWorkspace?.name ?? "TechNova Solutions (Demo)";
 
   const filtered = members.filter(m => {
     const matchSearch = search === "" ||
@@ -170,31 +209,35 @@ export default function MembersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2"><Users className="h-6 w-6 text-primary" /> Members</h1>
-          <p className="text-muted-foreground mt-1">{activeWorkspace.name} · {members.length} people</p>
+          <p className="text-muted-foreground mt-1 flex items-center gap-2">
+            {displayName} · {members.length} people
+            {isSeeding && <span className="flex items-center gap-1 text-primary text-xs"><Loader2 className="h-3 w-3 animate-spin" /> Loading live data…</span>}
+            {isDemo && !isSeeding && <Badge variant="secondary" className="text-xs">Demo Preview</Badge>}
+          </p>
         </div>
-        <Button onClick={() => setShowInvite(true)} data-testid="button-invite-member">
-          <Plus className="h-4 w-4 mr-2" /> Invite Member
-        </Button>
+        {activeWorkspace && (
+          <Button onClick={() => setShowInvite(true)} data-testid="button-invite-member">
+            <Plus className="h-4 w-4 mr-2" /> Invite Member
+          </Button>
+        )}
       </div>
 
       {/* Stats row */}
-      {members.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            { label: "Total Members", value: members.length, color: "text-primary" },
-            { label: "Active", value: activeCount, color: "text-green-400" },
-            { label: "Managers & Above", value: (roleCounts.Owner ?? 0) + (roleCounts.Admin ?? 0) + (roleCounts.Manager ?? 0), color: "text-blue-400" },
-            { label: "Guests & Observers", value: (roleCounts.Guest ?? 0) + (roleCounts.Observer ?? 0), color: "text-purple-400" },
-          ].map(({ label, value, color }) => (
-            <Card key={label}>
-              <CardContent className="p-3 text-center">
-                <div className={`text-2xl font-bold ${color}`}>{value}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">{label}</div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: "Total Members", value: members.length, color: "text-primary" },
+          { label: "Active", value: activeCount, color: "text-green-400" },
+          { label: "Managers & Above", value: (roleCounts.Owner ?? 0) + (roleCounts.Admin ?? 0) + (roleCounts.Manager ?? 0), color: "text-blue-400" },
+          { label: "Guests & Observers", value: (roleCounts.Guest ?? 0) + (roleCounts.Observer ?? 0), color: "text-purple-400" },
+        ].map(({ label, value, color }) => (
+          <Card key={label}>
+            <CardContent className="p-3 text-center">
+              <div className={`text-2xl font-bold ${color}`}>{value}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">{label}</div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
@@ -215,21 +258,8 @@ export default function MembersPage() {
       </div>
 
       {/* Member list */}
-      {isLoading ? (
+      {isLoading && activeWorkspace ? (
         <div className="space-y-2">{[1, 2, 3, 4].map(i => <Card key={i} className="animate-pulse h-16" />)}</div>
-      ) : filtered.length === 0 ? (
-        <Card className="text-center py-16">
-          <CardContent>
-            <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-lg font-medium">{search || roleFilter !== "All" ? "No members found" : "No members yet"}</p>
-            {!search && roleFilter === "All" && (
-              <>
-                <p className="text-muted-foreground mb-4">Invite team members or load a demo company from Workspace Setup</p>
-                <Button onClick={() => setShowInvite(true)}><Plus className="h-4 w-4 mr-2" /> Invite Member</Button>
-              </>
-            )}
-          </CardContent>
-        </Card>
       ) : (
         <div className="space-y-1.5">
           {filtered.map((member) => {
@@ -240,7 +270,6 @@ export default function MembersPage() {
               <Card key={member.id} data-testid={`card-member-${member.id}`}
                 className="hover:border-primary/30 transition-colors">
                 <CardContent className="p-3 flex items-center justify-between gap-3">
-                  {/* Left: avatar + name */}
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <Avatar className="h-9 w-9 shrink-0">
                       <AvatarFallback className={`text-sm font-semibold text-white ${avatarColor}`}>
@@ -253,7 +282,6 @@ export default function MembersPage() {
                     </div>
                   </div>
 
-                  {/* Right: role badge + status + change role + remove */}
                   <div className="flex items-center gap-2 shrink-0">
                     <Badge variant="outline" className={`text-xs hidden md:flex items-center gap-1 ${cfg.color} ${cfg.border} ${cfg.bg}`}
                       data-testid={`badge-role-${member.id}`}>
@@ -265,19 +293,23 @@ export default function MembersPage() {
                       {member.status === "active" ? "● Active" : member.status ?? "Invited"}
                     </Badge>
 
-                    <Select value={member.role} onValueChange={r => roleMutation.mutate({ id: member.id, role: r })}>
-                      <SelectTrigger className="h-7 w-28 text-xs" data-testid={`select-role-${member.id}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>{WORKSPACE_ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-                    </Select>
+                    {!isDemo && (
+                      <>
+                        <Select value={member.role} onValueChange={r => roleMutation.mutate({ id: member.id, role: r })}>
+                          <SelectTrigger className="h-7 w-28 text-xs" data-testid={`select-role-${member.id}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>{WORKSPACE_ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+                        </Select>
 
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                      data-testid={`button-remove-member-${member.id}`}
-                      onClick={() => removeMutation.mutate(member.id)}
-                      disabled={removeMutation.isPending}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          data-testid={`button-remove-member-${member.id}`}
+                          onClick={() => removeMutation.mutate(member.id)}
+                          disabled={removeMutation.isPending}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -287,37 +319,37 @@ export default function MembersPage() {
       )}
 
       {/* Role guide */}
-      {members.length > 0 && (
-        <Card className="bg-muted/20">
-          <CardContent className="p-4">
-            <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">Role Guide</p>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              {[
-                { role: "Owner", desc: "Full control of the workspace" },
-                { role: "Admin", desc: "Manage teams, members & settings" },
-                { role: "Manager", desc: "Run teams and assign tasks" },
-                { role: "Member", desc: "Standard member, creates own work" },
-                { role: "Guest", desc: "External collaborator, limited access" },
-                { role: "Observer", desc: "View only — no editing allowed" },
-              ].map(({ role, desc }) => {
-                const cfg = ROLE_CONFIG[role];
-                const Icon = cfg.icon;
-                return (
-                  <div key={role} className="flex items-start gap-2">
-                    <Icon className={`h-3.5 w-3.5 mt-0.5 ${cfg.color}`} />
-                    <div>
-                      <span className={`text-xs font-medium ${cfg.color}`}>{role}</span>
-                      <p className="text-xs text-muted-foreground">{desc}</p>
-                    </div>
+      <Card className="bg-muted/20">
+        <CardContent className="p-4">
+          <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">Role Guide</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {[
+              { role: "Owner", desc: "Full control of the workspace" },
+              { role: "Admin", desc: "Manage teams, members & settings" },
+              { role: "Manager", desc: "Run teams and assign tasks" },
+              { role: "Member", desc: "Standard member, creates own work" },
+              { role: "Guest", desc: "External collaborator, limited access" },
+              { role: "Observer", desc: "View only — no editing allowed" },
+            ].map(({ role, desc }) => {
+              const cfg = ROLE_CONFIG[role];
+              const Icon = cfg.icon;
+              return (
+                <div key={role} className="flex items-start gap-2">
+                  <Icon className={`h-3.5 w-3.5 mt-0.5 ${cfg.color}`} />
+                  <div>
+                    <span className={`text-xs font-medium ${cfg.color}`}>{role}</span>
+                    <p className="text-xs text-muted-foreground">{desc}</p>
                   </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
-      {showInvite && <InviteMemberModal workspaceId={activeWorkspace.id} onClose={() => setShowInvite(false)} />}
+      {showInvite && activeWorkspace && (
+        <InviteMemberModal workspaceId={activeWorkspace.id} onClose={() => setShowInvite(false)} />
+      )}
     </div>
   );
 }
