@@ -266,7 +266,7 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {showCreate && (
+      {showCreate && activeWorkspace && (
         <CreateProjectModal workspaceId={activeWorkspace.id} onClose={() => setShowCreate(false)} />
       )}
     </div>

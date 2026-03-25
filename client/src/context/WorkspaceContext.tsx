@@ -1,6 +1,5 @@
-import { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 interface Workspace {
   id: number;
@@ -31,33 +30,11 @@ const WorkspaceContext = createContext<WorkspaceContextValue>({
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [activeWorkspace, setActiveWorkspaceState] = useState<Workspace | null>(null);
-  const [isSeeding, setIsSeeding] = useState(false);
-  const seededRef = useRef(false);
-  const queryClient = useQueryClient();
 
   const { data: workspaces = [], isLoading } = useQuery<Workspace[]>({
     queryKey: ["/api/workspaces"],
   });
 
-  // Auto-seed demo data the first time we detect no workspaces exist
-  useEffect(() => {
-    if (!isLoading && workspaces.length === 0 && !seededRef.current) {
-      seededRef.current = true;
-      setIsSeeding(true);
-      apiRequest("POST", "/api/seed-team-demo", {})
-        .then(async (res) => {
-          if (!res.ok) throw new Error("seed failed");
-          await queryClient.invalidateQueries({ queryKey: ["/api/workspaces"] });
-          await queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
-          await queryClient.invalidateQueries({ queryKey: ["/api/workspace-members"] });
-          await queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-        })
-        .catch(() => { /* silently fail — user can manually create workspace */ })
-        .finally(() => setIsSeeding(false));
-    }
-  }, [isLoading, workspaces.length, queryClient]);
-
-  // Set first workspace as active once loaded
   useEffect(() => {
     if (workspaces.length > 0 && !activeWorkspace) {
       const savedId = localStorage.getItem("activeWorkspaceId");
@@ -72,7 +49,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <WorkspaceContext.Provider value={{ activeWorkspace, workspaceId: activeWorkspace?.id ?? null, setActiveWorkspace, workspaces, isLoading, isSeeding }}>
+    <WorkspaceContext.Provider value={{
+      activeWorkspace,
+      workspaceId: activeWorkspace?.id ?? null,
+      setActiveWorkspace,
+      workspaces,
+      isLoading,
+      isSeeding: false,
+    }}>
       {children}
     </WorkspaceContext.Provider>
   );
