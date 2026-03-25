@@ -6,6 +6,7 @@ import { DocumentEditor } from "@/components/collaboration/DocumentEditor";
 import { Button } from "@/components/ui/button";
 import { Plus, FileText, ChevronRight, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 
 interface Doc {
   id: number;
