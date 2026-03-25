@@ -1,8 +1,7 @@
 import { AppSidebar } from "@/components/AppSidebar";
 import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/use-auth";
-import { useEffect, useState, useCallback } from "react";
-import { useLocation } from "wouter";
+import { useEffect, useState } from "react";
 import { WorkspaceProvider } from "@/context/WorkspaceContext";
 import { TimeTracker } from "@/components/time/TimeTracker";
 import { AICommandBar } from "@/components/ai/AICommandBar";
@@ -39,16 +38,15 @@ function DashboardContent({
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
-  const [, setLocation] = useLocation();
   const [commandOpen, setCommandOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [coachOpen, setCoachOpen] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !user) {
-      setLocation("/api/login");
+      window.location.href = "/api/login";
     }
-  }, [user, isLoading, setLocation]);
+  }, [user, isLoading]);
 
   // Keyboard shortcuts
   useEffect(() => {
