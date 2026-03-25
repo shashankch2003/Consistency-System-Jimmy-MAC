@@ -46,7 +46,7 @@ Preferred communication style: Simple, everyday language.
 -   **Level/Ranking System**: 7-tier system (Unproductive to Elite) based on productivity metrics, with monthly evaluations and level-gated group messaging.
 -   **Grow Together (Social)**: Friend connections, comparison of productivity metrics, group creation and chat (paid feature), and privacy controls.
 -   **Know More (Learning)**: Video learning center with YouTube embeds and in-app feedback system.
--   **Team Productivity Intelligence**: Advanced module for team-level insights, scoring, pattern detection, and alerts.
+-   **Team Productivity Intelligence**: Advanced module for team-level insights, scoring, pattern detection, and alerts. Three-tab layout (My Dashboard / Team Dashboard / Organisation) with per-tab three-dots settings (color toggles, undo, version history), full drag-to-reorder sections, drag-to-reorder member cards, per-member trend lines, "See More" pagination for performers/activity/brief, team drill-down sheet, performer click-to-detail, custom date range pickers for trend and task performance, Time Distribution demo data, and ComparisonDrawer wired for both self-comparison and employee-vs-employee comparison.
 -   **Daily Planner**: AI-generated optimized schedules, task management, and evening reviews.
 -   **Focus Coach**: Live timer, productivity scoring, AI coaching, and integration with time entries.
 -   **AI System Foundation**: Central AI service for text generation, streaming, tool use, embeddings, knowledge indexing, and usage logging. Universal AI stream endpoint.
