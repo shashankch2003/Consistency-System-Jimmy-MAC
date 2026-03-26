@@ -1,0 +1,141 @@
+Build a modern, high-conversion landing page for a startup called:
+
+"Indepth – AI Execution System"
+
+IMPORTANT:
+This is NOT a productivity app. It is an AI-powered execution system designed to solve distraction, inconsistency, and lack of clarity in people’s lives.
+
+CORE PROBLEM:
+People start their day with goals but end it feeling guilty because they get distracted (especially by social media) and don’t know what to do next.
+
+CORE IDEA:
+This product uses AI to guide users step-by-step, track real productivity, and reduce distractions so they can actually execute.
+
+TARGET USERS:
+
+* Students, early professionals, and small business owners
+* Ambitious but distracted and inconsistent
+* People addicted to social media / wasting time
+* People who feel guilty at night for not progressing
+
+DESIGN STYLE:
+
+* Clean, modern, YC-style
+* Dark + white + AI/futuristic accents (blue/purple)
+* Smooth animations
+* Mobile responsive
+
+---
+
+SECTION 1: HERO
+
+Headline:
+"Stop Getting Distracted. Start Executing."
+
+Subheadline:
+"Indepth is an AI-powered execution system that helps you take action, stay focused, and finally follow through on your goals."
+
+CTA:
+
+* Get Early Access
+* See How It Works
+
+---
+
+SECTION 2: EMOTIONAL PROBLEM
+
+Headline:
+"You don’t lack discipline. You’re constantly distracted."
+
+Content:
+
+* You start your day with plans but lose focus
+* Social media consumes hours without you noticing
+* You feel guilty at night for wasting time
+* You don’t know what to do next to reach your goal
+
+End:
+"This is not a motivation problem. It’s a system problem."
+
+---
+
+SECTION 3: SOLUTION
+
+Headline:
+"An AI system that helps you execute"
+
+Explain:
+
+* AI creates a daily execution plan
+* Tracks real productivity (deep work vs distraction)
+* Identifies wasted time
+* Gives insights and improvement suggestions
+* Blocks distracting apps and websites
+
+---
+
+SECTION 4: HOW IT WORKS
+
+Step 1: Set your goal
+Step 2: AI creates a daily execution plan
+Step 3: System tracks your real activity
+Step 4: AI analyzes your behavior
+Step 5: You improve daily with feedback
+
+---
+
+SECTION 5: FEATURES
+
+* AI Daily Planner
+* Deep Work Tracking
+* Distraction Detection
+* App & Website Blocking
+* Productivity Insights Dashboard
+* Daily + Weekly Reports
+
+---
+
+SECTION 6: DIFFERENTIATION
+
+Headline:
+"Not another productivity tool"
+
+Others:
+
+* Require discipline
+* Track tasks only
+* Don’t solve distraction
+
+Indepth:
+
+* Guides execution
+* Tracks real behavior
+* Reduces distractions
+* Improves consistency
+
+---
+
+SECTION 7: VISION
+
+Headline:
+"We are building the execution layer for human potential"
+
+Content:
+"Our goal is to help millions of people stop wasting time and start achieving what they truly want."
+
+---
+
+SECTION 8: FINAL CTA
+
+"Your goals don’t need more planning. They need execution."
+
+Button:
+"Join Early Access"
+
+---
+
+TECH:
+
+* React + Tailwind
+* Clean UI
+* Smooth animations
