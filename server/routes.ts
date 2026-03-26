@@ -233,6 +233,28 @@ export async function registerRoutes(
     res.status(204).end();
   });
 
+  // User Schedules
+  app.get("/api/user-schedules", isAuthenticated, async (req: any, res) => {
+    const schedules = await storage.getUserSchedules(req.user.claims.sub);
+    res.json(schedules);
+  });
+  app.post("/api/user-schedules", isAuthenticated, async (req: any, res) => {
+    try {
+      const schedule = await storage.createUserSchedule({ ...req.body, userId: req.user.claims.sub });
+      res.status(201).json(schedule);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+  app.put("/api/user-schedules/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const schedule = await storage.updateUserSchedule(parseInt(req.params.id), req.body);
+      res.json(schedule);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+  app.delete("/api/user-schedules/:id", isAuthenticated, async (req, res) => {
+    await storage.deleteUserSchedule(parseInt(req.params.id));
+    res.status(204).end();
+  });
+
   // Good Habits
   app.get(api.goodHabits.list.path, isAuthenticated, async (req: any, res) => {
     const habits = await storage.getGoodHabits(req.user.claims.sub);

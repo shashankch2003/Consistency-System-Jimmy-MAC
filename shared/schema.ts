@@ -69,7 +69,29 @@ export const tasks = pgTable("tasks", {
   description: text("description"),
   completionPercentage: integer("completion_percentage").default(0),
   time: text("time"), // optional HH:MM
-  priority: text("priority").default("Normal"), // Very Important, Important, Normal
+  priority: text("priority").default("Medium"), // ASAP, High, Medium, Low, custom
+  status: text("status").default("To Do"), // "To Do" | "In Progress" | "Done"
+  duration: text("duration"), // "15 min" | "30 min" | "1 hr" | ...
+  customDuration: text("custom_duration"),
+  schedule: jsonb("schedule"), // { preset, startTime, endTime, preferredStartTime }
+  notificationSettings: jsonb("notification_settings"),
+  repeatSettings: jsonb("repeat_settings"),
+  flagged: boolean("flagged").default(false),
+  reviewLater: boolean("review_later").default(false),
+  assignedTo: text("assigned_to"),
+  executionScore: integer("execution_score"),
+  customFields: jsonb("custom_fields"),
+  boardColumn: text("board_column").default("To Do"),
+});
+
+export const userSchedules = pgTable("user_schedules", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  name: text("name").notNull(),
+  emoji: text("emoji").default("⏰"),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  preferredStartTime: text("preferred_start_time"),
 });
 
 export const goodHabits = pgTable("good_habits", {
@@ -742,6 +764,8 @@ export const insertYearlyGoalSchema = createInsertSchema(yearlyGoals).omit({ id:
 export const insertMonthlyOverviewGoalSchema = createInsertSchema(monthlyOverviewGoals).omit({ id: true, createdAt: true });
 export const insertMonthlyDynamicGoalSchema = createInsertSchema(monthlyDynamicGoals).omit({ id: true, createdAt: true });
 export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true });
+export const insertUserScheduleSchema = createInsertSchema(userSchedules).omit({ id: true });
+export type UserSchedule = typeof userSchedules.$inferSelect;
 export const insertGoodHabitSchema = createInsertSchema(goodHabits).omit({ id: true });
 export const insertGoodHabitEntrySchema = createInsertSchema(goodHabitEntries).omit({ id: true });
 export const insertBadHabitSchema = createInsertSchema(badHabits).omit({ id: true });

@@ -2,7 +2,7 @@ import { db } from "./db";
 import { eq, and, asc, like, desc, gte, lte } from "drizzle-orm";
 import {
   yearlyGoals, monthlyOverviewGoals, monthlyDynamicGoals,
-  tasks, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, payments, taskBankItems, dailyReasons, notes,
+  tasks, userSchedules, goodHabits, goodHabitEntries, badHabits, badHabitEntries, hourlyEntries, payments, taskBankItems, dailyReasons, notes,
   userLevels, groupMessages, adminInbox, monthlyEvaluations,
   journalEntries, customDayTypes, dayTypeEmojiOverrides, dayTypeUsage, userStreaks,
   successfulFundamentals, userSettings,
@@ -89,6 +89,10 @@ export interface IStorage extends IAuthStorage {
   createTask(task: InsertTask): Promise<typeof tasks.$inferSelect>;
   updateTask(id: number, updates: Partial<InsertTask>): Promise<typeof tasks.$inferSelect>;
   deleteTask(id: number): Promise<void>;
+  getUserSchedules(userId: string): Promise<(typeof userSchedules.$inferSelect)[]>;
+  createUserSchedule(data: typeof userSchedules.$inferInsert): Promise<typeof userSchedules.$inferSelect>;
+  updateUserSchedule(id: number, data: Partial<typeof userSchedules.$inferInsert>): Promise<typeof userSchedules.$inferSelect>;
+  deleteUserSchedule(id: number): Promise<void>;
 
   getGoodHabits(userId: string): Promise<(typeof goodHabits.$inferSelect)[]>;
   createGoodHabit(habit: InsertGoodHabit): Promise<typeof goodHabits.$inferSelect>;
@@ -544,6 +548,21 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteTask(id: number) {
     await db.delete(tasks).where(eq(tasks.id, id));
+  }
+
+  async getUserSchedules(userId: string) {
+    return await db.select().from(userSchedules).where(eq(userSchedules.userId, userId));
+  }
+  async createUserSchedule(data: typeof userSchedules.$inferInsert) {
+    const [created] = await db.insert(userSchedules).values(data).returning();
+    return created;
+  }
+  async updateUserSchedule(id: number, data: Partial<typeof userSchedules.$inferInsert>) {
+    const [updated] = await db.update(userSchedules).set(data).where(eq(userSchedules.id, id)).returning();
+    return updated;
+  }
+  async deleteUserSchedule(id: number) {
+    await db.delete(userSchedules).where(eq(userSchedules.id, id));
   }
 
   async getGoodHabits(userId: string) {

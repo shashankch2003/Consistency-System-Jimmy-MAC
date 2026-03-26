@@ -1,6 +1,8 @@
 import { useState, useRef } from "react";
 import { format, addDays, subDays, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getDay, addMonths, subMonths, isSameDay, isToday, startOfWeek, endOfWeek, addWeeks, subWeeks, isSameMonth } from "date-fns";
 import { useTasks, useTasksByMonth, useTasksByYear, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/use-tasks";
+import { DailyTaskPanel } from "@/components/tasks/DailyTaskPanel";
+import { DailyBoardView } from "@/components/tasks/DailyBoardView";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,18 +16,23 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const COMPLETION_LEVELS = [0, 25, 50, 75, 100];
-const PRIORITIES = ["Very Important", "Important", "Normal"] as const;
+const PRIORITIES = ["ASAP", "High", "Medium", "Low"] as const;
 
 function PriorityBadge({ priority }: { priority: string }) {
-  if (priority === "Very Important") return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded" data-testid="badge-priority-vi">
-      <AlertTriangle className="w-2.5 h-2.5" />VI
-    </span>
+  if (priority === "ASAP") return (
+    <span className="inline-flex items-center text-[10px] font-bold text-red-400 bg-red-500/15 border border-red-500/30 px-1.5 py-0.5 rounded-md" data-testid="badge-priority-asap">ASAP</span>
   );
-  if (priority === "Important") return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-yellow-400 bg-yellow-500/10 px-1.5 py-0.5 rounded" data-testid="badge-priority-imp">
-      <AlertCircle className="w-2.5 h-2.5" />IMP
-    </span>
+  if (priority === "High") return (
+    <span className="inline-flex items-center text-[10px] font-bold text-orange-400 bg-orange-500/15 border border-orange-500/30 px-1.5 py-0.5 rounded-md" data-testid="badge-priority-high">High</span>
+  );
+  if (priority === "Medium") return (
+    <span className="inline-flex items-center text-[10px] font-bold text-yellow-400 bg-yellow-500/15 border border-yellow-500/30 px-1.5 py-0.5 rounded-md" data-testid="badge-priority-med">Med</span>
+  );
+  if (priority === "Low") return (
+    <span className="inline-flex items-center text-[10px] font-bold text-green-400 bg-green-500/15 border border-green-500/30 px-1.5 py-0.5 rounded-md" data-testid="badge-priority-low">Low</span>
+  );
+  if (priority) return (
+    <span className="inline-flex items-center text-[10px] font-bold text-purple-400 bg-purple-500/15 border border-purple-500/30 px-1.5 py-0.5 rounded-md" data-testid="badge-priority-custom">{priority}</span>
   );
   return null;
 }
@@ -153,13 +160,15 @@ export default function TasksPage() {
   const [date, setDate] = useState(new Date());
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskTime, setNewTaskTime] = useState("");
-  const [newTaskPriority, setNewTaskPriority] = useState<string>("Normal");
+  const [newTaskPriority, setNewTaskPriority] = useState<string>("Medium");
   const [descTask, setDescTask] = useState<{ id: number; title: string; description: string | null } | null>(null);
+  const [panelTask, setPanelTask] = useState<any | null>(null);
   const [editingTitle, setEditingTitle] = useState<{ id: number; value: string } | null>(null);
   const [editingTime, setEditingTime] = useState<{ id: number; value: string } | null>(null);
   const [editingPriority, setEditingPriority] = useState<number | null>(null);
   const [analyticsMonth, setAnalyticsMonth] = useState(new Date());
-  const [viewMode, setViewMode] = useState<"task" | "calendar">("task");
+  const [viewMode, setViewMode] = useState<"task" | "calendar" | "board">("task");
+  const [undoStack, setUndoStack] = useState<{ id: number; type: "delete" | "update"; data: any }[]>([]);
   const [calViewMode, setCalViewMode] = useState<"day" | "week" | "month" | "year">("month");
   const dateStr = format(date, "yyyy-MM-dd");
   const analyticsMonthStr = format(analyticsMonth, "yyyy-MM");
@@ -321,12 +330,12 @@ export default function TasksPage() {
                   )}
                 </div>
                 <button
-                  onClick={() => setDescTask({ id: task.id, title: task.title, description: task.description })}
+                  onClick={() => setPanelTask(task)}
                   className={cn(
                     "p-1.5 rounded-md transition-colors shrink-0",
                     task.description ? "text-primary hover:bg-primary/10" : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted"
                   )}
-                  title="Description"
+                  title="Open details"
                   data-testid={`cal-day-button-desc-${task.id}`}
                 >
                   <FileText className="w-3.5 h-3.5" />
@@ -345,9 +354,10 @@ export default function TasksPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Normal">Normal</SelectItem>
-                      <SelectItem value="Important">Important</SelectItem>
-                      <SelectItem value="Very Important">Very Important</SelectItem>
+                      <SelectItem value="ASAP">ASAP</SelectItem>
+                      <SelectItem value="High">High</SelectItem>
+                      <SelectItem value="Medium">Medium</SelectItem>
+                      <SelectItem value="Low">Low</SelectItem>
                     </SelectContent>
                   </Select>
                 ) : (
@@ -357,7 +367,7 @@ export default function TasksPage() {
                     title="Click to change priority"
                     data-testid={`cal-day-button-priority-${task.id}`}
                   >
-                    {(task.priority === "Very Important" || task.priority === "Important") ? (
+                    {task.priority ? (
                       <PriorityBadge priority={task.priority} />
                     ) : (
                       <span className="inline-flex items-center text-[10px] text-muted-foreground/40 hover:text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded transition-colors">
@@ -440,9 +450,10 @@ export default function TasksPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="Normal">Normal</SelectItem>
-              <SelectItem value="Important">Important</SelectItem>
-              <SelectItem value="Very Important">Very Important</SelectItem>
+              <SelectItem value="ASAP">ASAP</SelectItem>
+              <SelectItem value="High">High</SelectItem>
+              <SelectItem value="Medium">Medium</SelectItem>
+              <SelectItem value="Low">Low</SelectItem>
             </SelectContent>
           </Select>
           <Button
@@ -572,15 +583,25 @@ export default function TasksPage() {
                   >
                     <span className="text-sm block mb-1">{format(day, "d")}</span>
                     {dayTaskCount > 0 && (
-                      <div className="flex flex-wrap gap-0.5 mt-auto">
-                        {dayTaskItems.slice(0, 4).map(t => (
+                      <div className="flex flex-col gap-0.5 mt-1 w-full">
+                        {dayTaskItems.slice(0, 3).map(t => (
                           <div key={t.id} className={cn(
-                            "w-2 h-2 rounded-full",
-                            isSelected ? getCompletionDotColor(t.completionPercentage || 0).replace("bg-", "bg-") : getCompletionDotColor(t.completionPercentage || 0)
-                          )} />
+                            "text-[9px] truncate px-1 py-0.5 rounded font-medium leading-tight",
+                            isSelected
+                              ? "bg-black/20 text-black"
+                              : t.completionPercentage === 100
+                                ? "bg-green-500/20 text-green-400"
+                                : t.priority === "ASAP"
+                                  ? "bg-red-500/20 text-red-400"
+                                  : t.priority === "High"
+                                    ? "bg-orange-500/20 text-orange-400"
+                                    : "bg-white/10 text-foreground/70"
+                          )}>
+                            {t.title}
+                          </div>
                         ))}
-                        {dayTaskCount > 4 && (
-                          <span className={cn("text-[9px]", isSelected ? "text-black/60" : "text-muted-foreground")}>+{dayTaskCount - 4}</span>
+                        {dayTaskCount > 3 && (
+                          <span className={cn("text-[9px] pl-1", isSelected ? "text-black/60" : "text-muted-foreground")}>+{dayTaskCount - 3} more</span>
                         )}
                       </div>
                     )}
@@ -675,29 +696,22 @@ export default function TasksPage() {
         <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl sm:text-3xl font-display font-bold" data-testid="text-page-title">Daily Tasks</h1>
-            <p className="text-muted-foreground text-sm">Track your daily task completion</p>
+            <p className="text-muted-foreground text-sm">Track your daily tasks</p>
           </div>
           <div className="flex items-center bg-card rounded-lg border border-border p-1 gap-1">
-            <button
-              onClick={() => setViewMode("task")}
-              className={cn(
-                "px-4 py-1.5 rounded-md text-sm font-medium transition-colors",
-                viewMode === "task" ? "bg-white text-black" : "text-muted-foreground hover:text-foreground"
-              )}
-              data-testid="button-view-task"
-            >
-              Task
-            </button>
-            <button
-              onClick={() => setViewMode("calendar")}
-              className={cn(
-                "px-4 py-1.5 rounded-md text-sm font-medium transition-colors",
-                viewMode === "calendar" ? "bg-white text-black" : "text-muted-foreground hover:text-foreground"
-              )}
-              data-testid="button-view-calendar"
-            >
-              Calendar
-            </button>
+            {(["task", "calendar", "board"] as const).map(v => (
+              <button
+                key={v}
+                onClick={() => setViewMode(v)}
+                className={cn(
+                  "px-4 py-1.5 rounded-md text-sm font-medium transition-colors capitalize",
+                  viewMode === v ? "bg-white text-black" : "text-muted-foreground hover:text-foreground"
+                )}
+                data-testid={`button-view-${v}`}
+              >
+                {v === "task" ? "Task" : v === "calendar" ? "Calendar" : "Board"}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -726,8 +740,8 @@ export default function TasksPage() {
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <div className="p-4 border-b border-border flex items-center gap-3">
               <Calendar className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold">Tasks for {format(date, "MMMM d")}</h2>
-              <span className="text-sm text-muted-foreground ml-auto">{tasks?.length || 0} tasks</span>
+              <h2 className="text-lg font-semibold">Tasks on {format(date, "MMMM do")}</h2>
+              <span className="text-sm text-muted-foreground ml-auto">{tasks?.length || 0} {tasks?.length === 1 ? "task" : "tasks"}</span>
             </div>
             <div className="divide-y divide-border">
               {isLoading ? (
@@ -772,12 +786,12 @@ export default function TasksPage() {
                       )}
                     </div>
                     <button
-                      onClick={() => setDescTask({ id: task.id, title: task.title, description: task.description })}
+                      onClick={() => setPanelTask(task)}
                       className={cn(
                         "p-1.5 rounded-md transition-colors shrink-0",
                         task.description ? "text-primary hover:bg-primary/10" : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted"
                       )}
-                      title="Description"
+                      title="Open details"
                       data-testid={`button-desc-${task.id}`}
                     >
                       <FileText className="w-3.5 h-3.5" />
@@ -796,9 +810,10 @@ export default function TasksPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Normal">Normal</SelectItem>
-                          <SelectItem value="Important">Important</SelectItem>
-                          <SelectItem value="Very Important">Very Important</SelectItem>
+                          <SelectItem value="ASAP">ASAP</SelectItem>
+                          <SelectItem value="High">High</SelectItem>
+                          <SelectItem value="Medium">Medium</SelectItem>
+                          <SelectItem value="Low">Low</SelectItem>
                         </SelectContent>
                       </Select>
                     ) : (
@@ -808,7 +823,7 @@ export default function TasksPage() {
                         title="Click to change priority"
                         data-testid={`button-priority-${task.id}`}
                       >
-                        {(task.priority === "Very Important" || task.priority === "Important") ? (
+                        {task.priority ? (
                           <PriorityBadge priority={task.priority} />
                         ) : (
                           <span className="inline-flex items-center text-[10px] text-muted-foreground/40 hover:text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded transition-colors">
@@ -1019,7 +1034,7 @@ export default function TasksPage() {
         </div>
       )}
 
-      <div className="space-y-6">
+      <div id="analytics-section" className="space-y-6 border-t border-border pt-8 mt-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-3">
             <BarChart3 className="w-5 sm:w-6 h-5 sm:h-6 text-primary" />
@@ -1164,7 +1179,26 @@ export default function TasksPage() {
         </div>
       </div>
 
-      {descTask && (
+      {viewMode === "board" && (
+        <DailyBoardView
+          allTasks={tasks ?? []}
+          currentDate={dateStr}
+          onTaskClick={(t) => setPanelTask(t)}
+          onUpdateTask={(id, data) => updateTask.mutate({ id, ...data })}
+          onCreateTask={(data) => createTask.mutate({ title: data.title, date: data.date || dateStr, status: data.status, boardColumn: data.boardColumn })}
+        />
+      )}
+
+      {panelTask && (
+        <DailyTaskPanel
+          task={panelTask}
+          onClose={() => setPanelTask(null)}
+          onUpdate={(data) => { updateTask.mutate({ id: panelTask.id, ...data }); setPanelTask((t: any) => ({ ...t, ...data })); }}
+          onDelete={() => { deleteTask.mutate(panelTask.id); setPanelTask(null); }}
+        />
+      )}
+
+      {descTask && !panelTask && (
         <DescriptionDialog
           task={descTask}
           onSave={(desc) => updateTask.mutate({ id: descTask.id, description: desc.trim() || null })}
