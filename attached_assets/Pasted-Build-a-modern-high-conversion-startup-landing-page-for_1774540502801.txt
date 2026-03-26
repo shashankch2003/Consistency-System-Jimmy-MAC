@@ -1,0 +1,169 @@
+Build a modern, high-conversion startup landing page for a SaaS product called:
+
+"Indepth – Execution System for Consistency"
+
+IMPORTANT CONTEXT:
+This is NOT a generic productivity app. It is an execution system designed for ambitious but inconsistent people who struggle to follow through on their goals.
+
+CORE INSIGHT:
+People don’t fail because of lack of goals — they fail because they don’t have a system that converts goals into daily execution.
+
+TARGET USERS:
+
+* Students, early professionals, and small business owners
+* People who are ambitious but inconsistent
+* People who feel guilty about wasting time and not achieving goals
+
+DESIGN STYLE:
+
+* Clean, minimal, YC-style landing page
+* Use whitespace, bold headings, simple UI
+* Colors: modern (dark + white + accent blue or purple)
+* Slightly futuristic (AI product feel)
+* Mobile responsive
+* Smooth scroll animations
+
+---
+
+SECTION 1: HERO SECTION
+
+Headline:
+"Stop Planning. Start Executing."
+
+Subheadline:
+"Indepth is an execution system that turns your goals into daily action, tracks real productivity, and keeps you accountable."
+
+CTA buttons:
+
+* "Get Early Access"
+* "See How It Works"
+
+Add a simple product mockup or dashboard UI preview (fake is okay)
+
+---
+
+SECTION 2: THE PROBLEM (EMOTIONAL + REAL)
+
+Headline:
+"You don’t have a discipline problem."
+
+Content (bullet points):
+
+* You start things but don’t finish
+* You feel busy but not productive
+* You don’t know what to do daily
+* You depend on motivation, not systems
+
+End line:
+"You don’t need more motivation. You need a system."
+
+---
+
+SECTION 3: THE SOLUTION
+
+Headline:
+"An execution system built for real life"
+
+Explain clearly:
+
+* Converts big goals → daily actionable steps
+* Tracks real productivity (not fake checklists)
+* Shows deep work vs wasted time
+* Gives AI-powered daily guidance
+* Builds accountability automatically
+
+---
+
+SECTION 4: HOW IT WORKS (VISUAL STEPS)
+
+Step 1: Set your goal
+Step 2: System breaks it into daily execution
+Step 3: Track real work (automatic + manual)
+Step 4: Get AI insights + improvement suggestions
+Step 5: Stay consistent with accountability loops
+
+Make this visually clean (cards or steps UI)
+
+---
+
+SECTION 5: KEY FEATURES
+
+* AI Daily Planner (auto generates daily schedule)
+* Productivity Tracking Dashboard
+* Deep Work vs Distraction Analysis
+* App & Website Blocking System
+* Habit + Task Integration
+* Weekly Progress Reports
+
+---
+
+SECTION 6: DIFFERENTIATION
+
+Headline:
+"Not another productivity app"
+
+Comparison table:
+
+Indepth vs Others:
+
+Others:
+
+* Require setup
+* Track tasks only
+* No real accountability
+* Focus on planning
+
+Indepth:
+
+* Ready-to-use system
+* Tracks execution
+* Built-in accountability
+* Focus on results
+
+---
+
+SECTION 7: SOCIAL PROOF (PLACEHOLDER)
+
+Add:
+
+* “Built for ambitious people”
+* Placeholder testimonials
+* "Early users report increased consistency"
+
+---
+
+SECTION 8: VISION (VERY IMPORTANT FOR INVESTORS)
+
+Headline:
+"We are building the execution layer of human potential"
+
+Content:
+"Our goal is to help millions of people move from intention to action, and from action to results."
+
+---
+
+SECTION 9: FINAL CTA
+
+Headline:
+"Your goals don’t need more planning. They need execution."
+
+CTA:
+"Join Early Access"
+
+---
+
+TECH REQUIREMENTS:
+
+* Use React + Tailwind CSS
+* Clean component structure
+* Reusable components
+* Smooth animations (Framer Motion optional)
+* Responsive design
+
+---
+
+OUTPUT:
+
+* Full working landing page code
+* Include placeholder images/UI
+* Focus on strong typography and layout
