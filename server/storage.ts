@@ -118,6 +118,7 @@ export interface IStorage extends IAuthStorage {
 
   getTaskBankItems(userId: string): Promise<(typeof taskBankItems.$inferSelect)[]>;
   createTaskBankItem(item: InsertTaskBankItem): Promise<typeof taskBankItems.$inferSelect>;
+  updateTaskBankItem(id: number, userId: string, updates: Partial<InsertTaskBankItem>): Promise<typeof taskBankItems.$inferSelect>;
   deleteTaskBankItem(id: number, userId: string): Promise<void>;
 
   getDailyReason(userId: string, date: string): Promise<(typeof dailyReasons.$inferSelect) | undefined>;
@@ -673,6 +674,10 @@ export class DatabaseStorage implements IStorage {
   async createTaskBankItem(item: InsertTaskBankItem) {
     const [created] = await db.insert(taskBankItems).values(item).returning();
     return created;
+  }
+  async updateTaskBankItem(id: number, userId: string, updates: Partial<InsertTaskBankItem>) {
+    const [updated] = await db.update(taskBankItems).set(updates).where(and(eq(taskBankItems.id, id), eq(taskBankItems.userId, userId))).returning();
+    return updated;
   }
   async deleteTaskBankItem(id: number, userId: string) {
     await db.delete(taskBankItems).where(and(eq(taskBankItems.id, id), eq(taskBankItems.userId, userId)));

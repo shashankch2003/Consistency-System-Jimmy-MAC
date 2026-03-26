@@ -214,14 +214,24 @@ export const api = {
       input: insertTaskBankItemSchema.omit({ userId: true }),
       responses: { 201: z.custom<typeof taskBankItems.$inferSelect>(), 400: errorSchemas.validation }
     },
+    update: {
+      method: 'PUT' as const, path: '/api/task-bank/:id' as const,
+      input: insertTaskBankItemSchema.omit({ userId: true }).partial(),
+      responses: { 200: z.custom<typeof taskBankItems.$inferSelect>(), 400: errorSchemas.validation, 404: errorSchemas.notFound }
+    },
     delete: {
       method: 'DELETE' as const, path: '/api/task-bank/:id' as const,
       responses: { 204: z.void(), 404: errorSchemas.notFound }
     },
     assign: {
       method: 'POST' as const, path: '/api/task-bank/:id/assign' as const,
-      input: z.object({ date: z.string() }),
+      input: z.object({ date: z.string(), priority: z.string().optional(), description: z.string().optional(), time: z.string().optional() }),
       responses: { 201: z.custom<typeof tasks.$inferSelect>(), 400: errorSchemas.validation }
+    },
+    parseVoice: {
+      method: 'POST' as const, path: '/api/task-bank/parse-voice' as const,
+      input: z.object({ transcript: z.string() }),
+      responses: { 200: z.object({ tasks: z.array(z.object({ title: z.string(), dueDate: z.string().optional(), dueTime: z.string().optional(), priority: z.string().optional(), description: z.string().optional(), duration: z.string().optional(), tags: z.array(z.string()).optional() })) }) }
     }
   },
   notes: {

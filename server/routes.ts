@@ -586,15 +586,53 @@ export async function registerRoutes(
     await storage.deleteTaskBankItem(parseInt(req.params.id), req.user.claims.sub);
     res.status(204).end();
   });
+  app.put(api.taskBank.update.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const input = api.taskBank.update.input.parse(req.body);
+      const updated = await storage.updateTaskBankItem(parseInt(req.params.id), req.user.claims.sub, input);
+      if (!updated) return res.status(404).json({ message: "Not found" });
+      res.json(updated);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
   app.post(api.taskBank.assign.path, isAuthenticated, async (req: any, res) => {
     try {
       const input = api.taskBank.assign.input.parse(req.body);
       const items = await storage.getTaskBankItems(req.user.claims.sub);
       const bankItem = items.find(i => i.id === parseInt(req.params.id));
       if (!bankItem) return res.status(404).json({ message: "Not found" });
-      const task = await storage.createTask({ userId: req.user.claims.sub, title: bankItem.title, date: input.date });
-      await storage.deleteTaskBankItem(bankItem.id);
+      const task = await storage.createTask({
+        userId: req.user.claims.sub,
+        title: bankItem.title,
+        date: input.date,
+        priority: input.priority || bankItem.priority || undefined,
+        description: input.description || bankItem.description || undefined,
+        time: input.time || bankItem.dueTime || undefined,
+      });
+      await storage.deleteTaskBankItem(bankItem.id, req.user.claims.sub);
       res.status(201).json(task);
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+  });
+  app.post(api.taskBank.parseVoice.path, isAuthenticated, async (req: any, res) => {
+    try {
+      const { transcript } = api.taskBank.parseVoice.input.parse(req.body);
+      const today = new Date().toISOString().split("T")[0];
+      const prompt = `You are a task extraction assistant. Parse the following voice transcript and extract all tasks mentioned.
+Today's date is ${today}.
+Convert relative dates (today, tomorrow, next monday, etc.) to actual dates in yyyy-MM-dd format.
+Priority levels: ASAP, High, Medium, Low. If they say "priority 1" use ASAP, "priority 2" use High, "priority 3" use Medium, "priority 4" use Low.
+
+Transcript: "${transcript}"
+
+Return a JSON object with a "tasks" array. Each task should have:
+- title (required, concise task name)
+- dueDate (optional, yyyy-MM-dd format)
+- dueTime (optional, HH:mm format)
+- priority (optional, one of: ASAP, High, Medium, Low)
+- description (optional, additional context)
+- duration (optional, e.g. "15 minutes", "1 hour")
+- tags (optional, array of relevant labels)`;
+      const result = await aiService.generateJSON<{ tasks: any[] }>(prompt, { temperature: 0.2 });
+      res.json({ tasks: Array.isArray(result?.tasks) ? result.tasks : [] });
     } catch (e: any) { res.status(400).json({ message: e.message }); }
   });
 

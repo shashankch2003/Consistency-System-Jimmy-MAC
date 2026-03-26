@@ -144,6 +144,13 @@ export const taskBankItems = pgTable("task_bank_items", {
   id: serial("id").primaryKey(),
   userId: varchar("user_id").notNull(),
   title: text("title").notNull(),
+  description: text("description"),
+  priority: text("priority"),
+  tags: text("tags").array(),
+  status: text("status").default("Not started"),
+  dueDate: text("due_date"),
+  dueTime: text("due_time"),
+  workingOn: text("working_on"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
