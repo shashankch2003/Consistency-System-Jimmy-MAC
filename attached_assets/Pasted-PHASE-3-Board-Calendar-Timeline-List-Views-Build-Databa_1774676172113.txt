@@ -1,0 +1,166 @@
+PHASE 3 — Board, Calendar, Timeline & List Views
+Build Database View Variants — Add Board (Kanban), Calendar, Timeline, and List views for databases. Each view reads the same database data but renders differently. Add a views table to store per-view configuration.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. DATABASE TABLES (in shared/schema.ts)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+-- Table 1: pm_database_views --
+export const pmDatabaseViews = pgTable("pm_database_views", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  databaseId: integer("database_id").notNull(),
+  name: text("name").notNull().default("Default View"),
+  type: text("type").notNull().default("table"),
+  config: jsonb("config").notNull().default({}),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPmDatabaseViewSchema = createInsertSchema(pmDatabaseViews);
+export type InsertPmDatabaseView = typeof pmDatabaseViews.$inferInsert;
+export type PmDatabaseView = typeof pmDatabaseViews.$inferSelect;
+
+View type values: "table", "board", "calendar", "timeline", "list"
+
+View config JSON per type:
+- table: { "visiblePropertyIds": [1,2,3], "sortPropertyId": null, "sortDir": "asc", "filters": [], "rowHeight": "normal" }
+- board: { "groupByPropertyId": 0, "visiblePropertyIds": [1,2], "hideEmptyGroups": false, "filters": [] }
+- calendar: { "datePropertyId": 0, "titlePropertyId": 0, "visiblePropertyIds": [1], "filters": [] }
+- timeline: { "datePropertyId": 0, "endDatePropertyId": null, "titlePropertyId": 0, "groupByPropertyId": null, "filters": [] }
+- list: { "visiblePropertyIds": [1,2,3], "sortPropertyId": null, "sortDir": "asc", "filters": [] }
+
+Filter object structure: { "propertyId": 0, "operator": "equals|contains|isEmpty|isNotEmpty|gt|lt", "value": "string" }
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. API ROUTES (add to server/routes.ts)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Route 1: GET /api/pm-databases/:databaseId/views
+Returns all views for a database, ordered by sortOrder. Filter by userId.
+
+Route 2: POST /api/pm-databases/:databaseId/views
+Creates a new view. Request body: z.object({ name: z.string(), type: z.string(), config: z.any().optional() }). Set sortOrder to max + 1. If type is "board", auto-set groupByPropertyId to the first "status" or "select" property in the database. If type is "calendar", auto-set datePropertyId to the first "date" property. Return created view.
+
+Route 3: PATCH /api/pm-database-views/:id
+Updates view name, type, or config. Request body: z.object({ name: z.string().optional(), type: z.string().optional(), config: z.any().optional() }). Return updated view.
+
+Route 4: DELETE /api/pm-database-views/:id
+Deletes a view. Return { success: true }. Do not allow deleting if it is the only view.
+
+Route 5: GET /api/pm-databases/:databaseId/rows/grouped
+Returns rows grouped by a property. Query param: groupByPropertyId (required). For select/status properties, group rows by their selected option. Return: { "groups": [{ "groupId": "option-uuid", "groupName": "Option Name", "groupColor": "blue", "rows": [...] }] }. Include an "No Value" group for rows without a value for that property.
+
+Route 6: GET /api/pm-databases/:databaseId/rows/calendar
+Returns rows with date values. Query params: datePropertyId (required), month (YYYY-MM format). Return rows that have a date value within that month, including the cell values. Return format: { "rows": [{ ...row, cells: [...], dateValue: "2024-01-15" }] }.
+
+Route 7: GET /api/pm-databases/:databaseId/rows/timeline
+Returns rows with date ranges. Query params: datePropertyId (required), startDate, endDate. Return rows that overlap with the date range. Each row includes its start date and end date (from the date property's value.start and value.end).
+
+Route 8: PATCH /api/pm-database-views/reorder
+Request body: z.object({ views: z.array(z.object({ id: z.number(), sortOrder: z.number() })) }). Return { success: true }.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. FRONTEND — Board View Component
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File: client/src/components/pm/DatabaseBoardView.tsx
+Props: databaseId: number, viewConfig: BoardViewConfig
+
+Layout:
+- Horizontal scrollable container with columns
+- Each column represents a group (a select/status option)
+- Column header: colored dot + group name + row count badge
+- Column body: vertical stack of cards
+- Each card shows: title (first text property value), and 1-2 visible properties as small text/badges below
+- A "+" button at the bottom of each column to add a new row with that group's value pre-set
+- Last column: "+ New Group" to add a new option to the groupBy property
+
+Drag and drop:
+- Cards can be dragged between columns. On drop, update the cell value for the groupBy property to the new column's option, and update sortOrder via PATCH /api/pm-database-rows/reorder.
+- Cards can be reordered within a column.
+
+Data fetching:
+- queryKey: ["pm-database-rows-grouped", databaseId, groupByPropertyId]
+- endpoint: GET /api/pm-databases/:databaseId/rows/grouped?groupByPropertyId=X
+
+Clicking a card opens the row's linked page in the editor (navigate to /dashboard/pm-editor/:linkedPageId).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. FRONTEND — Calendar View Component
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File: client/src/components/pm/DatabaseCalendarView.tsx
+Props: databaseId: number, viewConfig: CalendarViewConfig
+
+Layout:
+- Month navigation bar: left arrow, "Month Year" text, right arrow, "Today" button
+- 7-column grid (Sun-Sat headers)
+- Each day cell shows: day number, and up to 3 row titles as small colored pills. If more than 3, show "+N more" link.
+- Clicking a day cell creates a new row with the date property pre-set to that date.
+- Clicking a row pill navigates to the linked page.
+
+Data fetching:
+- queryKey: ["pm-database-rows-calendar", databaseId, datePropertyId, currentMonth]
+- endpoint: GET /api/pm-databases/:databaseId/rows/calendar?datePropertyId=X&month=YYYY-MM
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. FRONTEND — Timeline View Component
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File: client/src/components/pm/DatabaseTimelineView.tsx
+Props: databaseId: number, viewConfig: TimelineViewConfig
+
+Layout:
+- Horizontal timeline with weeks/months as columns
+- Left sidebar: list of row titles
+- Main area: horizontal bars representing each row's date range (start to end date)
+- If a row has only a start date and no end date, show a single-day marker
+- Navigation: scroll left/right to see past/future weeks
+- Clicking a bar navigates to the linked page
+
+Data fetching:
+- queryKey: ["pm-database-rows-timeline", databaseId, datePropertyId, startDate, endDate]
+- endpoint: GET /api/pm-databases/:databaseId/rows/timeline?datePropertyId=X&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. FRONTEND — List View Component
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File: client/src/components/pm/DatabaseListView.tsx
+Props: databaseId: number, viewConfig: ListViewConfig
+
+Layout:
+- Simple vertical list of rows
+- Each row item shows: a checkbox (if there is a checkbox property), title, and 2-3 visible property values inline as text/badges
+- Clicking a row navigates to its linked page
+- "+" button at the bottom to add new row
+- Sortable via drag handles on left
+
+Data fetching: Same as table view — queryKey: ["pm-database-rows", databaseId]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7. VIEW SWITCHER UPDATE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Update DatabaseTableView.tsx header to become a shared DatabaseViewContainer.tsx that:
+- Renders the view switcher tabs (showing all views for this database)
+- Has a "+" tab to create a new view (opens a dropdown: Table, Board, Calendar, Timeline, List)
+- Each tab shows the view name and type icon
+- Right-clicking a tab shows: Rename, Duplicate, Delete
+- Based on the active view's type, renders the corresponding component: DatabaseTableView, DatabaseBoardView, DatabaseCalendarView, DatabaseTimelineView, or DatabaseListView
+
+File: client/src/components/pm/DatabaseViewContainer.tsx
+This replaces the direct rendering of DatabaseTableView in the block editor.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+8. IMPORTANT NOTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- When a database is first created (in Phase 2's POST /api/pm-databases), also auto-create a default view of type "table" in pm_database_views.
+- Board view drag-and-drop must update both the cell value (to change group) and the row sortOrder.
+- Calendar view must handle month boundaries — a date range spanning two months should appear in both months.
+- Timeline view should calculate bar widths as percentages based on the visible date range.
+- Use framer-motion LayoutGroup for smooth board card reordering animations.
+- All routes go in server/routes.ts. Do not create separate files.
+- Do not modify package.json, vite.config.ts, or drizzle.config.ts.

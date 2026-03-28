@@ -49,7 +49,7 @@ import {
   aiTemplates, voiceNotes, teamInsightSnapshots, externalIntegrations,
   onboardingProgress, workspaceMembers,
   pmPages, pmBlocks, pmPageActivity,
-  pmDatabases, pmDatabaseProperties, pmDatabaseRows, pmDatabaseCells,
+  pmDatabases, pmDatabaseProperties, pmDatabaseRows, pmDatabaseCells, pmDatabaseViews,
 } from "../shared/schema";
 import { inArray, isNotNull } from "drizzle-orm";
 
@@ -7419,6 +7419,7 @@ Provide specific, actionable insights. Be encouraging but honest.`,
       const maxBlockOrder = blocks2.reduce((m, b) => Math.max(m, b.sortOrder), -1);
       await db.insert(pmBlocks).values({ userId, pageId: body.pageId, type: "database", content: { databaseId: db2.id }, sortOrder: maxBlockOrder + 1 });
       const properties = await db.select().from(pmDatabaseProperties).where(eq(pmDatabaseProperties.databaseId, db2.id)).orderBy(asc(pmDatabaseProperties.sortOrder));
+      await db.insert(pmDatabaseViews).values({ userId, databaseId: db2.id, name: "Default View", type: "table", config: {}, sortOrder: 0 });
       return res.json({ ...db2, properties });
     } catch (e: any) { return res.status(400).json({ error: e.message }); }
   });
@@ -7651,6 +7652,163 @@ Provide specific, actionable insights. Be encouraging but honest.`,
       const databases = await db.select().from(pmDatabases).where(and(eq(pmDatabases.pageId, pageId), eq(pmDatabases.userId, userId)));
       return res.json(databases);
     } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  // ============================================================
+  // PM WORKSPACE — Phase 3: View Routes
+  // ============================================================
+
+  app.get("/api/pm-databases/:databaseId/views", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const databaseId = parseInt(req.params.databaseId);
+      const views = await db.select().from(pmDatabaseViews).where(and(eq(pmDatabaseViews.databaseId, databaseId), eq(pmDatabaseViews.userId, userId))).orderBy(asc(pmDatabaseViews.sortOrder));
+      return res.json(views);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/pm-databases/:databaseId/views", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const databaseId = parseInt(req.params.databaseId);
+      const body = z.object({ name: z.string(), type: z.string(), config: z.any().optional() }).parse(req.body);
+      const existing = await db.select({ sortOrder: pmDatabaseViews.sortOrder }).from(pmDatabaseViews).where(and(eq(pmDatabaseViews.databaseId, databaseId), eq(pmDatabaseViews.userId, userId)));
+      const maxOrder = existing.reduce((m, v) => Math.max(m, v.sortOrder), -1);
+      let config: any = body.config || {};
+      if (body.type === "board" && !config.groupByPropertyId) {
+        const props = await db.select().from(pmDatabaseProperties).where(and(eq(pmDatabaseProperties.databaseId, databaseId), eq(pmDatabaseProperties.userId, userId))).orderBy(asc(pmDatabaseProperties.sortOrder));
+        const groupProp = props.find(p => p.type === "status" || p.type === "select");
+        if (groupProp) config = { ...config, groupByPropertyId: groupProp.id };
+      }
+      if (body.type === "calendar" && !config.datePropertyId) {
+        const props = await db.select().from(pmDatabaseProperties).where(and(eq(pmDatabaseProperties.databaseId, databaseId), eq(pmDatabaseProperties.userId, userId))).orderBy(asc(pmDatabaseProperties.sortOrder));
+        const dateProp = props.find(p => p.type === "date");
+        if (dateProp) config = { ...config, datePropertyId: dateProp.id };
+      }
+      const [view] = await db.insert(pmDatabaseViews).values({ userId, databaseId, name: body.name, type: body.type, config, sortOrder: maxOrder + 1 }).returning();
+      return res.json(view);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.patch("/api/pm-database-views/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const body = z.object({ name: z.string().optional(), type: z.string().optional(), config: z.any().optional() }).parse(req.body);
+      const [updated] = await db.update(pmDatabaseViews).set({ ...body }).where(and(eq(pmDatabaseViews.id, id), eq(pmDatabaseViews.userId, userId))).returning();
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      return res.json(updated);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.delete("/api/pm-database-views/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const [view] = await db.select().from(pmDatabaseViews).where(and(eq(pmDatabaseViews.id, id), eq(pmDatabaseViews.userId, userId)));
+      if (!view) return res.status(404).json({ error: "Not found" });
+      const allViews = await db.select().from(pmDatabaseViews).where(and(eq(pmDatabaseViews.databaseId, view.databaseId), eq(pmDatabaseViews.userId, userId)));
+      if (allViews.length <= 1) return res.status(400).json({ error: "Cannot delete the only view" });
+      await db.delete(pmDatabaseViews).where(and(eq(pmDatabaseViews.id, id), eq(pmDatabaseViews.userId, userId)));
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/pm-databases/:databaseId/rows/grouped", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const databaseId = parseInt(req.params.databaseId);
+      const groupByPropertyId = parseInt(req.query.groupByPropertyId as string);
+      const [prop] = await db.select().from(pmDatabaseProperties).where(and(eq(pmDatabaseProperties.id, groupByPropertyId), eq(pmDatabaseProperties.userId, userId)));
+      if (!prop) return res.status(404).json({ error: "Property not found" });
+      const options: any[] = (prop.config as any)?.options || [];
+      const rows = await db.select().from(pmDatabaseRows).where(and(eq(pmDatabaseRows.databaseId, databaseId), eq(pmDatabaseRows.userId, userId))).orderBy(asc(pmDatabaseRows.sortOrder));
+      const rowIds = rows.map(r => r.id);
+      const cells = rowIds.length ? await db.select().from(pmDatabaseCells).where(and(inArray(pmDatabaseCells.rowId, rowIds), eq(pmDatabaseCells.propertyId, groupByPropertyId), eq(pmDatabaseCells.userId, userId))) : [];
+      const rowsWithCells = await Promise.all(rows.map(async r => {
+        const allCells = await db.select().from(pmDatabaseCells).where(and(eq(pmDatabaseCells.rowId, r.id), eq(pmDatabaseCells.userId, userId)));
+        return { ...r, cells: allCells };
+      }));
+      const groups = options.map(opt => ({
+        groupId: opt.id,
+        groupName: opt.name,
+        groupColor: opt.color,
+        rows: rowsWithCells.filter(r => {
+          const cell = cells.find(c => c.rowId === r.id);
+          return (cell?.value as any)?.selectedId === opt.id;
+        }),
+      }));
+      const noValueRows = rowsWithCells.filter(r => {
+        const cell = cells.find(c => c.rowId === r.id);
+        return !cell || !(cell.value as any)?.selectedId;
+      });
+      groups.push({ groupId: "__no_value__", groupName: "No Value", groupColor: "gray", rows: noValueRows });
+      return res.json({ groups });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/pm-databases/:databaseId/rows/calendar", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const databaseId = parseInt(req.params.databaseId);
+      const datePropertyId = parseInt(req.query.datePropertyId as string);
+      const month = req.query.month as string;
+      if (!month) return res.status(400).json({ error: "month required (YYYY-MM)" });
+      const [year, mon] = month.split("-").map(Number);
+      const startOfMonth = new Date(year, mon - 1, 1);
+      const endOfMonth = new Date(year, mon, 0, 23, 59, 59);
+      const rows = await db.select().from(pmDatabaseRows).where(and(eq(pmDatabaseRows.databaseId, databaseId), eq(pmDatabaseRows.userId, userId))).orderBy(asc(pmDatabaseRows.sortOrder));
+      const rowIds = rows.map(r => r.id);
+      const dateCells = rowIds.length ? await db.select().from(pmDatabaseCells).where(and(inArray(pmDatabaseCells.rowId, rowIds), eq(pmDatabaseCells.propertyId, datePropertyId), eq(pmDatabaseCells.userId, userId))) : [];
+      const result: any[] = [];
+      for (const row of rows) {
+        const dateCell = dateCells.find(c => c.rowId === row.id);
+        if (!dateCell) continue;
+        const startStr = (dateCell.value as any)?.start;
+        const endStr = (dateCell.value as any)?.end;
+        if (!startStr) continue;
+        const startD = new Date(startStr);
+        const endD = endStr ? new Date(endStr) : startD;
+        if (endD < startOfMonth || startD > endOfMonth) continue;
+        const allCells = await db.select().from(pmDatabaseCells).where(and(eq(pmDatabaseCells.rowId, row.id), eq(pmDatabaseCells.userId, userId)));
+        result.push({ ...row, cells: allCells, dateValue: startStr });
+      }
+      return res.json({ rows: result });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/pm-databases/:databaseId/rows/timeline", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const databaseId = parseInt(req.params.databaseId);
+      const datePropertyId = parseInt(req.query.datePropertyId as string);
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+      const rows = await db.select().from(pmDatabaseRows).where(and(eq(pmDatabaseRows.databaseId, databaseId), eq(pmDatabaseRows.userId, userId))).orderBy(asc(pmDatabaseRows.sortOrder));
+      const rowIds = rows.map(r => r.id);
+      const dateCells = rowIds.length ? await db.select().from(pmDatabaseCells).where(and(inArray(pmDatabaseCells.rowId, rowIds), eq(pmDatabaseCells.propertyId, datePropertyId), eq(pmDatabaseCells.userId, userId))) : [];
+      const result: any[] = [];
+      for (const row of rows) {
+        const dateCell = dateCells.find(c => c.rowId === row.id);
+        const startStr = (dateCell?.value as any)?.start;
+        const endStr = (dateCell?.value as any)?.end || startStr;
+        if (!startStr) continue;
+        if (endDate && startStr > endDate) continue;
+        if (startDate && endStr && endStr < startDate) continue;
+        const allCells = await db.select().from(pmDatabaseCells).where(and(eq(pmDatabaseCells.rowId, row.id), eq(pmDatabaseCells.userId, userId)));
+        result.push({ ...row, cells: allCells, startDate: startStr, endDate: endStr });
+      }
+      return res.json(result);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.patch("/api/pm-database-views/reorder", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { views: viewUpdates } = z.object({ views: z.array(z.object({ id: z.number(), sortOrder: z.number() })) }).parse(req.body);
+      await Promise.all(viewUpdates.map(v => db.update(pmDatabaseViews).set({ sortOrder: v.sortOrder }).where(and(eq(pmDatabaseViews.id, v.id), eq(pmDatabaseViews.userId, userId)))));
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
   });
 
   // Register Sprint 1 AI cron jobs

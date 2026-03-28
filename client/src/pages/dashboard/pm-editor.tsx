@@ -7,7 +7,7 @@ import {
   CheckSquare, Quote, Code, Image, Minus, Loader2, Smile,
   FileText, Star, Table2
 } from "lucide-react";
-import DatabaseTableView from "@/components/pm/DatabaseTableView";
+import DatabaseViewContainer from "@/components/pm/DatabaseViewContainer";
 import { Button } from "@/components/ui/button";
 import {
   useRef, useState, useEffect, useCallback, KeyboardEvent
@@ -281,7 +281,7 @@ function BlockRenderer({
         );
       case "database": {
         const dbId = (block.content as any)?.databaseId;
-        return dbId ? <DatabaseTableView databaseId={dbId} /> : <div className="text-xs text-muted-foreground">Database not configured</div>;
+        return dbId ? <DatabaseViewContainer databaseId={dbId} /> : <div className="text-xs text-muted-foreground">Database not configured</div>;
       }
       default:
         return (

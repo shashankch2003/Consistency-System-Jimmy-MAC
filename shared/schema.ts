@@ -2747,3 +2747,18 @@ export const pmDatabaseCells = pgTable("pm_database_cells", {
 export const insertPmDatabaseCellSchema = createInsertSchema(pmDatabaseCells).omit({ id: true, createdAt: true });
 export type InsertPmDatabaseCell = typeof pmDatabaseCells.$inferInsert;
 export type PmDatabaseCell = typeof pmDatabaseCells.$inferSelect;
+
+export const pmDatabaseViews = pgTable("pm_database_views", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  databaseId: integer("database_id").notNull(),
+  name: text("name").notNull().default("Default View"),
+  type: text("type").notNull().default("table"),
+  config: jsonb("config").notNull().default({}),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPmDatabaseViewSchema = createInsertSchema(pmDatabaseViews).omit({ id: true, createdAt: true });
+export type InsertPmDatabaseView = typeof pmDatabaseViews.$inferInsert;
+export type PmDatabaseView = typeof pmDatabaseViews.$inferSelect;
