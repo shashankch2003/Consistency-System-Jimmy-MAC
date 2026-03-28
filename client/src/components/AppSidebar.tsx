@@ -67,14 +67,16 @@ const menuItems = [
   { title: "Fundamentals", icon: Trophy, url: "/dashboard/fundamentals" },
   { title: "Money", icon: Wallet, url: "/dashboard/money" },
   { title: "Know More", icon: PlayCircle, url: "/dashboard/know-more" },
-  { title: "Workspace", icon: PanelLeft, url: "/dashboard/pm-workspace" },
-  { title: "Templates", icon: LayoutTemplate, url: "/dashboard/pm-templates" },
-  { title: "Grow Together", icon: HeartHandshake, url: "/dashboard/grow-together" },
-  { title: "Community", icon: Users, url: "/dashboard/community" },
   { title: "Settings", icon: Settings, url: "/dashboard/settings" },
 ];
 
 // ─── HIDDEN MENU ITEMS (NOT DELETED — JUST HIDDEN) ──────────────────────────
+// Team / Collaborative Features (hidden until team features are re-enabled):
+//   { title: "Workspace", icon: PanelLeft, url: "/dashboard/pm-workspace" },
+//   { title: "Templates", icon: LayoutTemplate, url: "/dashboard/pm-templates" },
+//   { title: "Grow Together", icon: HeartHandshake, url: "/dashboard/grow-together" },
+//   { title: "Community", icon: Users, url: "/dashboard/community" },
+//
 // Phase 2 — Team Features:
 //   { title: "Team Intelligence", icon: BarChart3, url: "/dashboard/team-intelligence" },
 //   { title: "Productivity", icon: BarChart3, url: "/dashboard/productivity" },
