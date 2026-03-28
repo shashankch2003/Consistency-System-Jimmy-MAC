@@ -42,6 +42,7 @@ import {
   UsersRound,
   Building2,
   TrendingUp,
+  PanelLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
@@ -64,6 +65,7 @@ const menuItems = [
   { title: "Fundamentals", icon: Trophy, url: "/dashboard/fundamentals" },
   { title: "Money", icon: Wallet, url: "/dashboard/money" },
   { title: "Know More", icon: PlayCircle, url: "/dashboard/know-more" },
+  { title: "Workspace", icon: PanelLeft, url: "/dashboard/pm-workspace" },
   { title: "Grow Together", icon: HeartHandshake, url: "/dashboard/grow-together" },
   { title: "Community", icon: Users, url: "/dashboard/community" },
   { title: "Settings", icon: Settings, url: "/dashboard/settings" },

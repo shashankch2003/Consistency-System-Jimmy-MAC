@@ -48,6 +48,7 @@ import {
   taskDurationEstimates, aiNotificationItems, notificationPreferences,
   aiTemplates, voiceNotes, teamInsightSnapshots, externalIntegrations,
   onboardingProgress, workspaceMembers,
+  pmPages, pmBlocks, pmPageActivity,
 } from "../shared/schema";
 import { inArray, isNotNull } from "drizzle-orm";
 
@@ -7395,6 +7396,195 @@ Provide specific, actionable insights. Be encouraging but honest.`,
 
   // Register Sprint 1 AI cron jobs
   setupAiCronJobs();
+
+  // ============================================================
+  // PM WORKSPACE — Phase 1 Routes
+  // ============================================================
+
+  async function getPmPageDescendantIds(rootId: number, userId: string): Promise<number[]> {
+    const allPages = await db.select({ id: pmPages.id, parentPageId: pmPages.parentPageId }).from(pmPages).where(eq(pmPages.userId, userId));
+    const ids: number[] = [];
+    const queue = [rootId];
+    while (queue.length) {
+      const cur = queue.shift()!;
+      ids.push(cur);
+      allPages.filter(p => p.parentPageId === cur).forEach(p => queue.push(p.id));
+    }
+    return ids;
+  }
+
+  app.get("/api/pm-pages", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const pages = await db.select().from(pmPages).where(and(eq(pmPages.userId, userId), eq(pmPages.isArchived, false))).orderBy(asc(pmPages.sortOrder));
+      const allPages = await db.select({ id: pmPages.id, parentPageId: pmPages.parentPageId }).from(pmPages).where(eq(pmPages.userId, userId));
+      const withCount = pages.map(p => ({
+        ...p,
+        childCount: allPages.filter(c => c.parentPageId === p.id).length,
+      }));
+      return res.json(withCount);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/pm-pages/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const [page] = await db.select().from(pmPages).where(and(eq(pmPages.id, id), eq(pmPages.userId, userId)));
+      if (!page) return res.status(404).json({ error: "Not found" });
+      return res.json(page);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/pm-pages", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const body = z.object({ title: z.string().optional(), parentPageId: z.number().nullable().optional(), icon: z.string().optional(), pageType: z.string().optional() }).parse(req.body);
+      const siblings = await db.select({ sortOrder: pmPages.sortOrder }).from(pmPages).where(and(eq(pmPages.userId, userId), body.parentPageId != null ? eq(pmPages.parentPageId, body.parentPageId!) : isNull(pmPages.parentPageId)));
+      const maxOrder = siblings.reduce((m, s) => Math.max(m, s.sortOrder), -1);
+      const [page] = await db.insert(pmPages).values({ userId, title: body.title || "Untitled", parentPageId: body.parentPageId ?? null, icon: body.icon || "", pageType: body.pageType || "page", sortOrder: maxOrder + 1 }).returning();
+      await db.insert(pmPageActivity).values({ userId, pageId: page.id, action: "created", metadata: {} });
+      return res.json(page);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.patch("/api/pm-pages/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const body = z.object({ title: z.string().optional(), icon: z.string().optional(), coverImage: z.string().optional(), sortOrder: z.number().optional(), parentPageId: z.number().nullable().optional(), isFavorite: z.boolean().optional(), isArchived: z.boolean().optional() }).parse(req.body);
+      const [page] = await db.update(pmPages).set({ ...body, updatedAt: new Date() }).where(and(eq(pmPages.id, id), eq(pmPages.userId, userId))).returning();
+      if (!page) return res.status(404).json({ error: "Not found" });
+      let action = "edited";
+      if (body.isFavorite === true) action = "favorited";
+      else if (body.isFavorite === false) action = "unfavorited";
+      else if (body.isArchived === true) action = "archived";
+      else if (body.isArchived === false) action = "restored";
+      await db.insert(pmPageActivity).values({ userId, pageId: id, action, metadata: {} });
+      return res.json(page);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.delete("/api/pm-pages/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const ids = await getPmPageDescendantIds(id, userId);
+      if (ids.length) {
+        await db.delete(pmPageActivity).where(and(inArray(pmPageActivity.pageId, ids), eq(pmPageActivity.userId, userId)));
+        await db.delete(pmBlocks).where(and(inArray(pmBlocks.pageId, ids), eq(pmBlocks.userId, userId)));
+        await db.delete(pmPages).where(and(inArray(pmPages.id, ids), eq(pmPages.userId, userId)));
+      }
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/pm-pages/:id/duplicate", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const [orig] = await db.select().from(pmPages).where(and(eq(pmPages.id, id), eq(pmPages.userId, userId)));
+      if (!orig) return res.status(404).json({ error: "Not found" });
+      const siblings = await db.select({ sortOrder: pmPages.sortOrder }).from(pmPages).where(and(eq(pmPages.userId, userId), orig.parentPageId != null ? eq(pmPages.parentPageId, orig.parentPageId) : isNull(pmPages.parentPageId)));
+      const maxOrder = siblings.reduce((m, s) => Math.max(m, s.sortOrder), -1);
+      const [newPage] = await db.insert(pmPages).values({ userId, title: orig.title + " (Copy)", parentPageId: orig.parentPageId, icon: orig.icon, coverImage: orig.coverImage, pageType: orig.pageType, sortOrder: maxOrder + 1 }).returning();
+      const blocks = await db.select().from(pmBlocks).where(and(eq(pmBlocks.pageId, id), eq(pmBlocks.userId, userId)));
+      if (blocks.length) {
+        await db.insert(pmBlocks).values(blocks.map(b => ({ userId, pageId: newPage.id, parentBlockId: null, type: b.type, content: b.content as any, sortOrder: b.sortOrder })));
+      }
+      await db.insert(pmPageActivity).values({ userId, pageId: newPage.id, action: "duplicated", metadata: { sourcePageId: id } });
+      return res.json(newPage);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.patch("/api/pm-pages/reorder", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { pages: pageUpdates } = z.object({ pages: z.array(z.object({ id: z.number(), sortOrder: z.number(), parentPageId: z.number().nullable() })) }).parse(req.body);
+      await Promise.all(pageUpdates.map(p => db.update(pmPages).set({ sortOrder: p.sortOrder, parentPageId: p.parentPageId }).where(and(eq(pmPages.id, p.id), eq(pmPages.userId, userId)))));
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/pm-pages/:pageId/blocks", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const pageId = parseInt(req.params.pageId);
+      const blocks = await db.select().from(pmBlocks).where(and(eq(pmBlocks.pageId, pageId), eq(pmBlocks.userId, userId))).orderBy(asc(pmBlocks.sortOrder));
+      return res.json(blocks);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/pm-pages/:pageId/blocks", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const pageId = parseInt(req.params.pageId);
+      const body = z.object({ type: z.string(), content: z.any().optional(), parentBlockId: z.number().nullable().optional(), sortOrder: z.number().optional() }).parse(req.body);
+      let sortOrder = body.sortOrder;
+      if (sortOrder === undefined) {
+        const siblings = await db.select({ sortOrder: pmBlocks.sortOrder }).from(pmBlocks).where(and(eq(pmBlocks.pageId, pageId), eq(pmBlocks.userId, userId)));
+        sortOrder = siblings.reduce((m, s) => Math.max(m, s.sortOrder), -1) + 1;
+      }
+      const [block] = await db.insert(pmBlocks).values({ userId, pageId, type: body.type, content: body.content || {}, parentBlockId: body.parentBlockId ?? null, sortOrder }).returning();
+      return res.json(block);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.patch("/api/pm-blocks/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const body = z.object({ type: z.string().optional(), content: z.any().optional(), sortOrder: z.number().optional(), parentBlockId: z.number().nullable().optional() }).parse(req.body);
+      const [block] = await db.update(pmBlocks).set({ ...body, updatedAt: new Date() }).where(and(eq(pmBlocks.id, id), eq(pmBlocks.userId, userId))).returning();
+      if (!block) return res.status(404).json({ error: "Not found" });
+      return res.json(block);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.delete("/api/pm-blocks/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const allBlocks = await db.select({ id: pmBlocks.id, parentBlockId: pmBlocks.parentBlockId }).from(pmBlocks).where(eq(pmBlocks.userId, userId));
+      const ids: number[] = [];
+      const queue = [id];
+      while (queue.length) {
+        const cur = queue.shift()!;
+        ids.push(cur);
+        allBlocks.filter(b => b.parentBlockId === cur).forEach(b => queue.push(b.id));
+      }
+      await db.delete(pmBlocks).where(and(inArray(pmBlocks.id, ids), eq(pmBlocks.userId, userId)));
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.patch("/api/pm-blocks/reorder", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { blocks: blockUpdates } = z.object({ blocks: z.array(z.object({ id: z.number(), sortOrder: z.number(), parentBlockId: z.number().nullable() })) }).parse(req.body);
+      await Promise.all(blockUpdates.map(b => db.update(pmBlocks).set({ sortOrder: b.sortOrder, parentBlockId: b.parentBlockId }).where(and(eq(pmBlocks.id, b.id), eq(pmBlocks.userId, userId)))));
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/pm-pages/:pageId/blocks/batch", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const pageId = parseInt(req.params.pageId);
+      const { blocks: blockData } = z.object({ blocks: z.array(z.object({ type: z.string(), content: z.any(), sortOrder: z.number(), parentBlockId: z.number().nullable().optional() })) }).parse(req.body);
+      const created = await db.insert(pmBlocks).values(blockData.map(b => ({ userId, pageId, type: b.type, content: b.content, sortOrder: b.sortOrder, parentBlockId: b.parentBlockId ?? null }))).returning();
+      return res.json(created);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/pm-pages/:pageId/activity", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const pageId = parseInt(req.params.pageId);
+      const activity = await db.select().from(pmPageActivity).where(and(eq(pmPageActivity.pageId, pageId), eq(pmPageActivity.userId, userId))).orderBy(desc(pmPageActivity.createdAt)).limit(50);
+      return res.json(activity);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
 
   return httpServer;
 }

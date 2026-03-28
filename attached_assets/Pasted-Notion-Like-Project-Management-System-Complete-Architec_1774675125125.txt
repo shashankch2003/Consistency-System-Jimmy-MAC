@@ -1,0 +1,318 @@
+Notion-Like Project Management System — Complete Architecture & Replit Prompts
+System Overview
+This document contains the full product architecture and 6 phased Replit prompts for building a Notion-level project management system inside the Consistency System app. Each phase is a self-contained, directly-pasteable prompt.
+Phase Map:
+PhaseNameTablesRoutesPages1Core Pages & Blocks31422Database Engine4160 (extends Phase 1)3Views — Board, Calendar, Timeline, List180 (extends Phase 2)4Team & Permissions31215Templates, Search & Navigation2816Comments, History, Notifications3100 (extends existing)
+Total new tables: 16 | Total new routes: 68 | Total new pages: 4
+
+PHASE 1 — Core Pages & Block Editor
+Build Notion-Style Pages & Block Editor — A hierarchical page system with a slash-command block editor, drag-and-drop reordering, nested pages, favorites, and a collapsible sidebar tree.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. DATABASE TABLES (in shared/schema.ts)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+-- Table 1: pm_pages --
+import { pgTable, serial, text, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+
+export const pmPages = pgTable("pm_pages", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  parentPageId: integer("parent_page_id"),
+  title: text("title").notNull().default("Untitled"),
+  icon: text("icon").default(""),
+  coverImage: text("cover_image").default(""),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isFavorite: boolean("is_favorite").notNull().default(false),
+  isArchived: boolean("is_archived").notNull().default(false),
+  isTemplate: boolean("is_template").notNull().default(false),
+  pageType: text("page_type").notNull().default("page"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPmPageSchema = createInsertSchema(pmPages);
+export type InsertPmPage = typeof pmPages.$inferInsert;
+export type PmPage = typeof pmPages.$inferSelect;
+
+-- Table 2: pm_blocks --
+export const pmBlocks = pgTable("pm_blocks", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  pageId: integer("page_id").notNull(),
+  parentBlockId: integer("parent_block_id"),
+  type: text("type").notNull().default("paragraph"),
+  content: jsonb("content").notNull().default({}),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPmBlockSchema = createInsertSchema(pmBlocks);
+export type InsertPmBlock = typeof pmBlocks.$inferInsert;
+export type PmBlock = typeof pmBlocks.$inferSelect;
+
+Block type values: "paragraph", "heading1", "heading2", "heading3", "bulletList", "numberedList", "todo", "toggle", "quote", "callout", "divider", "image", "video", "embed", "code", "database"
+
+Block content JSON structure per type:
+- paragraph: { "text": "string", "marks": [{ "type": "bold|italic|underline|strikethrough|code|link", "attrs": {} }] }
+- heading1/heading2/heading3: { "text": "string" }
+- bulletList/numberedList: { "text": "string" }
+- todo: { "text": "string", "checked": false }
+- toggle: { "text": "string", "isOpen": false }
+- quote: { "text": "string" }
+- callout: { "text": "string", "emoji": "💡", "color": "blue" }
+- divider: {}
+- image: { "url": "string", "caption": "string", "width": 100 }
+- video: { "url": "string", "caption": "string" }
+- embed: { "url": "string", "caption": "string" }
+- code: { "text": "string", "language": "javascript" }
+- database: { "databaseId": 0 }
+
+-- Table 3: pm_page_activity --
+export const pmPageActivity = pgTable("pm_page_activity", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  pageId: integer("page_id").notNull(),
+  action: text("action").notNull(),
+  metadata: jsonb("metadata").notNull().default({}),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPmPageActivitySchema = createInsertSchema(pmPageActivity);
+export type InsertPmPageActivity = typeof pmPageActivity.$inferInsert;
+export type PmPageActivity = typeof pmPageActivity.$inferSelect;
+
+Action values: "created", "edited", "archived", "restored", "duplicated", "moved", "favorited", "unfavorited"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. API ROUTES (add to server/routes.ts)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+All routes use isAuthenticated middleware. All routes filter by userId using eq(pmPages.userId, req.user.claims.sub).
+
+Route 1: GET /api/pm-pages
+Returns all non-archived pages for the current user, ordered by sortOrder ascending. Include a computed field "childCount" by counting pages where parentPageId equals each page's id.
+
+Route 2: GET /api/pm-pages/:id
+Returns a single page by id where userId matches. Return 404 if not found.
+
+Route 3: POST /api/pm-pages
+Creates a new page. Request body validated with z.object({ title: z.string().optional(), parentPageId: z.number().nullable().optional(), icon: z.string().optional(), pageType: z.string().optional() }). Set sortOrder to max(sortOrder) + 1 among sibling pages (same parentPageId). Log "created" action to pm_page_activity. Return the created page.
+
+Route 4: PATCH /api/pm-pages/:id
+Updates a page. Request body validated with z.object({ title: z.string().optional(), icon: z.string().optional(), coverImage: z.string().optional(), sortOrder: z.number().optional(), parentPageId: z.number().nullable().optional(), isFavorite: z.boolean().optional(), isArchived: z.boolean().optional() }). Set updatedAt to new Date(). Log appropriate action to pm_page_activity. Return the updated page.
+
+Route 5: DELETE /api/pm-pages/:id
+Hard-deletes a page and all its child pages (recursive), all blocks belonging to those pages, and all activity records for those pages. Return { success: true }.
+
+Route 6: POST /api/pm-pages/:id/duplicate
+Duplicates a page and all its blocks. New page gets title = original title + " (Copy)", same parentPageId, sortOrder = max(sortOrder) + 1 among siblings. Duplicate all blocks with new pageId. Log "duplicated" action. Return the new page.
+
+Route 7: PATCH /api/pm-pages/reorder
+Request body validated with z.object({ pages: z.array(z.object({ id: z.number(), sortOrder: z.number(), parentPageId: z.number().nullable() })) }). Update sortOrder and parentPageId for each page in the array. Return { success: true }.
+
+Route 8: GET /api/pm-pages/:pageId/blocks
+Returns all blocks for a page, ordered by sortOrder ascending. Filter by userId.
+
+Route 9: POST /api/pm-pages/:pageId/blocks
+Creates a new block. Request body validated with z.object({ type: z.string(), content: z.any().optional(), parentBlockId: z.number().nullable().optional(), sortOrder: z.number().optional() }). If sortOrder not provided, set to max(sortOrder) + 1 among sibling blocks. Return the created block.
+
+Route 10: PATCH /api/pm-blocks/:id
+Updates a block. Request body validated with z.object({ type: z.string().optional(), content: z.any().optional(), sortOrder: z.number().optional(), parentBlockId: z.number().nullable().optional() }). Set updatedAt to new Date(). Return the updated block.
+
+Route 11: DELETE /api/pm-blocks/:id
+Deletes a block and all child blocks (where parentBlockId equals this block's id, recursive). Return { success: true }.
+
+Route 12: PATCH /api/pm-blocks/reorder
+Request body validated with z.object({ blocks: z.array(z.object({ id: z.number(), sortOrder: z.number(), parentBlockId: z.number().nullable() })) }). Update each block's sortOrder and parentBlockId. Return { success: true }.
+
+Route 13: POST /api/pm-pages/:pageId/blocks/batch
+Creates multiple blocks at once. Request body validated with z.object({ blocks: z.array(z.object({ type: z.string(), content: z.any(), sortOrder: z.number(), parentBlockId: z.number().nullable().optional() })) }). Return array of created blocks.
+
+Route 14: GET /api/pm-pages/:pageId/activity
+Returns the 50 most recent activity records for a page, ordered by createdAt descending. Filter by userId.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. FRONTEND — Page: Workspace Hub
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File: client/src/pages/dashboard/pm-workspace.tsx
+Page title: "Workspace"
+
+This is the main entry point. It shows a list of root-level pages (where parentPageId is null) as cards in a grid layout.
+
+Layout:
+- Top bar: page title "Workspace" on the left, a "New Page" button (Plus icon) on the right
+- Below: 2-column grid of page cards
+- Each page card shows: icon (or default FileText icon), title, "Updated X ago" timestamp, a 3-dot menu (MoreHorizontal icon) with options: "Add to Favorites", "Duplicate", "Archive", "Delete"
+- If a page is favorited, show a filled Star icon on the card
+- Clicking a page card navigates to /dashboard/pm-editor/:id using wouter's useLocation
+
+Data fetching:
+- queryKey: ["pm-pages"]
+- endpoint: GET /api/pm-pages
+
+Mutations:
+- Create page: POST /api/pm-pages, invalidate ["pm-pages"]
+- Update page (favorite/archive): PATCH /api/pm-pages/:id, invalidate ["pm-pages"]
+- Delete page: DELETE /api/pm-pages/:id, invalidate ["pm-pages"]
+- Duplicate page: POST /api/pm-pages/:id/duplicate, invalidate ["pm-pages"]
+
+Loading state: Show 6 skeleton cards in the grid using shadcn Skeleton component.
+Empty state: Show a centered illustration area with FileText icon (size 48, text-muted-foreground), heading "No pages yet", subtext "Create your first page to get started", and a "Create Page" button.
+
+Every interactive element must have a data-testid attribute: data-testid="create-page-btn", data-testid="page-card-{id}", data-testid="page-menu-{id}", data-testid="favorite-btn-{id}", data-testid="delete-btn-{id}".
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. FRONTEND — Page: Block Editor
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File: client/src/pages/dashboard/pm-editor.tsx
+Route: /dashboard/pm-editor/:id (id is the page id from URL params)
+
+This is the main page editor — the core of the system.
+
+Layout (top to bottom):
+A) Cover image area: If page has coverImage, show it as a 200px tall banner with a hover overlay showing "Change Cover" and "Remove Cover" buttons. If no cover, show nothing (but on hover over the top area, show a faint "Add Cover" button).
+
+B) Page header area (max-width 720px, centered):
+   - Icon: If page has icon, show it as a 48px emoji/icon. Clicking opens an emoji picker popover (use a grid of 50 common emojis). If no icon, on hover show a faint "Add Icon" button.
+   - Title: A large contentEditable div (text-4xl font-bold) that updates the page title via PATCH on blur. Placeholder text: "Untitled".
+
+C) Block content area (max-width 720px, centered):
+   - Render each block based on its type.
+   - Each block has a drag handle (GripVertical icon) on the left that appears on hover.
+   - Each block has a "+" button on the left (below drag handle) that appears on hover — clicking it opens the slash command menu at that position to insert a new block below.
+   - Blocks are rendered in sortOrder.
+
+D) Slash command menu:
+   - Triggered by typing "/" in any text block OR clicking the "+" button on any block.
+   - Shows a floating menu (absolute positioned, z-50, white bg, shadow-lg, rounded-lg, border) with a search input at top and a list of block types below.
+   - Block type options displayed as rows with icon + label + description:
+     * Text (AlignLeft icon) — "Just start writing with plain text"
+     * Heading 1 (Heading1 icon) — "Large section heading"
+     * Heading 2 (Heading2 icon) — "Medium section heading"
+     * Heading 3 (Heading3 icon) — "Small section heading"
+     * Bullet List (List icon) — "Create a simple bullet list"
+     * Numbered List (ListOrdered icon) — "Create a numbered list"
+     * To-Do (CheckSquare icon) — "Track tasks with a to-do list"
+     * Toggle (ChevronRight icon) — "Toggles can hide and show content"
+     * Quote (Quote icon) — "Capture a quote"
+     * Callout (AlertCircle icon) — "Make writing stand out"
+     * Divider (Minus icon) — "Visually divide blocks"
+     * Code (Code icon) — "Capture a code snippet"
+     * Image (ImageIcon icon) — "Upload or embed an image"
+   - Typing in the search input filters the list.
+   - Clicking a block type creates a new block of that type at the current position and closes the menu.
+   - Pressing Escape or clicking outside closes the menu.
+
+E) Block rendering by type:
+   - paragraph: A contentEditable div (text-base). On Enter, create a new paragraph block below. On Backspace at start of empty block, delete the block and focus the previous one.
+   - heading1: contentEditable div with text-3xl font-bold
+   - heading2: contentEditable div with text-2xl font-semibold
+   - heading3: contentEditable div with text-xl font-medium
+   - bulletList: contentEditable div with a bullet character (•) prefix, left padding 24px
+   - numberedList: contentEditable div with auto-incrementing number prefix, left padding 24px
+   - todo: A checkbox (shadcn Checkbox) + contentEditable div. Clicking checkbox toggles content.checked and updates via PATCH. Checked items get line-through text style.
+   - toggle: A ChevronRight icon (rotates 90° when open via CSS transition) + contentEditable div for the toggle title. When open, show child blocks indented 24px below. Child blocks have parentBlockId = this toggle block's id.
+   - quote: A div with border-l-4 border-muted-foreground pl-4 italic styling, contentEditable.
+   - callout: A div with bg-muted rounded-lg p-4 flex gap-2. Left side: emoji (from content.emoji). Right side: contentEditable div for text.
+   - divider: A horizontal rule (hr) element, border-t border-muted, my-4. Not editable.
+   - code: A pre/code block with bg-muted rounded p-4 font-mono text-sm. Use a textarea for editing.
+   - image: If content.url exists, show the image with optional caption below. If no url, show a placeholder div with ImageIcon and text "Click to add an image" — clicking opens a text input to paste an image URL.
+
+F) Drag and drop:
+   - Use HTML5 drag and drop. Each block is draggable via its GripVertical handle.
+   - On drop, update sortOrder of affected blocks via PATCH /api/pm-blocks/reorder.
+   - Show a blue horizontal line indicator where the block will be dropped.
+
+G) Keyboard shortcuts:
+   - Enter in a text block: create new paragraph block below, focus it
+   - Backspace at start of empty block: delete block, focus previous block
+   - "/" at start of a block or after a space: open slash command menu
+
+Data fetching:
+- Page data: queryKey: ["pm-page", pageId], endpoint: GET /api/pm-pages/:id
+- Blocks data: queryKey: ["pm-blocks", pageId], endpoint: GET /api/pm-pages/:pageId/blocks
+
+Mutations:
+- Update page: PATCH /api/pm-pages/:id, invalidate ["pm-page", pageId]
+- Create block: POST /api/pm-pages/:pageId/blocks, invalidate ["pm-blocks", pageId]
+- Update block: PATCH /api/pm-blocks/:id, invalidate ["pm-blocks", pageId]
+- Delete block: DELETE /api/pm-blocks/:id, invalidate ["pm-blocks", pageId]
+- Reorder blocks: PATCH /api/pm-blocks/reorder, invalidate ["pm-blocks", pageId]
+
+Loading state: Show a skeleton with a wide rectangle (cover area), a circle (icon), a long skeleton line (title), and 5 short skeleton lines (blocks).
+Error state: If page not found (404), show "Page not found" with a "Back to Workspace" link.
+
+Breadcrumb navigation at the very top: Show the page hierarchy. If page has parentPageId, fetch parent page title and show: "Parent > Current Page". Each breadcrumb item is clickable and navigates to that page.
+
+data-testid attributes: data-testid="page-title", data-testid="block-{id}", data-testid="slash-menu", data-testid="slash-menu-item-{type}", data-testid="block-drag-handle-{id}", data-testid="add-block-btn-{id}", data-testid="breadcrumb".
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. SIDEBAR — Notion-style page tree
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+In client/src/components/AppSidebar.tsx, add a new collapsible section titled "Project Manager" after the last existing sidebar section.
+
+Structure of this sidebar section:
+A) Section header: "Project Manager" label with a Plus icon button on the right. Clicking the Plus button creates a new root page (POST /api/pm-pages with no parentPageId) and navigates to /dashboard/pm-editor/:newId.
+
+B) "Favorites" subsection (only shown if user has favorited pages):
+   - Label: "Favorites" in text-xs text-muted-foreground uppercase tracking-wide
+   - Lists all pages where isFavorite is true
+   - Each item shows: icon (or FileText fallback) + title (truncated to 20 chars)
+   - Clicking navigates to /dashboard/pm-editor/:id
+
+C) "Pages" subsection:
+   - Label: "Pages" in text-xs text-muted-foreground uppercase tracking-wide
+   - Lists all root pages (parentPageId is null) that are not archived
+   - Each page item shows:
+     * A ChevronRight icon that rotates when expanded (if page has children)
+     * Page icon (or FileText fallback)
+     * Page title (truncated to 20 chars)
+     * On hover: a Plus icon button to create a child page, and a MoreHorizontal icon for a dropdown menu with: "Add to Favorites", "Duplicate", "Archive", "Delete"
+   - If a page has children, clicking the chevron expands to show child pages indented 16px deeper
+   - Support infinite nesting depth (recursive component)
+   - Clicking the page title navigates to /dashboard/pm-editor/:id
+
+D) At the bottom of the section: "Archived" link (Archive icon) — clicking navigates to /dashboard/pm-workspace with a query param ?filter=archived that shows only archived pages.
+
+Data: The sidebar fetches pages using queryKey: ["pm-pages"], endpoint: GET /api/pm-pages. It builds the tree structure client-side by grouping pages by parentPageId.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. ROUTING (in client/src/App.tsx)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add these imports:
+import PmWorkspace from "./pages/dashboard/pm-workspace";
+import PmEditor from "./pages/dashboard/pm-editor";
+
+Add these routes:
+<Route path="/dashboard/pm-workspace" component={PmWorkspace} />
+<Route path="/dashboard/pm-editor/:id" component={PmEditor} />
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7. SIDEBAR ENTRY (in AppSidebar.tsx)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add a sidebar link for the workspace hub:
+- Label: "Workspace"
+- Icon: LayoutDashboard from lucide-react
+- Route: /dashboard/pm-workspace
+- Position: after the last existing sidebar item, before the new "Project Manager" tree section
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+8. IMPORTANT IMPLEMENTATION NOTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- All block text editing uses contentEditable divs, NOT textarea or input elements (except for code blocks which use textarea).
+- Block content updates should debounce — wait 500ms after the user stops typing before sending PATCH request. Use a useRef for the debounce timer.
+- The slash command menu must be positioned absolutely near the cursor/caret position.
+- Page title changes also debounce at 500ms.
+- Use framer-motion for block insertion animation (fadeIn + slideDown, duration 0.15s) and block deletion animation (fadeOut + slideUp, duration 0.15s).
+- All API errors should show a toast notification using shadcn useToast with variant "destructive" and a descriptive message.
+- Do not create separate route files. All routes go in server/routes.ts.
+- Do not modify package.json, vite.config.ts, or drizzle.config.ts.

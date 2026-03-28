@@ -82,6 +82,8 @@ import CommandCenterPage from "@/pages/dashboard/command-center";
 import TeamInsightsPage from "@/pages/dashboard/team-insights";
 import IntegrationsPage from "@/pages/dashboard/integrations";
 import OnboardingPage from "@/pages/dashboard/onboarding";
+import PmWorkspacePage from "@/pages/dashboard/pm-workspace";
+import PmEditorPage from "@/pages/dashboard/pm-editor";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -374,6 +376,16 @@ function Router() {
       <Route path="/dashboard/onboarding">
         <DashboardLayout>
           <OnboardingPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/pm-workspace">
+        <DashboardLayout>
+          <PmWorkspacePage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/pm-editor/:id">
+        <DashboardLayout>
+          <PmEditorPage />
         </DashboardLayout>
       </Route>
 

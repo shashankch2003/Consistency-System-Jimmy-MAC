@@ -2632,3 +2632,56 @@ export const templates = aiTemplates;
 export const habits = aiHabits;
 export const habitCompletions = aiHabitCompletions;
 export const productivityScores = aiProductivityScores;
+
+// ============================================================
+// PM WORKSPACE — Phase 1: Pages, Blocks & Activity
+// ============================================================
+
+export const pmPages = pgTable("pm_pages", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  parentPageId: integer("parent_page_id"),
+  title: text("title").notNull().default("Untitled"),
+  icon: text("icon").default(""),
+  coverImage: text("cover_image").default(""),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isFavorite: boolean("is_favorite").notNull().default(false),
+  isArchived: boolean("is_archived").notNull().default(false),
+  isTemplate: boolean("is_template").notNull().default(false),
+  pageType: text("page_type").notNull().default("page"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPmPageSchema = createInsertSchema(pmPages).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPmPage = typeof pmPages.$inferInsert;
+export type PmPage = typeof pmPages.$inferSelect;
+
+export const pmBlocks = pgTable("pm_blocks", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  pageId: integer("page_id").notNull(),
+  parentBlockId: integer("parent_block_id"),
+  type: text("type").notNull().default("paragraph"),
+  content: jsonb("content").notNull().default({}),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPmBlockSchema = createInsertSchema(pmBlocks).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPmBlock = typeof pmBlocks.$inferInsert;
+export type PmBlock = typeof pmBlocks.$inferSelect;
+
+export const pmPageActivity = pgTable("pm_page_activity", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  pageId: integer("page_id").notNull(),
+  action: text("action").notNull(),
+  metadata: jsonb("metadata").notNull().default({}),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPmPageActivitySchema = createInsertSchema(pmPageActivity).omit({ id: true, createdAt: true });
+export type InsertPmPageActivity = typeof pmPageActivity.$inferInsert;
+export type PmPageActivity = typeof pmPageActivity.$inferSelect;
