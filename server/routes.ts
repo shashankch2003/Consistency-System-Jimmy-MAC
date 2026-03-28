@@ -50,6 +50,7 @@ import {
   onboardingProgress, workspaceMembers,
   pmPages, pmBlocks, pmPageActivity,
   pmDatabases, pmDatabaseProperties, pmDatabaseRows, pmDatabaseCells, pmDatabaseViews,
+  pmWorkspaces, pmWorkspaceMembers, pmPagePermissions,
 } from "../shared/schema";
 import { inArray, isNotNull } from "drizzle-orm";
 
@@ -7811,6 +7812,164 @@ Provide specific, actionable insights. Be encouraging but honest.`,
     } catch (e: any) { return res.status(400).json({ error: e.message }); }
   });
 
+  // ============================================================
+  // PM WORKSPACE — Phase 4: Team Management & Permissions
+  // ============================================================
+
+  app.post("/api/pm-workspaces", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { name } = z.object({ name: z.string() }).parse(req.body);
+      const [ws] = await db.insert(pmWorkspaces).values({ ownerId: userId, name }).returning();
+      await db.insert(pmWorkspaceMembers).values({ workspaceId: ws.id, userId, role: "owner", inviteStatus: "accepted" });
+      return res.json(ws);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/pm-workspaces", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const memberships = await db.select().from(pmWorkspaceMembers).where(and(eq(pmWorkspaceMembers.userId, userId), eq(pmWorkspaceMembers.inviteStatus, "accepted")));
+      const wsIds = memberships.map(m => m.workspaceId);
+      if (!wsIds.length) return res.json([]);
+      const workspaces = await db.select().from(pmWorkspaces).where(inArray(pmWorkspaces.id, wsIds));
+      return res.json(workspaces);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.patch("/api/pm-workspaces/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const body = z.object({ name: z.string().optional(), icon: z.string().optional() }).parse(req.body);
+      const [member] = await db.select().from(pmWorkspaceMembers).where(and(eq(pmWorkspaceMembers.workspaceId, id), eq(pmWorkspaceMembers.userId, userId)));
+      if (!member || !["owner", "admin"].includes(member.role)) return res.status(403).json({ error: "Access denied" });
+      const [updated] = await db.update(pmWorkspaces).set({ ...body, updatedAt: new Date() }).where(eq(pmWorkspaces.id, id)).returning();
+      return res.json(updated);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.delete("/api/pm-workspaces/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const [ws] = await db.select().from(pmWorkspaces).where(and(eq(pmWorkspaces.id, id), eq(pmWorkspaces.ownerId, userId)));
+      if (!ws) return res.status(403).json({ error: "Only the owner can delete this workspace" });
+      await db.delete(pmWorkspaceMembers).where(eq(pmWorkspaceMembers.workspaceId, id));
+      await db.delete(pmWorkspaces).where(eq(pmWorkspaces.id, id));
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/pm-workspaces/:workspaceId/members", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const workspaceId = parseInt(req.params.workspaceId);
+      const [self] = await db.select().from(pmWorkspaceMembers).where(and(eq(pmWorkspaceMembers.workspaceId, workspaceId), eq(pmWorkspaceMembers.userId, userId)));
+      if (!self) return res.status(403).json({ error: "Access denied" });
+      const members = await db.select().from(pmWorkspaceMembers).where(eq(pmWorkspaceMembers.workspaceId, workspaceId)).orderBy(asc(pmWorkspaceMembers.createdAt));
+      return res.json(members);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/pm-workspaces/:workspaceId/members", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const workspaceId = parseInt(req.params.workspaceId);
+      const body = z.object({ email: z.string().email(), role: z.string() }).parse(req.body);
+      const [self] = await db.select().from(pmWorkspaceMembers).where(and(eq(pmWorkspaceMembers.workspaceId, workspaceId), eq(pmWorkspaceMembers.userId, userId)));
+      if (!self || !["owner", "admin"].includes(self.role)) return res.status(403).json({ error: "Access denied" });
+      const [member] = await db.insert(pmWorkspaceMembers).values({ workspaceId, userId: body.email, role: body.role, invitedBy: userId, inviteEmail: body.email, inviteStatus: "pending" }).returning();
+      return res.json(member);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.patch("/api/pm-workspace-members/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const { role } = z.object({ role: z.string() }).parse(req.body);
+      const [target] = await db.select().from(pmWorkspaceMembers).where(eq(pmWorkspaceMembers.id, id));
+      if (!target) return res.status(404).json({ error: "Not found" });
+      if (target.userId === userId) return res.status(400).json({ error: "Cannot change own role" });
+      if (role === "owner") return res.status(400).json({ error: "Cannot transfer ownership" });
+      const [self] = await db.select().from(pmWorkspaceMembers).where(and(eq(pmWorkspaceMembers.workspaceId, target.workspaceId), eq(pmWorkspaceMembers.userId, userId)));
+      if (!self || self.role !== "owner") return res.status(403).json({ error: "Only owners can change roles" });
+      const [updated] = await db.update(pmWorkspaceMembers).set({ role }).where(eq(pmWorkspaceMembers.id, id)).returning();
+      return res.json(updated);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.delete("/api/pm-workspace-members/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const [target] = await db.select().from(pmWorkspaceMembers).where(eq(pmWorkspaceMembers.id, id));
+      if (!target) return res.status(404).json({ error: "Not found" });
+      if (target.role === "owner") return res.status(400).json({ error: "Cannot remove the owner" });
+      const [self] = await db.select().from(pmWorkspaceMembers).where(and(eq(pmWorkspaceMembers.workspaceId, target.workspaceId), eq(pmWorkspaceMembers.userId, userId)));
+      if (!self || !["owner", "admin"].includes(self.role)) return res.status(403).json({ error: "Access denied" });
+      await db.delete(pmWorkspaceMembers).where(eq(pmWorkspaceMembers.id, id));
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/pm-pages/:pageId/permissions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const pageId = parseInt(req.params.pageId);
+      const [page] = await db.select().from(pmPages).where(eq(pmPages.id, pageId));
+      if (!page) return res.status(404).json({ error: "Not found" });
+      const fullPerms = await db.select().from(pmPagePermissions).where(and(eq(pmPagePermissions.pageId, pageId), eq(pmPagePermissions.accessLevel, "full"), eq(pmPagePermissions.targetType, "user"), eq(pmPagePermissions.targetId, userId)));
+      if (page.userId !== userId && !fullPerms.length) return res.status(403).json({ error: "Access denied" });
+      const permissions = await db.select().from(pmPagePermissions).where(eq(pmPagePermissions.pageId, pageId));
+      return res.json(permissions);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/pm-pages/:pageId/permissions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const pageId = parseInt(req.params.pageId);
+      const body = z.object({ targetType: z.string(), targetId: z.string(), accessLevel: z.string() }).parse(req.body);
+      const [page] = await db.select().from(pmPages).where(eq(pmPages.id, pageId));
+      if (!page) return res.status(404).json({ error: "Not found" });
+      const fullPerms = await db.select().from(pmPagePermissions).where(and(eq(pmPagePermissions.pageId, pageId), eq(pmPagePermissions.accessLevel, "full"), eq(pmPagePermissions.targetType, "user"), eq(pmPagePermissions.targetId, userId)));
+      if (page.userId !== userId && !fullPerms.length) return res.status(403).json({ error: "Access denied" });
+      const [perm] = await db.insert(pmPagePermissions).values({ pageId, targetType: body.targetType, targetId: body.targetId, accessLevel: body.accessLevel, grantedBy: userId }).returning();
+      return res.json(perm);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.patch("/api/pm-page-permissions/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const { accessLevel } = z.object({ accessLevel: z.string() }).parse(req.body);
+      const [perm] = await db.select().from(pmPagePermissions).where(eq(pmPagePermissions.id, id));
+      if (!perm) return res.status(404).json({ error: "Not found" });
+      const [page] = await db.select().from(pmPages).where(eq(pmPages.id, perm.pageId));
+      const fullPerms = await db.select().from(pmPagePermissions).where(and(eq(pmPagePermissions.pageId, perm.pageId), eq(pmPagePermissions.accessLevel, "full"), eq(pmPagePermissions.targetType, "user"), eq(pmPagePermissions.targetId, userId)));
+      if (page?.userId !== userId && !fullPerms.length) return res.status(403).json({ error: "Access denied" });
+      const [updated] = await db.update(pmPagePermissions).set({ accessLevel }).where(eq(pmPagePermissions.id, id)).returning();
+      return res.json(updated);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.delete("/api/pm-page-permissions/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const [perm] = await db.select().from(pmPagePermissions).where(eq(pmPagePermissions.id, id));
+      if (!perm) return res.status(404).json({ error: "Not found" });
+      const [page] = await db.select().from(pmPages).where(eq(pmPages.id, perm.pageId));
+      const fullPerms = await db.select().from(pmPagePermissions).where(and(eq(pmPagePermissions.pageId, perm.pageId), eq(pmPagePermissions.accessLevel, "full"), eq(pmPagePermissions.targetType, "user"), eq(pmPagePermissions.targetId, userId)));
+      if (page?.userId !== userId && !fullPerms.length) return res.status(403).json({ error: "Access denied" });
+      await db.delete(pmPagePermissions).where(eq(pmPagePermissions.id, id));
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
   // Register Sprint 1 AI cron jobs
   setupAiCronJobs();
 
@@ -7833,12 +7992,18 @@ Provide specific, actionable insights. Be encouraging but honest.`,
   app.get("/api/pm-pages", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const pages = await db.select().from(pmPages).where(and(eq(pmPages.userId, userId), eq(pmPages.isArchived, false))).orderBy(asc(pmPages.sortOrder));
-      const allPages = await db.select({ id: pmPages.id, parentPageId: pmPages.parentPageId }).from(pmPages).where(eq(pmPages.userId, userId));
-      const withCount = pages.map(p => ({
-        ...p,
-        childCount: allPages.filter(c => c.parentPageId === p.id).length,
-      }));
+      const workspaceId = req.query.workspaceId ? parseInt(req.query.workspaceId as string) : null;
+      let pages: any[];
+      if (workspaceId) {
+        const member = await db.select().from(pmWorkspaceMembers).where(and(eq(pmWorkspaceMembers.workspaceId, workspaceId), eq(pmWorkspaceMembers.userId, userId), eq(pmWorkspaceMembers.inviteStatus, "accepted"))).limit(1);
+        if (!member.length) return res.status(403).json({ error: "Access denied" });
+        pages = await db.select().from(pmPages).where(and(eq(pmPages.workspaceId, workspaceId), eq(pmPages.isArchived, false))).orderBy(asc(pmPages.sortOrder));
+      } else {
+        pages = await db.select().from(pmPages).where(and(eq(pmPages.userId, userId), eq(pmPages.isArchived, false))).orderBy(asc(pmPages.sortOrder));
+      }
+      const allPageIds = pages.map(p => p.id);
+      const allPages = allPageIds.length ? await db.select({ id: pmPages.id, parentPageId: pmPages.parentPageId }).from(pmPages).where(inArray(pmPages.id, allPageIds)) : [];
+      const withCount = pages.map(p => ({ ...p, childCount: allPages.filter(c => c.parentPageId === p.id).length }));
       return res.json(withCount);
     } catch (e: any) { return res.status(500).json({ error: e.message }); }
   });

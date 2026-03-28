@@ -5,7 +5,7 @@ import {
   ArrowLeft, Plus, GripVertical, Trash2, ChevronRight,
   AlignLeft, Heading1, Heading2, Heading3, List, ListOrdered,
   CheckSquare, Quote, Code, Image, Minus, Loader2, Smile,
-  FileText, Star, Table2
+  FileText, Star, Table2, Share2, Globe, Lock, Copy, X
 } from "lucide-react";
 import DatabaseViewContainer from "@/components/pm/DatabaseViewContainer";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,9 @@ import { cn } from "@/lib/utils";
 import {
   Popover, PopoverContent, PopoverTrigger
 } from "@/components/ui/popover";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
@@ -357,6 +360,10 @@ export default function PmEditorPage() {
   const { toast } = useToast();
 
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareEmail, setShareEmail] = useState("");
+  const [shareLevel, setShareLevel] = useState("view");
+  const [isPublic, setIsPublic] = useState(false);
   const titleRef = useRef<HTMLDivElement>(null);
 
   const { data: page, isLoading: pageLoading } = useQuery<PmPage>({
@@ -397,6 +404,27 @@ export default function PmEditorPage() {
   const createDatabase = useMutation({
     mutationFn: () => apiRequest("POST", `/api/pm-databases`, { pageId }).then(r => r.json()),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pm-blocks", pageId] }),
+  });
+
+  const { data: permissions = [] } = useQuery<any[]>({
+    queryKey: ["pm-page-permissions", pageId],
+    queryFn: () => apiRequest("GET", `/api/pm-pages/${pageId}/permissions`).then(r => r.json()),
+    enabled: !!pageId && shareOpen,
+  });
+
+  const addPermission = useMutation({
+    mutationFn: (body: any) => apiRequest("POST", `/api/pm-pages/${pageId}/permissions`, body).then(r => r.json()),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["pm-page-permissions", pageId] }); setShareEmail(""); },
+  });
+
+  const updatePermission = useMutation({
+    mutationFn: ({ id, accessLevel }: any) => apiRequest("PATCH", `/api/pm-page-permissions/${id}`, { accessLevel }).then(r => r.json()),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pm-page-permissions", pageId] }),
+  });
+
+  const removePermission = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/pm-page-permissions/${id}`).then(r => r.json()),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pm-page-permissions", pageId] }),
   });
 
   const handleTitleBlur = () => {
@@ -473,6 +501,15 @@ export default function PmEditorPage() {
         </div>
         <Button
           variant="ghost"
+          size="sm"
+          className="h-8 gap-1.5 text-xs shrink-0"
+          onClick={() => setShareOpen(true)}
+          data-testid="button-share"
+        >
+          <Share2 className="w-3.5 h-3.5" /> Share
+        </Button>
+        <Button
+          variant="ghost"
           size="icon"
           className="h-8 w-8 shrink-0"
           onClick={() => updatePage.mutate({ isFavorite: !page.isFavorite })}
@@ -481,6 +518,124 @@ export default function PmEditorPage() {
           <Star className={cn("w-4 h-4", page.isFavorite && "fill-yellow-400 text-yellow-400")} />
         </Button>
       </div>
+
+      <Dialog open={shareOpen} onOpenChange={setShareOpen}>
+        <DialogContent className="max-w-md" data-testid="share-dialog">
+          <DialogHeader>
+            <DialogTitle>Share</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-1">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Add people</p>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Email address..."
+                  value={shareEmail}
+                  onChange={e => setShareEmail(e.target.value)}
+                  className="flex-1 h-8 text-xs"
+                  data-testid="input-share-email"
+                />
+                <select
+                  className="border border-border rounded-md px-2 text-xs bg-background"
+                  value={shareLevel}
+                  onChange={e => setShareLevel(e.target.value)}
+                  data-testid="select-share-level"
+                >
+                  <option value="view">View</option>
+                  <option value="comment">Comment</option>
+                  <option value="edit">Edit</option>
+                  <option value="full">Full Access</option>
+                </select>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs"
+                  disabled={!shareEmail.trim() || addPermission.isPending}
+                  onClick={() => addPermission.mutate({ targetType: "user", targetId: shareEmail, accessLevel: shareLevel })}
+                  data-testid="button-share-invite"
+                >
+                  Invite
+                </Button>
+              </div>
+            </div>
+
+            {(permissions as any[]).filter(p => p.targetType === "user").length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-2">People with access</p>
+                <div className="space-y-1">
+                  {(permissions as any[]).filter(p => p.targetType === "user").map((p: any) => (
+                    <div key={p.id} className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-semibold text-primary shrink-0">
+                        {p.targetId.slice(0, 2).toUpperCase()}
+                      </div>
+                      <span className="flex-1 text-xs truncate">{p.targetId}</span>
+                      <select
+                        className="border border-border rounded px-1.5 py-0.5 text-xs bg-background"
+                        value={p.accessLevel}
+                        onChange={e => updatePermission.mutate({ id: p.id, accessLevel: e.target.value })}
+                        data-testid={`select-perm-level-${p.id}`}
+                      >
+                        <option value="view">View</option>
+                        <option value="comment">Comment</option>
+                        <option value="edit">Edit</option>
+                        <option value="full">Full Access</option>
+                      </select>
+                      <button onClick={() => removePermission.mutate(p.id)} className="text-muted-foreground hover:text-destructive" data-testid={`remove-perm-${p.id}`}>
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="border-t border-border pt-3">
+              <p className="text-xs font-medium text-muted-foreground mb-2">General access</p>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setIsPublic(false);
+                    const pub = (permissions as any[]).find(p => p.targetType === "public");
+                    if (pub) removePermission.mutate(pub.id);
+                  }}
+                  className={cn("flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors", !isPublic ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground")}
+                  data-testid="btn-restricted"
+                >
+                  <Lock className="w-3.5 h-3.5" /> Restricted
+                </button>
+                <button
+                  onClick={() => {
+                    setIsPublic(true);
+                    const existing = (permissions as any[]).find(p => p.targetType === "public");
+                    if (!existing) addPermission.mutate({ targetType: "public", targetId: "public", accessLevel: "view" });
+                  }}
+                  className={cn("flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors", isPublic ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground")}
+                  data-testid="btn-public"
+                >
+                  <Globe className="w-3.5 h-3.5" /> Anyone with link
+                </button>
+              </div>
+              {isPublic && (
+                <div className="mt-2 flex items-center gap-2">
+                  <select className="border border-border rounded px-1.5 py-0.5 text-xs bg-background" data-testid="select-public-level">
+                    <option value="view">Can view</option>
+                    <option value="comment">Can comment</option>
+                    <option value="edit">Can edit</option>
+                  </select>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1.5"
+                    onClick={() => { navigator.clipboard.writeText(window.location.href); toast({ title: "Link copied!" }); }}
+                    data-testid="button-copy-link"
+                  >
+                    <Copy className="w-3 h-3" /> Copy link
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {page.coverImage && (
         <div className="relative group/cover h-[200px] w-full bg-cover bg-center" style={{ backgroundImage: `url(${page.coverImage})` }}>

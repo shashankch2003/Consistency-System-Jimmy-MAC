@@ -1,0 +1,180 @@
+PHASE 4 — Team Management & Permissions
+Build Team Management & Permissions — Add workspaces with team members, role-based access control, and page-level sharing permissions.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. DATABASE TABLES (in shared/schema.ts)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+-- Table 1: pm_workspaces --
+export const pmWorkspaces = pgTable("pm_workspaces", {
+  id: serial("id").primaryKey(),
+  ownerId: text("owner_id").notNull(),
+  name: text("name").notNull().default("My Workspace"),
+  icon: text("icon").default(""),
+  plan: text("plan").notNull().default("free"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPmWorkspaceSchema = createInsertSchema(pmWorkspaces);
+export type InsertPmWorkspace = typeof pmWorkspaces.$inferInsert;
+export type PmWorkspace = typeof pmWorkspaces.$inferSelect;
+
+-- Table 2: pm_workspace_members --
+export const pmWorkspaceMembers = pgTable("pm_workspace_members", {
+  id: serial("id").primaryKey(),
+  workspaceId: integer("workspace_id").notNull(),
+  userId: text("user_id").notNull(),
+  role: text("role").notNull().default("member"),
+  invitedBy: text("invited_by"),
+  inviteEmail: text("invite_email"),
+  inviteStatus: text("invite_status").notNull().default("accepted"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPmWorkspaceMemberSchema = createInsertSchema(pmWorkspaceMembers);
+export type InsertPmWorkspaceMember = typeof pmWorkspaceMembers.$inferInsert;
+export type PmWorkspaceMember = typeof pmWorkspaceMembers.$inferSelect;
+
+Role values: "owner", "admin", "member", "guest"
+inviteStatus values: "pending", "accepted", "declined"
+
+-- Table 3: pm_page_permissions --
+export const pmPagePermissions = pgTable("pm_page_permissions", {
+  id: serial("id").primaryKey(),
+  pageId: integer("page_id").notNull(),
+  targetType: text("target_type").notNull(),
+  targetId: text("target_id").notNull(),
+  accessLevel: text("access_level").notNull().default("view"),
+  grantedBy: text("granted_by").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPmPagePermissionSchema = createInsertSchema(pmPagePermissions);
+export type InsertPmPagePermission = typeof pmPagePermissions.$inferInsert;
+export type PmPagePermission = typeof pmPagePermissions.$inferSelect;
+
+targetType values: "user", "workspace", "public"
+targetId: for "user" = userId string, for "workspace" = workspaceId as string, for "public" = "public"
+accessLevel values: "view", "comment", "edit", "full"
+
+Access level capabilities:
+- view: can read page and database content
+- comment: can view + add comments
+- edit: can view + comment + edit blocks, add/edit database rows
+- full: can edit + delete page, manage permissions, archive
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. API ROUTES (add to server/routes.ts)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Route 1: POST /api/pm-workspaces
+Creates a workspace. Request body: z.object({ name: z.string() }). Auto-add current user as "owner" member. Return created workspace.
+
+Route 2: GET /api/pm-workspaces
+Returns all workspaces the current user is a member of (join pm_workspace_members where userId matches and inviteStatus is "accepted").
+
+Route 3: PATCH /api/pm-workspaces/:id
+Updates workspace name or icon. Only allow if current user is owner or admin (check pm_workspace_members). Request body: z.object({ name: z.string().optional(), icon: z.string().optional() }). Return updated workspace.
+
+Route 4: DELETE /api/pm-workspaces/:id
+Deletes workspace, all members, all pages with workspaceId matching. Only allow if current user is owner. Return { success: true }.
+
+Route 5: GET /api/pm-workspaces/:workspaceId/members
+Returns all members for a workspace. Only allow if current user is a member. Join with user data to return member name/avatar.
+
+Route 6: POST /api/pm-workspaces/:workspaceId/members
+Invites a member. Request body: z.object({ email: z.string().email(), role: z.string() }). Only allow if current user is owner or admin. Create member record with inviteStatus "pending". Return created member.
+
+Route 7: PATCH /api/pm-workspace-members/:id
+Updates a member's role. Request body: z.object({ role: z.string() }). Only owner can change roles. Cannot change own role. Cannot make someone owner (ownership transfer is separate). Return updated member.
+
+Route 8: DELETE /api/pm-workspace-members/:id
+Removes a member. Only owner or admin can remove members. Cannot remove the owner. Return { success: true }.
+
+Route 9: GET /api/pm-pages/:pageId/permissions
+Returns all permissions for a page. Only allow if current user has "full" access or is page creator.
+
+Route 10: POST /api/pm-pages/:pageId/permissions
+Creates a permission. Request body: z.object({ targetType: z.string(), targetId: z.string(), accessLevel: z.string() }). Only allow if current user has "full" access. Return created permission.
+
+Route 11: PATCH /api/pm-page-permissions/:id
+Updates accessLevel. Request body: z.object({ accessLevel: z.string() }). Only allow if current user has "full" access. Return updated permission.
+
+Route 12: DELETE /api/pm-page-permissions/:id
+Removes a permission. Only allow if current user has "full" access. Return { success: true }.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. MODIFY EXISTING TABLES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add a new column to pm_pages table:
+  workspaceId: integer("workspace_id")
+
+This column is nullable — pages without a workspaceId are personal/private pages. Pages with a workspaceId belong to that workspace.
+
+Update GET /api/pm-pages to accept an optional query param workspaceId. If provided, return pages for that workspace where the current user has access (is a workspace member OR has a direct page permission). If not provided, return only pages where userId matches (personal pages).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. FRONTEND — Team Settings Page
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File: client/src/pages/dashboard/pm-team-settings.tsx
+Route: /dashboard/pm-team-settings/:workspaceId
+Page title: "Team Settings"
+
+Layout (using shadcn Tabs):
+Tab 1 — "Members":
+- List of current members in a table: Avatar, Name, Email, Role badge (colored: owner=purple, admin=blue, member=green, guest=gray), "..." menu (Change Role, Remove)
+- "Invite Member" button at top-right. Opens a Dialog with: email input, role select dropdown (admin, member, guest), "Send Invite" button.
+- Pending invites shown in a separate section below with status "Pending" badge and a "Cancel Invite" button.
+
+Tab 2 — "General":
+- Workspace name input (editable, save on blur)
+- Workspace icon picker
+- Danger zone: "Delete Workspace" button (red, shows confirmation dialog)
+
+Data fetching:
+- queryKey: ["pm-workspace-members", workspaceId]
+- endpoint: GET /api/pm-workspaces/:workspaceId/members
+
+Mutations:
+- Invite member: POST /api/pm-workspaces/:workspaceId/members, invalidate ["pm-workspace-members", workspaceId]
+- Update role: PATCH /api/pm-workspace-members/:id, invalidate ["pm-workspace-members", workspaceId]
+- Remove member: DELETE /api/pm-workspace-members/:id, invalidate ["pm-workspace-members", workspaceId]
+- Update workspace: PATCH /api/pm-workspaces/:id, invalidate ["pm-workspaces"]
+- Delete workspace: DELETE /api/pm-workspaces/:id, invalidate ["pm-workspaces"], navigate to /dashboard/pm-workspace
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. SHARING UI IN PAGE EDITOR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add a "Share" button (Share2 icon) in the top-right of pm-editor.tsx. Clicking it opens a Dialog:
+
+Layout:
+- "Share" heading
+- "Add people" section: input to type user email or name, access level dropdown (View, Comment, Edit, Full Access), "Invite" button
+- "People with access" section: list of users/workspace with access level dropdowns and remove buttons
+- "General access" section: toggle between "Restricted" (only people added) and "Anyone with link" (creates public permission). If "Anyone with link" is selected, show a "Copy link" button and an access level dropdown for the public link.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. ROUTING AND SIDEBAR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add import in App.tsx:
+import PmTeamSettings from "./pages/dashboard/pm-team-settings";
+
+Add route:
+<Route path="/dashboard/pm-team-settings/:workspaceId" component={PmTeamSettings} />
+
+In AppSidebar.tsx, inside the "Project Manager" section, add a workspace switcher dropdown at the top. If the user belongs to multiple workspaces, show a Select dropdown with workspace names. Below the dropdown, add a "Settings" link (Settings icon) that navigates to /dashboard/pm-team-settings/:activeWorkspaceId.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7. IMPORTANT NOTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- When a user first logs in and has no workspace, auto-create one named "My Workspace" with them as owner.
+- Permission checks must happen on every page/block/database API route. Create a helper function checkPageAccess(pageId, userId, requiredLevel) that checks pm_page_permissions and workspace membership. Use it in all existing page and block routes.
+- Guest role users can only access pages they have been explicitly given permission to.
+- All routes go in server/routes.ts.
+- Do not modify package.json, vite.config.ts, or drizzle.config.ts.

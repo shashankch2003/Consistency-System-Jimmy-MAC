@@ -2641,6 +2641,7 @@ export const pmPages = pgTable("pm_pages", {
   id: serial("id").primaryKey(),
   userId: text("user_id").notNull(),
   parentPageId: integer("parent_page_id"),
+  workspaceId: integer("workspace_id"),
   title: text("title").notNull().default("Untitled"),
   icon: text("icon").default(""),
   coverImage: text("cover_image").default(""),
@@ -2762,3 +2763,46 @@ export const pmDatabaseViews = pgTable("pm_database_views", {
 export const insertPmDatabaseViewSchema = createInsertSchema(pmDatabaseViews).omit({ id: true, createdAt: true });
 export type InsertPmDatabaseView = typeof pmDatabaseViews.$inferInsert;
 export type PmDatabaseView = typeof pmDatabaseViews.$inferSelect;
+
+export const pmWorkspaces = pgTable("pm_workspaces", {
+  id: serial("id").primaryKey(),
+  ownerId: text("owner_id").notNull(),
+  name: text("name").notNull().default("My Workspace"),
+  icon: text("icon").default(""),
+  plan: text("plan").notNull().default("free"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPmWorkspaceSchema = createInsertSchema(pmWorkspaces).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPmWorkspace = typeof pmWorkspaces.$inferInsert;
+export type PmWorkspace = typeof pmWorkspaces.$inferSelect;
+
+export const pmWorkspaceMembers = pgTable("pm_workspace_members", {
+  id: serial("id").primaryKey(),
+  workspaceId: integer("workspace_id").notNull(),
+  userId: text("user_id").notNull(),
+  role: text("role").notNull().default("member"),
+  invitedBy: text("invited_by"),
+  inviteEmail: text("invite_email"),
+  inviteStatus: text("invite_status").notNull().default("accepted"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPmWorkspaceMemberSchema = createInsertSchema(pmWorkspaceMembers).omit({ id: true, createdAt: true });
+export type InsertPmWorkspaceMember = typeof pmWorkspaceMembers.$inferInsert;
+export type PmWorkspaceMember = typeof pmWorkspaceMembers.$inferSelect;
+
+export const pmPagePermissions = pgTable("pm_page_permissions", {
+  id: serial("id").primaryKey(),
+  pageId: integer("page_id").notNull(),
+  targetType: text("target_type").notNull(),
+  targetId: text("target_id").notNull(),
+  accessLevel: text("access_level").notNull().default("view"),
+  grantedBy: text("granted_by").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPmPagePermissionSchema = createInsertSchema(pmPagePermissions).omit({ id: true, createdAt: true });
+export type InsertPmPagePermission = typeof pmPagePermissions.$inferInsert;
+export type PmPagePermission = typeof pmPagePermissions.$inferSelect;
