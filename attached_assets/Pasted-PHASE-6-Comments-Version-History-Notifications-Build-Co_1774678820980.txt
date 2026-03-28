@@ -1,0 +1,180 @@
+PHASE 6 — Comments, Version History & Notifications
+Build Comments, Version History & Notifications — Add inline comments with @mentions, page version history with restore, and a notification center.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. DATABASE TABLES (in shared/schema.ts)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+-- Table 1: pm_comments --
+export const pmComments = pgTable("pm_comments", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  pageId: integer("page_id").notNull(),
+  blockId: integer("block_id"),
+  parentCommentId: integer("parent_comment_id"),
+  content: text("content").notNull(),
+  mentions: text("mentions").array(),
+  isResolved: boolean("is_resolved").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPmCommentSchema = createInsertSchema(pmComments);
+export type InsertPmComment = typeof pmComments.$inferInsert;
+export type PmComment = typeof pmComments.$inferSelect;
+
+-- Table 2: pm_page_versions --
+export const pmPageVersions = pgTable("pm_page_versions", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  pageId: integer("page_id").notNull(),
+  versionNumber: integer("version_number").notNull(),
+  title: text("title").notNull(),
+  blocksSnapshot: jsonb("blocks_snapshot").notNull().default([]),
+  changeDescription: text("change_description").notNull().default(""),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPmPageVersionSchema = createInsertSchema(pmPageVersions);
+export type InsertPmPageVersion = typeof pmPageVersions.$inferInsert;
+export type PmPageVersion = typeof pmPageVersions.$inferSelect;
+
+-- Table 3: pm_notifications --
+export const pmNotifications = pgTable("pm_notifications", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  linkUrl: text("link_url"),
+  isRead: boolean("is_read").notNull().default(false),
+  metadata: jsonb("metadata").notNull().default({}),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPmNotificationSchema = createInsertSchema(pmNotifications);
+export type InsertPmNotification = typeof pmNotifications.$inferInsert;
+export type PmNotification = typeof pmNotifications.$inferSelect;
+
+Notification type values: "mention", "comment", "share", "invite", "pageUpdate"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. API ROUTES (add to server/routes.ts)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Route 1: GET /api/pm-pages/:pageId/comments
+Returns all comments for a page, ordered by createdAt ascending. Include user display name for each comment. Filter: only return comments the user has permission to see (they are a page viewer/editor or the comment author).
+
+Route 2: POST /api/pm-pages/:pageId/comments
+Creates a comment. Request body: z.object({ content: z.string(), blockId: z.number().nullable().optional(), parentCommentId: z.number().nullable().optional(), mentions: z.array(z.string()).optional() }). For each userId in mentions array, create a notification of type "mention" for that user with message "[commenter name] mentioned you in [page title]" and linkUrl "/dashboard/pm-editor/[pageId]". Return created comment.
+
+Route 3: PATCH /api/pm-comments/:id
+Updates a comment's content or isResolved. Request body: z.object({ content: z.string().optional(), isResolved: z.boolean().optional() }). Only allow if user is the comment author (for content) or has edit access to the page (for resolving). Return updated comment.
+
+Route 4: DELETE /api/pm-comments/:id
+Deletes a comment and all its replies (where parentCommentId = this id). Only allow if user is the author. Return { success: true }.
+
+Route 5: POST /api/pm-pages/:pageId/versions
+Creates a version snapshot. Reads all blocks for the page and serializes them. Request body: z.object({ changeDescription: z.string().optional() }). Set versionNumber to max(versionNumber) + 1 for this pageId. Return created version.
+
+Route 6: GET /api/pm-pages/:pageId/versions
+Returns all versions for a page, ordered by versionNumber descending. Limit to 50. Each version returns id, versionNumber, title, changeDescription, createdAt (not the full blocksSnapshot — that's fetched on demand).
+
+Route 7: GET /api/pm-page-versions/:id
+Returns a single version with its full blocksSnapshot.
+
+Route 8: POST /api/pm-page-versions/:id/restore
+Restores a page to a version. Creates a new version with the current state first (auto-save with changeDescription "Auto-saved before restore"). Then replaces all blocks on the page: delete all current blocks, then create new blocks from the version's blocksSnapshot. Return the restored page.
+
+Route 9: GET /api/pm-notifications
+Returns notifications for the current user, ordered by createdAt descending. Limit to 50. Accept query param unreadOnly (boolean) — if true, only return where isRead is false.
+
+Route 10: PATCH /api/pm-notifications/:id/read
+Marks a notification as read. Set isRead to true. Return updated notification.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. AUTO-VERSIONING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Update PATCH /api/pm-blocks/:id to auto-create a version every 30 edits. Keep a counter per page (use a simple in-memory Map<pageId, editCount> in server/routes.ts). When editCount reaches 30, call the version creation logic internally with changeDescription "Auto-saved", reset counter to 0.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. FRONTEND — Comments Panel
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add a "Comments" button (MessageSquare icon) in the top-right of pm-editor.tsx (next to the Share button). Clicking it toggles a right sidebar panel (320px wide).
+
+Comments panel layout:
+- Header: "Comments" + close button (X icon) + toggle "Show resolved"
+- Comment list: each comment shows user avatar/initials, user name, timestamp (relative), comment text, "Reply" button, "Resolve" button (if unresolved), three-dot menu (Edit, Delete — only for own comments)
+- Replies are indented 24px under their parent comment, connected by a thin vertical line (border-l)
+- At the bottom: a comment input area with a textarea, @mention autocomplete (type @ to show user list dropdown), and a "Comment" button
+- Block-level comments: if a comment has a blockId, show a small link "On: [block preview]" below the comment. Clicking it scrolls to and highlights that block.
+
+@mention autocomplete: When user types "@" in the comment textarea, show a dropdown of workspace members. Filter as user types after "@". Selecting a user inserts their name and adds their userId to the mentions array.
+
+Data fetching:
+- queryKey: ["pm-comments", pageId]
+- endpoint: GET /api/pm-pages/:pageId/comments
+
+Mutations:
+- Create comment: POST /api/pm-pages/:pageId/comments, invalidate ["pm-comments", pageId]
+- Update comment: PATCH /api/pm-comments/:id, invalidate ["pm-comments", pageId]
+- Delete comment: DELETE /api/pm-comments/:id, invalidate ["pm-comments", pageId]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. FRONTEND — Version History Panel
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add a "History" button (History icon) in the top-right of pm-editor.tsx. Clicking it opens a right sidebar panel (320px wide, same area as comments — they toggle each other).
+
+Layout:
+- Header: "Version History" + close button
+- Version list: each item shows version number ("v1", "v2", etc.), timestamp (relative), change description, "Preview" button, "Restore" button
+- Clicking "Preview" replaces the editor content with the version's blocks in read-only mode, with a yellow banner at top: "Viewing version N — [Restore] [Back to current]"
+- Clicking "Restore" shows a confirmation dialog: "This will restore the page to version N. A backup of the current state will be saved. Continue?" — on confirm, calls POST /api/pm-page-versions/:id/restore, invalidates ["pm-blocks", pageId] and ["pm-page-versions", pageId].
+
+Data fetching:
+- queryKey: ["pm-page-versions", pageId]
+- endpoint: GET /api/pm-pages/:pageId/versions
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. FRONTEND — Notification Bell
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add a notification bell icon (Bell icon from lucide-react) to the app's top navigation bar (wherever the user avatar/menu is). Show an unread count badge (small red circle with number) if there are unread notifications.
+
+Clicking the bell opens a dropdown panel (max-w-sm, max-h-96, scrollable):
+- Header: "Notifications" + "Mark all read" button
+- List of notifications: each shows type icon (AtSign for mention, MessageSquare for comment, Share2 for share, UserPlus for invite, FileText for pageUpdate), title (bold), message, timestamp (relative), unread indicator (blue dot)
+- Clicking a notification marks it as read and navigates to linkUrl
+- Empty state: "No notifications yet"
+
+Data fetching:
+- queryKey: ["pm-notifications"]
+- endpoint: GET /api/pm-notifications
+- Poll every 30 seconds using refetchInterval: 30000
+
+Mutations:
+- Mark read: PATCH /api/pm-notifications/:id/read, invalidate ["pm-notifications"]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7. NOTIFICATION TRIGGERS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Update these existing routes to create notifications:
+
+- POST /api/pm-pages/:pageId/permissions (when sharing with a user): Create notification type "share" for the target user: "[sharer name] shared [page title] with you"
+- POST /api/pm-workspaces/:workspaceId/members (when inviting): Create notification type "invite" for the invited user (if they exist): "[inviter name] invited you to [workspace name]"
+- POST /api/pm-pages/:pageId/comments: Already handled above (mention notifications). Also create a "comment" notification for the page owner (if commenter is not the owner): "[commenter name] commented on [page title]"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+8. IMPORTANT NOTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- Version snapshots can be large (many blocks). Only load full snapshots when user clicks "Preview" — the list view only shows metadata.
+- Keep a max of 100 versions per page. When creating version 101, delete the oldest version.
+- @mention autocomplete must fetch workspace members. Use the existing GET /api/pm-workspaces/:workspaceId/members endpoint.
+- Notification polling at 30s is acceptable. Do not implement WebSockets for this phase.
+- All routes go in server/routes.ts.
+- Do not modify package.json, vite.config.ts, or drizzle.config.ts.

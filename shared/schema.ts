@@ -2840,3 +2840,51 @@ export const pmSearchIndex = pgTable("pm_search_index", {
 export const insertPmSearchIndexSchema = createInsertSchema(pmSearchIndex).omit({ id: true });
 export type InsertPmSearchIndex = typeof pmSearchIndex.$inferInsert;
 export type PmSearchIndex = typeof pmSearchIndex.$inferSelect;
+
+export const pmComments = pgTable("pm_comments", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  pageId: integer("page_id").notNull(),
+  blockId: integer("block_id"),
+  parentCommentId: integer("parent_comment_id"),
+  content: text("content").notNull(),
+  mentions: text("mentions").array(),
+  isResolved: boolean("is_resolved").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPmCommentSchema = createInsertSchema(pmComments);
+export type InsertPmComment = typeof pmComments.$inferInsert;
+export type PmComment = typeof pmComments.$inferSelect;
+
+export const pmPageVersions = pgTable("pm_page_versions", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  pageId: integer("page_id").notNull(),
+  versionNumber: integer("version_number").notNull(),
+  title: text("title").notNull(),
+  blocksSnapshot: jsonb("blocks_snapshot").notNull().default([]),
+  changeDescription: text("change_description").notNull().default(""),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPmPageVersionSchema = createInsertSchema(pmPageVersions);
+export type InsertPmPageVersion = typeof pmPageVersions.$inferInsert;
+export type PmPageVersion = typeof pmPageVersions.$inferSelect;
+
+export const pmNotifications = pgTable("pm_notifications", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  linkUrl: text("link_url"),
+  isRead: boolean("is_read").notNull().default(false),
+  metadata: jsonb("metadata").notNull().default({}),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPmNotificationSchema = createInsertSchema(pmNotifications);
+export type InsertPmNotification = typeof pmNotifications.$inferInsert;
+export type PmNotification = typeof pmNotifications.$inferSelect;

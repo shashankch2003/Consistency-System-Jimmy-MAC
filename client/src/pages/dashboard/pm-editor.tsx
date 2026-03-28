@@ -5,9 +5,12 @@ import {
   ArrowLeft, Plus, GripVertical, Trash2, ChevronRight,
   AlignLeft, Heading1, Heading2, Heading3, List, ListOrdered,
   CheckSquare, Quote, Code, Image, Minus, Loader2, Smile,
-  FileText, Star, Table2, Share2, Globe, Lock, Copy, X
+  FileText, Star, Table2, Share2, Globe, Lock, Copy, X,
+  MessageSquare, History
 } from "lucide-react";
 import DatabaseViewContainer from "@/components/pm/DatabaseViewContainer";
+import CommentsPanel from "@/components/pm/CommentsPanel";
+import HistoryPanel, { VersionPreviewBanner } from "@/components/pm/HistoryPanel";
 import { Button } from "@/components/ui/button";
 import {
   useRef, useState, useEffect, useCallback, KeyboardEvent
@@ -21,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 
 type PmPage = {
   id: number;
@@ -358,12 +362,17 @@ export default function PmEditorPage() {
   const pageId = parseInt(params.id || "0");
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const currentUserId = (user as any)?.claims?.sub || "";
 
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareEmail, setShareEmail] = useState("");
   const [shareLevel, setShareLevel] = useState("view");
   const [isPublic, setIsPublic] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [previewVersion, setPreviewVersion] = useState<any | null>(null);
   const titleRef = useRef<HTMLDivElement>(null);
 
   const { data: page, isLoading: pageLoading } = useQuery<PmPage>({
@@ -427,6 +436,26 @@ export default function PmEditorPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pm-page-permissions", pageId] }),
   });
 
+  const { data: workspaceMembers = [] } = useQuery<any[]>({
+    queryKey: ["pm-workspaces-all"],
+    queryFn: () => fetch("/api/pm-workspaces").then(r => r.json()).then(async (wsList: any[]) => {
+      if (!wsList.length) return [];
+      const members = await fetch(`/api/pm-workspaces/${wsList[0].id}/members`).then(r => r.json()).catch(() => []);
+      return Array.isArray(members) ? members : [];
+    }),
+    enabled: commentsOpen,
+  });
+
+  const restoreFromPreview = useMutation({
+    mutationFn: (id: number) => apiRequest("POST", `/api/pm-page-versions/${id}/restore`).then(r => r.json()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pm-blocks", pageId] });
+      queryClient.invalidateQueries({ queryKey: ["pm-page-versions", pageId] });
+      setPreviewVersion(null);
+      toast({ title: "Page restored" });
+    },
+  });
+
   const handleTitleBlur = () => {
     const newTitle = titleRef.current?.innerText?.trim() || "Untitled";
     if (newTitle !== page?.title) {
@@ -484,7 +513,7 @@ export default function PmEditorPage() {
   }
 
   return (
-    <div className="min-h-screen pb-32" data-testid="pm-editor-page">
+    <div className="flex flex-col min-h-screen" data-testid="pm-editor-page">
       <div className="sticky top-0 z-40 bg-background/95 backdrop-blur border-b border-border/50 px-4 sm:px-6 py-3 flex items-center gap-3">
         <Button
           variant="ghost"
@@ -507,6 +536,24 @@ export default function PmEditorPage() {
           data-testid="button-share"
         >
           <Share2 className="w-3.5 h-3.5" /> Share
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn("h-8 w-8 shrink-0", commentsOpen && "bg-accent")}
+          onClick={() => { setCommentsOpen(v => !v); setHistoryOpen(false); setPreviewVersion(null); }}
+          data-testid="button-comments"
+        >
+          <MessageSquare className="w-4 h-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn("h-8 w-8 shrink-0", historyOpen && "bg-accent")}
+          onClick={() => { setHistoryOpen(v => !v); setCommentsOpen(false); setPreviewVersion(null); }}
+          data-testid="button-history"
+        >
+          <History className="w-4 h-4" />
         </Button>
         <Button
           variant="ghost"
@@ -637,6 +684,18 @@ export default function PmEditorPage() {
         </DialogContent>
       </Dialog>
 
+      {previewVersion && (
+        <VersionPreviewBanner
+          version={previewVersion}
+          onRestore={() => restoreFromPreview.mutate(previewVersion.id)}
+          onClose={() => setPreviewVersion(null)}
+          isRestoring={restoreFromPreview.isPending}
+        />
+      )}
+
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        <div className="flex-1 min-w-0 overflow-y-auto pb-32">
+
       {page.coverImage && (
         <div className="relative group/cover h-[200px] w-full bg-cover bg-center" style={{ backgroundImage: `url(${page.coverImage})` }}>
           <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/cover:opacity-100 transition-opacity flex items-end justify-end gap-2 p-4">
@@ -754,6 +813,25 @@ export default function PmEditorPage() {
             <Plus className="w-3.5 h-3.5" />
             Add a block
           </button>
+        )}
+      </div>
+        </div>
+
+        {commentsOpen && (
+          <CommentsPanel
+            pageId={pageId}
+            currentUserId={currentUserId}
+            members={workspaceMembers}
+            onClose={() => setCommentsOpen(false)}
+          />
+        )}
+        {historyOpen && (
+          <HistoryPanel
+            pageId={pageId}
+            onClose={() => setHistoryOpen(false)}
+            previewVersion={previewVersion}
+            onSetPreviewVersion={setPreviewVersion}
+          />
         )}
       </div>
     </div>

@@ -52,10 +52,12 @@ import {
   pmDatabases, pmDatabaseProperties, pmDatabaseRows, pmDatabaseCells, pmDatabaseViews,
   pmWorkspaces, pmWorkspaceMembers, pmPagePermissions,
   pmTemplates, pmSearchIndex,
+  pmComments, pmPageVersions, pmNotifications,
 } from "../shared/schema";
 import { inArray, isNotNull } from "drizzle-orm";
 
 const ADMIN_USER_ID = process.env.ADMIN_USER_ID || "";
+const pageEditCount = new Map<number, number>();
 
 // In-memory rate limit cache for autopilot (key: "autopilot_daily:{userId}:{date}")
 const autopilotRateCache = new Map<string, { count: number; resetAt: number }>();
@@ -7881,6 +7883,10 @@ Provide specific, actionable insights. Be encouraging but honest.`,
       const [self] = await db.select().from(pmWorkspaceMembers).where(and(eq(pmWorkspaceMembers.workspaceId, workspaceId), eq(pmWorkspaceMembers.userId, userId)));
       if (!self || !["owner", "admin"].includes(self.role)) return res.status(403).json({ error: "Access denied" });
       const [member] = await db.insert(pmWorkspaceMembers).values({ workspaceId, userId: body.email, role: body.role, invitedBy: userId, inviteEmail: body.email, inviteStatus: "pending" }).returning();
+      const [ws] = await db.select().from(pmWorkspaces).where(eq(pmWorkspaces.id, workspaceId));
+      if (ws) {
+        await db.insert(pmNotifications).values({ userId: body.email, type: "invite", title: "Workspace invitation", message: `${userId} invited you to "${ws.name}"`, linkUrl: `/dashboard/pm-workspace`, metadata: { workspaceId, invitedBy: userId } });
+      }
       return res.json(member);
     } catch (e: any) { return res.status(400).json({ error: e.message }); }
   });
@@ -7938,6 +7944,9 @@ Provide specific, actionable insights. Be encouraging but honest.`,
       const fullPerms = await db.select().from(pmPagePermissions).where(and(eq(pmPagePermissions.pageId, pageId), eq(pmPagePermissions.accessLevel, "full"), eq(pmPagePermissions.targetType, "user"), eq(pmPagePermissions.targetId, userId)));
       if (page.userId !== userId && !fullPerms.length) return res.status(403).json({ error: "Access denied" });
       const [perm] = await db.insert(pmPagePermissions).values({ pageId, targetType: body.targetType, targetId: body.targetId, accessLevel: body.accessLevel, grantedBy: userId }).returning();
+      if (body.targetType === "user" && body.targetId !== userId) {
+        await db.insert(pmNotifications).values({ userId: body.targetId, type: "share", title: "Page shared with you", message: `${userId} shared "${page.title}" with you`, linkUrl: `/dashboard/pm-editor/${pageId}`, metadata: { pageId, grantedBy: userId } });
+      }
       return res.json(perm);
     } catch (e: any) { return res.status(400).json({ error: e.message }); }
   });
@@ -8135,6 +8144,23 @@ Provide specific, actionable insights. Be encouraging but honest.`,
         const txt = (body.content as any)?.text;
         await db.delete(pmSearchIndex).where(and(eq(pmSearchIndex.blockId, id), eq(pmSearchIndex.userId, userId)));
         if (txt) await db.insert(pmSearchIndex).values({ userId, pageId: block.pageId, blockId: id, contentType: "blockText", searchText: txt, updatedAt: new Date() });
+      }
+      const count = (pageEditCount.get(block.pageId) || 0) + 1;
+      if (count >= 30) {
+        pageEditCount.set(block.pageId, 0);
+        const [pg] = await db.select().from(pmPages).where(eq(pmPages.id, block.pageId));
+        if (pg) {
+          const allBlocks = await db.select().from(pmBlocks).where(and(eq(pmBlocks.pageId, block.pageId), eq(pmBlocks.userId, userId))).orderBy(asc(pmBlocks.sortOrder));
+          const versions = await db.select({ versionNumber: pmPageVersions.versionNumber }).from(pmPageVersions).where(eq(pmPageVersions.pageId, block.pageId));
+          const maxVer = versions.reduce((m, v) => Math.max(m, v.versionNumber), 0);
+          if (versions.length >= 100) {
+            const oldest = await db.select({ id: pmPageVersions.id }).from(pmPageVersions).where(eq(pmPageVersions.pageId, block.pageId)).orderBy(asc(pmPageVersions.versionNumber)).limit(1);
+            if (oldest.length) await db.delete(pmPageVersions).where(eq(pmPageVersions.id, oldest[0].id));
+          }
+          await db.insert(pmPageVersions).values({ userId, pageId: block.pageId, versionNumber: maxVer + 1, title: pg.title, blocksSnapshot: allBlocks, changeDescription: "Auto-saved" });
+        }
+      } else {
+        pageEditCount.set(block.pageId, count);
       }
       return res.json(block);
     } catch (e: any) { return res.status(400).json({ error: e.message }); }
@@ -8413,6 +8439,155 @@ Provide specific, actionable insights. Be encouraging but honest.`,
       }
       if (entries.length) await db.insert(pmSearchIndex).values(entries);
       return res.json({ success: true, indexedPages: pages.length, indexedBlocks: entries.filter(e => e.contentType === "blockText").length });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/pm-pages/:pageId/comments", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const pageId = parseInt(req.params.pageId);
+      const comments = await db.select().from(pmComments).where(eq(pmComments.pageId, pageId)).orderBy(asc(pmComments.createdAt));
+      return res.json(comments);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/pm-pages/:pageId/comments", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const pageId = parseInt(req.params.pageId);
+      const body = z.object({ content: z.string(), blockId: z.number().nullable().optional(), parentCommentId: z.number().nullable().optional(), mentions: z.array(z.string()).optional() }).parse(req.body);
+      const [page] = await db.select().from(pmPages).where(eq(pmPages.id, pageId));
+      if (!page) return res.status(404).json({ error: "Page not found" });
+      const [comment] = await db.insert(pmComments).values({ userId, pageId, blockId: body.blockId ?? null, parentCommentId: body.parentCommentId ?? null, content: body.content, mentions: body.mentions || [] }).returning();
+      for (const mentionedUserId of (body.mentions || [])) {
+        if (mentionedUserId !== userId) {
+          await db.insert(pmNotifications).values({ userId: mentionedUserId, type: "mention", title: "You were mentioned", message: `${userId} mentioned you in "${page.title}"`, linkUrl: `/dashboard/pm-editor/${pageId}`, metadata: { pageId, commentId: comment.id } });
+        }
+      }
+      if (page.userId !== userId) {
+        await db.insert(pmNotifications).values({ userId: page.userId, type: "comment", title: "New comment on your page", message: `${userId} commented on "${page.title}"`, linkUrl: `/dashboard/pm-editor/${pageId}`, metadata: { pageId, commentId: comment.id } });
+      }
+      return res.json(comment);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.patch("/api/pm-comments/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const body = z.object({ content: z.string().optional(), isResolved: z.boolean().optional() }).parse(req.body);
+      const [comment] = await db.select().from(pmComments).where(eq(pmComments.id, id));
+      if (!comment) return res.status(404).json({ error: "Not found" });
+      if (body.content !== undefined && comment.userId !== userId) return res.status(403).json({ error: "Not your comment" });
+      const [updated] = await db.update(pmComments).set({ ...body, updatedAt: new Date() }).where(eq(pmComments.id, id)).returning();
+      return res.json(updated);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.delete("/api/pm-comments/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const [comment] = await db.select().from(pmComments).where(eq(pmComments.id, id));
+      if (!comment) return res.status(404).json({ error: "Not found" });
+      if (comment.userId !== userId) return res.status(403).json({ error: "Not your comment" });
+      await db.delete(pmComments).where(eq(pmComments.parentCommentId, id));
+      await db.delete(pmComments).where(eq(pmComments.id, id));
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/pm-pages/:pageId/versions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const pageId = parseInt(req.params.pageId);
+      const body = z.object({ changeDescription: z.string().optional() }).parse(req.body);
+      const [page] = await db.select().from(pmPages).where(and(eq(pmPages.id, pageId), eq(pmPages.userId, userId)));
+      if (!page) return res.status(404).json({ error: "Not found" });
+      const allBlocks = await db.select().from(pmBlocks).where(and(eq(pmBlocks.pageId, pageId), eq(pmBlocks.userId, userId))).orderBy(asc(pmBlocks.sortOrder));
+      const versions = await db.select({ id: pmPageVersions.id, versionNumber: pmPageVersions.versionNumber }).from(pmPageVersions).where(eq(pmPageVersions.pageId, pageId)).orderBy(asc(pmPageVersions.versionNumber));
+      const maxVer = versions.reduce((m, v) => Math.max(m, v.versionNumber), 0);
+      if (versions.length >= 100) {
+        await db.delete(pmPageVersions).where(eq(pmPageVersions.id, versions[0].id));
+      }
+      const [version] = await db.insert(pmPageVersions).values({ userId, pageId, versionNumber: maxVer + 1, title: page.title, blocksSnapshot: allBlocks, changeDescription: body.changeDescription || "" }).returning();
+      return res.json(version);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/pm-pages/:pageId/versions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const pageId = parseInt(req.params.pageId);
+      const versions = await db.select({ id: pmPageVersions.id, versionNumber: pmPageVersions.versionNumber, title: pmPageVersions.title, changeDescription: pmPageVersions.changeDescription, createdAt: pmPageVersions.createdAt, pageId: pmPageVersions.pageId }).from(pmPageVersions).where(and(eq(pmPageVersions.pageId, pageId), eq(pmPageVersions.userId, userId))).orderBy(desc(pmPageVersions.versionNumber)).limit(50);
+      return res.json(versions);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/pm-page-versions/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const [version] = await db.select().from(pmPageVersions).where(and(eq(pmPageVersions.id, id), eq(pmPageVersions.userId, userId)));
+      if (!version) return res.status(404).json({ error: "Not found" });
+      return res.json(version);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/pm-page-versions/:id/restore", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const [version] = await db.select().from(pmPageVersions).where(and(eq(pmPageVersions.id, id), eq(pmPageVersions.userId, userId)));
+      if (!version) return res.status(404).json({ error: "Not found" });
+      const [page] = await db.select().from(pmPages).where(and(eq(pmPages.id, version.pageId), eq(pmPages.userId, userId)));
+      if (!page) return res.status(404).json({ error: "Page not found" });
+      const currentBlocks = await db.select().from(pmBlocks).where(and(eq(pmBlocks.pageId, version.pageId), eq(pmBlocks.userId, userId))).orderBy(asc(pmBlocks.sortOrder));
+      const existingVersions = await db.select({ id: pmPageVersions.id, versionNumber: pmPageVersions.versionNumber }).from(pmPageVersions).where(eq(pmPageVersions.pageId, version.pageId)).orderBy(asc(pmPageVersions.versionNumber));
+      const maxVer = existingVersions.reduce((m, v) => Math.max(m, v.versionNumber), 0);
+      if (existingVersions.length >= 100) {
+        await db.delete(pmPageVersions).where(eq(pmPageVersions.id, existingVersions[0].id));
+      }
+      await db.insert(pmPageVersions).values({ userId, pageId: version.pageId, versionNumber: maxVer + 1, title: page.title, blocksSnapshot: currentBlocks, changeDescription: "Auto-saved before restore" });
+      if (currentBlocks.length) {
+        await db.delete(pmSearchIndex).where(and(inArray(pmSearchIndex.blockId, currentBlocks.map(b => b.id)), eq(pmSearchIndex.userId, userId)));
+      }
+      await db.delete(pmBlocks).where(and(eq(pmBlocks.pageId, version.pageId), eq(pmBlocks.userId, userId)));
+      const blocksSnap = (version.blocksSnapshot as any[]) || [];
+      if (blocksSnap.length) {
+        await db.insert(pmBlocks).values(blocksSnap.map((b: any) => ({ userId, pageId: version.pageId, type: b.type, content: b.content || {}, sortOrder: b.sortOrder, parentBlockId: null })));
+      }
+      return res.json(page);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/pm-notifications", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const unreadOnly = req.query.unreadOnly === "true";
+      let q = db.select().from(pmNotifications).$dynamic();
+      const conds = [eq(pmNotifications.userId, userId)];
+      if (unreadOnly) conds.push(eq(pmNotifications.isRead, false));
+      q = q.where(and(...conds)).orderBy(desc(pmNotifications.createdAt)).limit(50);
+      return res.json(await q);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.patch("/api/pm-notifications/:id/read", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const [updated] = await db.update(pmNotifications).set({ isRead: true }).where(and(eq(pmNotifications.id, id), eq(pmNotifications.userId, userId))).returning();
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      return res.json(updated);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.patch("/api/pm-notifications/read-all", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      await db.update(pmNotifications).set({ isRead: true }).where(eq(pmNotifications.userId, userId));
+      return res.json({ success: true });
     } catch (e: any) { return res.status(500).json({ error: e.message }); }
   });
 

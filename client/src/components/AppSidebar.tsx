@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
+import { PmNotificationBell } from "@/components/pm/PmNotificationBell";
 
 // ─── CURRENTLY VISIBLE MENU ITEMS ───────────────────────────────────────────
 // These are the core personal productivity features (Phase 1).
@@ -146,6 +147,7 @@ export function AppSidebar({ onOpenCommand, onOpenSearch, onOpenCoach }: AppSide
             <span className="font-display font-bold text-lg">Consistency System</span>
           </Link>
           <div className="flex items-center gap-1">
+            <PmNotificationBell />
             <NotificationCenter />
             <SidebarTrigger className="h-8 w-8 rounded-lg border border-border/50 hover:bg-white/10" data-testid="button-sidebar-close" />
           </div>
