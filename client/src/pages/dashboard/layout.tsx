@@ -7,6 +7,7 @@ import { TimeTracker } from "@/components/time/TimeTracker";
 import { AICommandBar } from "@/components/ai/AICommandBar";
 import { AICoach } from "@/components/ai/AICoach";
 import { SmartSearch } from "@/components/ai/SmartSearch";
+import QuickNavModal from "@/components/pm/QuickNavModal";
 import { useEffect } from "react";
 
 function DashboardContent({
@@ -120,6 +121,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <AICommandBar open={commandOpen} onClose={() => setCommandOpen(false)} />
         <SmartSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
         <AICoach open={coachOpen} onClose={() => setCoachOpen(false)} />
+        <QuickNavModal />
       </SidebarProvider>
     </WorkspaceProvider>
   );

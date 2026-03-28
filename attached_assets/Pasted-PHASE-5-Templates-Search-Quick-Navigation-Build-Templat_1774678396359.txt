@@ -1,0 +1,181 @@
+PHASE 5 — Templates, Search & Quick Navigation
+Build Templates, Search & Quick Navigation — Add a template system for pages and databases, global search across all pages/blocks, and a quick-navigation modal (Ctrl+P).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. DATABASE TABLES (in shared/schema.ts)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+-- Table 1: pm_templates --
+export const pmTemplates = pgTable("pm_templates", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  workspaceId: integer("workspace_id"),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  icon: text("icon").default(""),
+  category: text("category").notNull().default("general"),
+  pageSnapshot: jsonb("page_snapshot").notNull().default({}),
+  blocksSnapshot: jsonb("blocks_snapshot").notNull().default([]),
+  databaseSnapshot: jsonb("database_snapshot"),
+  isSystemTemplate: boolean("is_system_template").notNull().default(false),
+  usageCount: integer("usage_count").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPmTemplateSchema = createInsertSchema(pmTemplates);
+export type InsertPmTemplate = typeof pmTemplates.$inferInsert;
+export type PmTemplate = typeof pmTemplates.$inferSelect;
+
+category values: "general", "project", "meeting", "docs", "engineering", "marketing", "hr", "personal"
+
+pageSnapshot JSON: { "title": "string", "icon": "string", "coverImage": "string" }
+blocksSnapshot JSON: array of { "type": "string", "content": {}, "sortOrder": 0, "children": [] }
+databaseSnapshot JSON (if page contains a database): { "title": "string", "properties": [...], "defaultView": "table", "sampleRows": [...] }
+
+-- Table 2: pm_search_index --
+export const pmSearchIndex = pgTable("pm_search_index", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  pageId: integer("page_id").notNull(),
+  blockId: integer("block_id"),
+  contentType: text("content_type").notNull(),
+  searchText: text("search_text").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPmSearchIndexSchema = createInsertSchema(pmSearchIndex);
+export type InsertPmSearchIndex = typeof pmSearchIndex.$inferInsert;
+export type PmSearchIndex = typeof pmSearchIndex.$inferSelect;
+
+contentType values: "pageTitle", "blockText", "databaseTitle", "databaseCellText"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. API ROUTES (add to server/routes.ts)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Route 1: GET /api/pm-templates
+Returns all templates accessible to the user: user's own templates + system templates + workspace templates (if user is a member). Accept optional query param category to filter.
+
+Route 2: POST /api/pm-templates
+Creates a template from an existing page. Request body: z.object({ pageId: z.number(), name: z.string(), description: z.string().optional(), category: z.string().optional() }). Reads the page and all its blocks, serializes them into pageSnapshot and blocksSnapshot. If the page contains database blocks, serialize the database schema into databaseSnapshot. Return created template.
+
+Route 3: POST /api/pm-templates/:id/use
+Creates a new page from a template. Request body: z.object({ parentPageId: z.number().nullable().optional(), workspaceId: z.number().optional() }). Deserializes the snapshots to create a new page with all blocks (and database if applicable). Increment usageCount. Return the new page.
+
+Route 4: DELETE /api/pm-templates/:id
+Deletes a template. Only allow if user owns it. Return { success: true }.
+
+Route 5: POST /api/pm-templates/seed-system
+Creates system templates if they do not exist (check isSystemTemplate). Create these 6 templates:
+1. "Meeting Notes" (meeting category): page with heading1 "Meeting Notes", heading2 "Attendees", bulletList block, heading2 "Agenda", numberedList block, heading2 "Action Items", todo block x3, divider, heading2 "Notes", paragraph block.
+2. "Project Tracker" (project category): page with heading1 "Project Tracker", database with properties: Task (text), Status (status: To Do/In Progress/Done/Blocked), Priority (select: High/Medium/Low), Assignee (person), Due Date (date), defaultView "board".
+3. "Weekly Planner" (personal category): page with heading1 "Weekly Planner", 7 toggle blocks (Monday through Sunday), each with 3 todo child blocks.
+4. "Bug Tracker" (engineering category): page with database: Bug Title (text), Severity (select: Critical/High/Medium/Low), Status (status: Open/Investigating/Fixed/Closed), Reported By (person), Date (date).
+5. "Content Calendar" (marketing category): page with database: Title (text), Status (status: Draft/Review/Published), Type (select: Blog/Social/Email/Video), Publish Date (date), defaultView "calendar".
+6. "Team Wiki" (docs category): page with heading1 "Team Wiki", callout block with text "Welcome to the team wiki", toggle "Getting Started" with 3 paragraph children, toggle "Processes" with 2 paragraph children, divider, heading2 "Quick Links", bulletList block x3.
+
+Route 6: GET /api/pm-search
+Full-text search. Query param: q (search string, min 2 chars). Search pm_search_index using ILIKE '%q%' on searchText, filter by userId. Return up to 20 results, each with: pageId, blockId, contentType, searchText (with match highlighted by wrapping in **), page title, page icon. Order by relevance (pageTitle matches first, then blockText).
+
+Route 7: POST /api/pm-search/reindex/:pageId
+Rebuilds the search index for a page. Delete existing index entries for this pageId. Create new entries: one for the page title, one for each text-containing block (paragraph, heading, todo, quote, callout, code — extract the "text" field from content JSON). Return { success: true }.
+
+Route 8: POST /api/pm-search/reindex-all
+Rebuilds the entire search index for the current user. Delete all their index entries and recreate from all pages and blocks. Return { success: true, indexedPages: count, indexedBlocks: count }.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. SEARCH INDEX TRIGGERS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Update the following existing routes to also update the search index:
+
+- POST /api/pm-pages (after creating page, add pageTitle index entry)
+- PATCH /api/pm-pages/:id (if title changed, update pageTitle index entry)
+- DELETE /api/pm-pages/:id (delete all index entries for pageId)
+- POST /api/pm-pages/:pageId/blocks (add blockText index entry if block has text content)
+- PATCH /api/pm-blocks/:id (update blockText index entry if content.text changed)
+- DELETE /api/pm-blocks/:id (delete index entry for blockId)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. FRONTEND — Templates Gallery Page
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File: client/src/pages/dashboard/pm-templates.tsx
+Route: /dashboard/pm-templates
+Page title: "Templates"
+
+Layout:
+- Top bar: "Templates" heading, "Create Template" button (if user has pages to templatize)
+- Category filter bar: horizontal row of pill buttons for each category ("All", "General", "Project", "Meeting", "Docs", "Engineering", "Marketing", "HR", "Personal")
+- Template grid (3 columns): each template card shows icon, name, description (2 lines truncated), category badge, usage count, "Use Template" button
+- "Use Template" button creates a new page from the template and navigates to /dashboard/pm-editor/:newPageId
+- "Create Template" button opens a Dialog: select a page from a dropdown of user's pages, enter template name and description, select category, click "Create"
+
+Data fetching:
+- queryKey: ["pm-templates", selectedCategory]
+- endpoint: GET /api/pm-templates?category=X
+
+Mutations:
+- Create template: POST /api/pm-templates, invalidate ["pm-templates"]
+- Use template: POST /api/pm-templates/:id/use, invalidate ["pm-pages"], navigate to new page
+- Delete template: DELETE /api/pm-templates/:id, invalidate ["pm-templates"]
+
+Loading state: 6 skeleton cards.
+Empty state: "No templates yet. Create one from an existing page or browse system templates."
+
+On first load, call POST /api/pm-templates/seed-system to ensure system templates exist.
+
+data-testid: data-testid="template-card-{id}", data-testid="use-template-{id}", data-testid="category-filter-{category}", data-testid="create-template-btn".
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. FRONTEND — Quick Navigation Modal (Ctrl+P)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File: client/src/components/pm/QuickNavModal.tsx
+
+This is a global modal accessible from anywhere via Ctrl+P (or Cmd+P on Mac). Add it to the root layout component.
+
+Layout:
+- Overlay: fixed inset-0 bg-black/50 z-50
+- Modal: centered, max-w-lg, bg-background rounded-xl shadow-2xl
+- Search input at top: auto-focused, placeholder "Search pages..." (Search icon on left)
+- Results list below: max-height 400px, scrollable
+  - If search input is empty: show "Recent pages" — the 10 most recently updated pages, ordered by updatedAt desc
+  - If search input has text: show search results from GET /api/pm-search?q=X
+  - Each result item shows: page icon, page title, content preview (searchText, truncated to 60 chars), and contentType badge
+  - Arrow keys navigate the list (highlight active item with bg-muted)
+  - Enter on a highlighted item navigates to /dashboard/pm-editor/:pageId and closes the modal
+  - Clicking an item does the same
+- Escape closes the modal
+
+Register the keyboard shortcut using useEffect with a keydown listener on document. Check for (event.ctrlKey || event.metaKey) && event.key === "p". Call event.preventDefault() to prevent browser print dialog.
+
+Data fetching:
+- When input is empty: queryKey: ["pm-pages-recent"], endpoint: GET /api/pm-pages (sorted by updatedAt, limit 10 client-side)
+- When input has text: queryKey: ["pm-search", searchQuery], endpoint: GET /api/pm-search?q=X. Debounce search at 300ms.
+
+data-testid: data-testid="quick-nav-modal", data-testid="quick-nav-input", data-testid="quick-nav-result-{index}".
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. ROUTING & SIDEBAR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Add import in App.tsx:
+import PmTemplates from "./pages/dashboard/pm-templates";
+
+Add route:
+<Route path="/dashboard/pm-templates" component={PmTemplates} />
+
+In AppSidebar.tsx, in the "Project Manager" section, add a "Templates" link (LayoutTemplate icon) after the "Workspace" link, before the page tree.
+
+Add QuickNavModal to the root layout so it's available on all pages.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7. IMPORTANT NOTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- System templates are created once and shared across all users (isSystemTemplate = true, userId = "system").
+- The search index is a denormalized text-based index. It does not replace the source data — it mirrors it for fast searching.
+- Call POST /api/pm-search/reindex-all once on first use (can be triggered from a settings page or automatically on first search with empty index).
+- All routes go in server/routes.ts.
+- Do not modify package.json, vite.config.ts, or drizzle.config.ts.

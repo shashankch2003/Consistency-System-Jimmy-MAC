@@ -2806,3 +2806,37 @@ export const pmPagePermissions = pgTable("pm_page_permissions", {
 export const insertPmPagePermissionSchema = createInsertSchema(pmPagePermissions).omit({ id: true, createdAt: true });
 export type InsertPmPagePermission = typeof pmPagePermissions.$inferInsert;
 export type PmPagePermission = typeof pmPagePermissions.$inferSelect;
+
+export const pmTemplates = pgTable("pm_templates", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  workspaceId: integer("workspace_id"),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  icon: text("icon").default(""),
+  category: text("category").notNull().default("general"),
+  pageSnapshot: jsonb("page_snapshot").notNull().default({}),
+  blocksSnapshot: jsonb("blocks_snapshot").notNull().default([]),
+  databaseSnapshot: jsonb("database_snapshot"),
+  isSystemTemplate: boolean("is_system_template").notNull().default(false),
+  usageCount: integer("usage_count").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPmTemplateSchema = createInsertSchema(pmTemplates).omit({ id: true, createdAt: true });
+export type InsertPmTemplate = typeof pmTemplates.$inferInsert;
+export type PmTemplate = typeof pmTemplates.$inferSelect;
+
+export const pmSearchIndex = pgTable("pm_search_index", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  pageId: integer("page_id").notNull(),
+  blockId: integer("block_id"),
+  contentType: text("content_type").notNull(),
+  searchText: text("search_text").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPmSearchIndexSchema = createInsertSchema(pmSearchIndex).omit({ id: true });
+export type InsertPmSearchIndex = typeof pmSearchIndex.$inferInsert;
+export type PmSearchIndex = typeof pmSearchIndex.$inferSelect;

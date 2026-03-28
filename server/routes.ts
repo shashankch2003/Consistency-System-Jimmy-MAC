@@ -51,6 +51,7 @@ import {
   pmPages, pmBlocks, pmPageActivity,
   pmDatabases, pmDatabaseProperties, pmDatabaseRows, pmDatabaseCells, pmDatabaseViews,
   pmWorkspaces, pmWorkspaceMembers, pmPagePermissions,
+  pmTemplates, pmSearchIndex,
 } from "../shared/schema";
 import { inArray, isNotNull } from "drizzle-orm";
 
@@ -8026,6 +8027,7 @@ Provide specific, actionable insights. Be encouraging but honest.`,
       const maxOrder = siblings.reduce((m, s) => Math.max(m, s.sortOrder), -1);
       const [page] = await db.insert(pmPages).values({ userId, title: body.title || "Untitled", parentPageId: body.parentPageId ?? null, icon: body.icon || "", pageType: body.pageType || "page", sortOrder: maxOrder + 1 }).returning();
       await db.insert(pmPageActivity).values({ userId, pageId: page.id, action: "created", metadata: {} });
+      await db.insert(pmSearchIndex).values({ userId, pageId: page.id, blockId: null, contentType: "pageTitle", searchText: page.title, updatedAt: new Date() });
       return res.json(page);
     } catch (e: any) { return res.status(400).json({ error: e.message }); }
   });
@@ -8043,6 +8045,10 @@ Provide specific, actionable insights. Be encouraging but honest.`,
       else if (body.isArchived === true) action = "archived";
       else if (body.isArchived === false) action = "restored";
       await db.insert(pmPageActivity).values({ userId, pageId: id, action, metadata: {} });
+      if (body.title !== undefined) {
+        await db.delete(pmSearchIndex).where(and(eq(pmSearchIndex.pageId, id), eq(pmSearchIndex.userId, userId), eq(pmSearchIndex.contentType, "pageTitle"), isNull(pmSearchIndex.blockId)));
+        await db.insert(pmSearchIndex).values({ userId, pageId: id, blockId: null, contentType: "pageTitle", searchText: body.title, updatedAt: new Date() });
+      }
       return res.json(page);
     } catch (e: any) { return res.status(400).json({ error: e.message }); }
   });
@@ -8054,6 +8060,7 @@ Provide specific, actionable insights. Be encouraging but honest.`,
       const ids = await getPmPageDescendantIds(id, userId);
       if (ids.length) {
         await db.delete(pmPageActivity).where(and(inArray(pmPageActivity.pageId, ids), eq(pmPageActivity.userId, userId)));
+        await db.delete(pmSearchIndex).where(and(inArray(pmSearchIndex.pageId, ids), eq(pmSearchIndex.userId, userId)));
         await db.delete(pmBlocks).where(and(inArray(pmBlocks.pageId, ids), eq(pmBlocks.userId, userId)));
         await db.delete(pmPages).where(and(inArray(pmPages.id, ids), eq(pmPages.userId, userId)));
       }
@@ -8108,6 +8115,11 @@ Provide specific, actionable insights. Be encouraging but honest.`,
         sortOrder = siblings.reduce((m, s) => Math.max(m, s.sortOrder), -1) + 1;
       }
       const [block] = await db.insert(pmBlocks).values({ userId, pageId, type: body.type, content: body.content || {}, parentBlockId: body.parentBlockId ?? null, sortOrder }).returning();
+      const textTypes = ["paragraph", "heading1", "heading2", "heading3", "todo", "quote", "callout", "code"];
+      if (textTypes.includes(block.type)) {
+        const txt = (block.content as any)?.text;
+        if (txt) await db.insert(pmSearchIndex).values({ userId, pageId, blockId: block.id, contentType: "blockText", searchText: txt, updatedAt: new Date() });
+      }
       return res.json(block);
     } catch (e: any) { return res.status(400).json({ error: e.message }); }
   });
@@ -8119,6 +8131,11 @@ Provide specific, actionable insights. Be encouraging but honest.`,
       const body = z.object({ type: z.string().optional(), content: z.any().optional(), sortOrder: z.number().optional(), parentBlockId: z.number().nullable().optional() }).parse(req.body);
       const [block] = await db.update(pmBlocks).set({ ...body, updatedAt: new Date() }).where(and(eq(pmBlocks.id, id), eq(pmBlocks.userId, userId))).returning();
       if (!block) return res.status(404).json({ error: "Not found" });
+      if (body.content !== undefined) {
+        const txt = (body.content as any)?.text;
+        await db.delete(pmSearchIndex).where(and(eq(pmSearchIndex.blockId, id), eq(pmSearchIndex.userId, userId)));
+        if (txt) await db.insert(pmSearchIndex).values({ userId, pageId: block.pageId, blockId: id, contentType: "blockText", searchText: txt, updatedAt: new Date() });
+      }
       return res.json(block);
     } catch (e: any) { return res.status(400).json({ error: e.message }); }
   });
@@ -8135,6 +8152,7 @@ Provide specific, actionable insights. Be encouraging but honest.`,
         ids.push(cur);
         allBlocks.filter(b => b.parentBlockId === cur).forEach(b => queue.push(b.id));
       }
+      if (ids.length) await db.delete(pmSearchIndex).where(and(inArray(pmSearchIndex.blockId, ids), eq(pmSearchIndex.userId, userId)));
       await db.delete(pmBlocks).where(and(inArray(pmBlocks.id, ids), eq(pmBlocks.userId, userId)));
       return res.json({ success: true });
     } catch (e: any) { return res.status(500).json({ error: e.message }); }
@@ -8165,6 +8183,236 @@ Provide specific, actionable insights. Be encouraging but honest.`,
       const pageId = parseInt(req.params.pageId);
       const activity = await db.select().from(pmPageActivity).where(and(eq(pmPageActivity.pageId, pageId), eq(pmPageActivity.userId, userId))).orderBy(desc(pmPageActivity.createdAt)).limit(50);
       return res.json(activity);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/pm-templates", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const category = req.query.category as string | undefined;
+      let q = db.select().from(pmTemplates).$dynamic();
+      const conditions = [
+        or(eq(pmTemplates.userId, userId), eq(pmTemplates.isSystemTemplate, true))
+      ];
+      if (category && category !== "all") conditions.push(eq(pmTemplates.category, category));
+      q = q.where(and(...conditions)).orderBy(desc(pmTemplates.usageCount), desc(pmTemplates.createdAt));
+      return res.json(await q);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/pm-templates", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const body = z.object({ pageId: z.number(), name: z.string(), description: z.string().optional(), category: z.string().optional() }).parse(req.body);
+      const [page] = await db.select().from(pmPages).where(and(eq(pmPages.id, body.pageId), eq(pmPages.userId, userId)));
+      if (!page) return res.status(404).json({ error: "Page not found" });
+      const blocks = await db.select().from(pmBlocks).where(and(eq(pmBlocks.pageId, body.pageId), eq(pmBlocks.userId, userId))).orderBy(asc(pmBlocks.sortOrder));
+      const pageSnapshot = { title: page.title, icon: page.icon || "", coverImage: page.coverImage || "" };
+      const blocksSnapshot = blocks.map(b => ({ type: b.type, content: b.content, sortOrder: b.sortOrder, children: [] }));
+      let databaseSnapshot = null;
+      const dbBlock = blocks.find(b => b.type === "database");
+      if (dbBlock) {
+        const dbId = (dbBlock.content as any)?.databaseId;
+        if (dbId) {
+          const [dbRec] = await db.select().from(pmDatabases).where(eq(pmDatabases.id, dbId));
+          const props = await db.select().from(pmDatabaseProperties).where(eq(pmDatabaseProperties.databaseId, dbId)).orderBy(asc(pmDatabaseProperties.sortOrder));
+          const views = await db.select().from(pmDatabaseViews).where(eq(pmDatabaseViews.databaseId, dbId)).orderBy(asc(pmDatabaseViews.sortOrder));
+          if (dbRec) databaseSnapshot = { title: dbRec.title, properties: props.map(p => ({ name: p.name, type: p.type, config: p.config })), defaultView: views[0]?.type || "table" };
+        }
+      }
+      const [tpl] = await db.insert(pmTemplates).values({ userId, name: body.name, description: body.description || "", category: body.category || "general", pageSnapshot, blocksSnapshot, databaseSnapshot, isSystemTemplate: false }).returning();
+      return res.json(tpl);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/pm-templates/seed-system", async (_req, res) => {
+    try {
+      const systemTemplates = [
+        {
+          name: "Meeting Notes", description: "Capture attendees, agenda, action items, and notes", icon: "📝", category: "meeting",
+          pageSnapshot: { title: "Meeting Notes", icon: "📝", coverImage: "" },
+          blocksSnapshot: [
+            { type: "heading1", content: { text: "Meeting Notes" }, sortOrder: 0, children: [] },
+            { type: "heading2", content: { text: "Attendees" }, sortOrder: 1, children: [] },
+            { type: "bulletList", content: { text: "" }, sortOrder: 2, children: [] },
+            { type: "heading2", content: { text: "Agenda" }, sortOrder: 3, children: [] },
+            { type: "numberedList", content: { text: "" }, sortOrder: 4, children: [] },
+            { type: "heading2", content: { text: "Action Items" }, sortOrder: 5, children: [] },
+            { type: "todo", content: { text: "", checked: false }, sortOrder: 6, children: [] },
+            { type: "todo", content: { text: "", checked: false }, sortOrder: 7, children: [] },
+            { type: "todo", content: { text: "", checked: false }, sortOrder: 8, children: [] },
+            { type: "divider", content: {}, sortOrder: 9, children: [] },
+            { type: "heading2", content: { text: "Notes" }, sortOrder: 10, children: [] },
+            { type: "paragraph", content: { text: "" }, sortOrder: 11, children: [] },
+          ],
+        },
+        {
+          name: "Project Tracker", description: "Track tasks with status, priority, assignee, and due date", icon: "🚀", category: "project",
+          pageSnapshot: { title: "Project Tracker", icon: "🚀", coverImage: "" },
+          blocksSnapshot: [{ type: "heading1", content: { text: "Project Tracker" }, sortOrder: 0, children: [] }, { type: "database", content: {}, sortOrder: 1, children: [] }],
+          databaseSnapshot: { title: "Tasks", properties: [{ name: "Task", type: "text", config: {} }, { name: "Status", type: "status", config: { options: ["To Do", "In Progress", "Done", "Blocked"] } }, { name: "Priority", type: "select", config: { options: ["High", "Medium", "Low"] } }, { name: "Assignee", type: "person", config: {} }, { name: "Due Date", type: "date", config: {} }], defaultView: "board" },
+        },
+        {
+          name: "Weekly Planner", description: "Plan your week day by day with task lists", icon: "📅", category: "personal",
+          pageSnapshot: { title: "Weekly Planner", icon: "📅", coverImage: "" },
+          blocksSnapshot: [
+            { type: "heading1", content: { text: "Weekly Planner" }, sortOrder: 0, children: [] },
+            ...["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].flatMap((day, i) => [
+              { type: "toggle", content: { text: day }, sortOrder: i + 1, children: [
+                { type: "todo", content: { text: "", checked: false }, sortOrder: 0, children: [] },
+                { type: "todo", content: { text: "", checked: false }, sortOrder: 1, children: [] },
+                { type: "todo", content: { text: "", checked: false }, sortOrder: 2, children: [] },
+              ]},
+            ]),
+          ],
+        },
+        {
+          name: "Bug Tracker", description: "Track bugs with severity, status, reporter, and date", icon: "🐛", category: "engineering",
+          pageSnapshot: { title: "Bug Tracker", icon: "🐛", coverImage: "" },
+          blocksSnapshot: [{ type: "heading1", content: { text: "Bug Tracker" }, sortOrder: 0, children: [] }, { type: "database", content: {}, sortOrder: 1, children: [] }],
+          databaseSnapshot: { title: "Bugs", properties: [{ name: "Bug Title", type: "text", config: {} }, { name: "Severity", type: "select", config: { options: ["Critical", "High", "Medium", "Low"] } }, { name: "Status", type: "status", config: { options: ["Open", "Investigating", "Fixed", "Closed"] } }, { name: "Reported By", type: "person", config: {} }, { name: "Date", type: "date", config: {} }], defaultView: "table" },
+        },
+        {
+          name: "Content Calendar", description: "Schedule and track content by type and publish date", icon: "📣", category: "marketing",
+          pageSnapshot: { title: "Content Calendar", icon: "📣", coverImage: "" },
+          blocksSnapshot: [{ type: "heading1", content: { text: "Content Calendar" }, sortOrder: 0, children: [] }, { type: "database", content: {}, sortOrder: 1, children: [] }],
+          databaseSnapshot: { title: "Content", properties: [{ name: "Title", type: "text", config: {} }, { name: "Status", type: "status", config: { options: ["Draft", "Review", "Published"] } }, { name: "Type", type: "select", config: { options: ["Blog", "Social", "Email", "Video"] } }, { name: "Publish Date", type: "date", config: {} }], defaultView: "calendar" },
+        },
+        {
+          name: "Team Wiki", description: "Document team processes, getting started guides, and quick links", icon: "📚", category: "docs",
+          pageSnapshot: { title: "Team Wiki", icon: "📚", coverImage: "" },
+          blocksSnapshot: [
+            { type: "heading1", content: { text: "Team Wiki" }, sortOrder: 0, children: [] },
+            { type: "callout", content: { text: "Welcome to the team wiki" }, sortOrder: 1, children: [] },
+            { type: "toggle", content: { text: "Getting Started" }, sortOrder: 2, children: [{ type: "paragraph", content: { text: "" }, sortOrder: 0, children: [] }, { type: "paragraph", content: { text: "" }, sortOrder: 1, children: [] }, { type: "paragraph", content: { text: "" }, sortOrder: 2, children: [] }] },
+            { type: "toggle", content: { text: "Processes" }, sortOrder: 3, children: [{ type: "paragraph", content: { text: "" }, sortOrder: 0, children: [] }, { type: "paragraph", content: { text: "" }, sortOrder: 1, children: [] }] },
+            { type: "divider", content: {}, sortOrder: 4, children: [] },
+            { type: "heading2", content: { text: "Quick Links" }, sortOrder: 5, children: [] },
+            { type: "bulletList", content: { text: "" }, sortOrder: 6, children: [] },
+            { type: "bulletList", content: { text: "" }, sortOrder: 7, children: [] },
+            { type: "bulletList", content: { text: "" }, sortOrder: 8, children: [] },
+          ],
+        },
+      ];
+      const existingNames = await db.select({ name: pmTemplates.name }).from(pmTemplates).where(eq(pmTemplates.isSystemTemplate, true));
+      const existingNameSet = new Set(existingNames.map(e => e.name));
+      let seeded = 0;
+      for (const tpl of systemTemplates) {
+        if (!existingNameSet.has(tpl.name)) {
+          await db.insert(pmTemplates).values({ userId: "system", name: tpl.name, description: tpl.description, icon: tpl.icon, category: tpl.category, pageSnapshot: tpl.pageSnapshot, blocksSnapshot: tpl.blocksSnapshot, databaseSnapshot: tpl.databaseSnapshot ?? null, isSystemTemplate: true });
+          seeded++;
+        }
+      }
+      return res.json({ success: true, seeded });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/pm-templates/:id/use", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const body = z.object({ parentPageId: z.number().nullable().optional(), workspaceId: z.number().optional() }).parse(req.body);
+      const [tpl] = await db.select().from(pmTemplates).where(eq(pmTemplates.id, id));
+      if (!tpl) return res.status(404).json({ error: "Template not found" });
+      const snap = tpl.pageSnapshot as any;
+      const siblings = await db.select({ sortOrder: pmPages.sortOrder }).from(pmPages).where(and(eq(pmPages.userId, userId), body.parentPageId != null ? eq(pmPages.parentPageId, body.parentPageId!) : isNull(pmPages.parentPageId)));
+      const maxOrder = siblings.reduce((m, s) => Math.max(m, s.sortOrder), -1);
+      const [newPage] = await db.insert(pmPages).values({ userId, title: snap.title || "Untitled", icon: snap.icon || "", coverImage: snap.coverImage || "", parentPageId: body.parentPageId ?? null, pageType: "page", sortOrder: maxOrder + 1 }).returning();
+      const blocksSnap = (tpl.blocksSnapshot as any[]) || [];
+      for (const b of blocksSnap.filter((b: any) => b.type !== "database")) {
+        await db.insert(pmBlocks).values({ userId, pageId: newPage.id, type: b.type, content: b.content || {}, sortOrder: b.sortOrder, parentBlockId: null });
+      }
+      if (tpl.databaseSnapshot) {
+        const dbSnap = tpl.databaseSnapshot as any;
+        const [newDb] = await db.insert(pmDatabases).values({ userId, pageId: newPage.id, title: dbSnap.title || "Database" }).returning();
+        const props: any[] = dbSnap.properties || [];
+        for (let i = 0; i < props.length; i++) {
+          await db.insert(pmDatabaseProperties).values({ userId, databaseId: newDb.id, name: props[i].name, type: props[i].type, config: props[i].config || {}, sortOrder: i });
+        }
+        await db.insert(pmDatabaseViews).values({ userId, databaseId: newDb.id, name: "Default View", type: dbSnap.defaultView || "table", config: {}, sortOrder: 0 });
+        const dbBlockOrder = blocksSnap.find((b: any) => b.type === "database")?.sortOrder ?? blocksSnap.length;
+        await db.insert(pmBlocks).values({ userId, pageId: newPage.id, type: "database", content: { databaseId: newDb.id }, sortOrder: dbBlockOrder, parentBlockId: null });
+      }
+      await db.update(pmTemplates).set({ usageCount: tpl.usageCount + 1 }).where(eq(pmTemplates.id, id));
+      await db.insert(pmSearchIndex).values({ userId, pageId: newPage.id, blockId: null, contentType: "pageTitle", searchText: newPage.title, updatedAt: new Date() });
+      return res.json(newPage);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.delete("/api/pm-templates/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const [tpl] = await db.select().from(pmTemplates).where(and(eq(pmTemplates.id, id), eq(pmTemplates.userId, userId)));
+      if (!tpl) return res.status(404).json({ error: "Not found or not yours" });
+      await db.delete(pmTemplates).where(eq(pmTemplates.id, id));
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/pm-search", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const q = (req.query.q as string || "").trim();
+      if (q.length < 2) return res.json([]);
+      const { sql: rawSql } = await import("drizzle-orm");
+      const entries = await db.select().from(pmSearchIndex).where(and(eq(pmSearchIndex.userId, userId), rawSql`${pmSearchIndex.searchText} ILIKE ${"%" + q + "%"}`)).limit(20);
+      const pageIds = [...new Set(entries.map(e => e.pageId))];
+      const pages = pageIds.length ? await db.select({ id: pmPages.id, title: pmPages.title, icon: pmPages.icon }).from(pmPages).where(inArray(pmPages.id, pageIds)) : [];
+      const pageMap = new Map(pages.map(p => [p.id, p]));
+      const sorted = entries.sort((a, b) => {
+        if (a.contentType === "pageTitle" && b.contentType !== "pageTitle") return -1;
+        if (a.contentType !== "pageTitle" && b.contentType === "pageTitle") return 1;
+        return 0;
+      });
+      const results = sorted.map(e => {
+        const highlighted = e.searchText.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), (m: string) => `**${m}**`);
+        const pg = pageMap.get(e.pageId);
+        return { pageId: e.pageId, blockId: e.blockId, contentType: e.contentType, searchText: highlighted, pageTitle: pg?.title || "", pageIcon: pg?.icon || "" };
+      });
+      return res.json(results);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/pm-search/reindex/:pageId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const pageId = parseInt(req.params.pageId);
+      await db.delete(pmSearchIndex).where(and(eq(pmSearchIndex.pageId, pageId), eq(pmSearchIndex.userId, userId)));
+      const [page] = await db.select().from(pmPages).where(and(eq(pmPages.id, pageId), eq(pmPages.userId, userId)));
+      if (!page) return res.status(404).json({ error: "Not found" });
+      await db.insert(pmSearchIndex).values({ userId, pageId, blockId: null, contentType: "pageTitle", searchText: page.title, updatedAt: new Date() });
+      const blocks = await db.select().from(pmBlocks).where(and(eq(pmBlocks.pageId, pageId), eq(pmBlocks.userId, userId)));
+      const textTypes = ["paragraph", "heading1", "heading2", "heading3", "todo", "quote", "callout", "code"];
+      for (const b of blocks) {
+        if (textTypes.includes(b.type)) {
+          const txt = (b.content as any)?.text;
+          if (txt) await db.insert(pmSearchIndex).values({ userId, pageId, blockId: b.id, contentType: "blockText", searchText: txt, updatedAt: new Date() });
+        }
+      }
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/pm-search/reindex-all", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      await db.delete(pmSearchIndex).where(eq(pmSearchIndex.userId, userId));
+      const pages = await db.select().from(pmPages).where(eq(pmPages.userId, userId));
+      const blocks = await db.select().from(pmBlocks).where(eq(pmBlocks.userId, userId));
+      const textTypes = ["paragraph", "heading1", "heading2", "heading3", "todo", "quote", "callout", "code"];
+      const entries: any[] = [];
+      for (const p of pages) {
+        entries.push({ userId, pageId: p.id, blockId: null, contentType: "pageTitle", searchText: p.title, updatedAt: new Date() });
+      }
+      for (const b of blocks) {
+        if (textTypes.includes(b.type)) {
+          const txt = (b.content as any)?.text;
+          if (txt) entries.push({ userId, pageId: b.pageId, blockId: b.id, contentType: "blockText", searchText: txt, updatedAt: new Date() });
+        }
+      }
+      if (entries.length) await db.insert(pmSearchIndex).values(entries);
+      return res.json({ success: true, indexedPages: pages.length, indexedBlocks: entries.filter(e => e.contentType === "blockText").length });
     } catch (e: any) { return res.status(500).json({ error: e.message }); }
   });
 

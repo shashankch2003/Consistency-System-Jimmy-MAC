@@ -85,6 +85,7 @@ import OnboardingPage from "@/pages/dashboard/onboarding";
 import PmWorkspacePage from "@/pages/dashboard/pm-workspace";
 import PmEditorPage from "@/pages/dashboard/pm-editor";
 import PmTeamSettings from "@/pages/dashboard/pm-team-settings";
+import PmTemplates from "@/pages/dashboard/pm-templates";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -385,6 +386,11 @@ function Router() {
         </DashboardLayout>
       </Route>
       <Route path="/dashboard/pm-team-settings/:workspaceId" component={PmTeamSettings} />
+      <Route path="/dashboard/pm-templates">
+        <DashboardLayout>
+          <PmTemplates />
+        </DashboardLayout>
+      </Route>
       <Route path="/dashboard/pm-editor/:id">
         <DashboardLayout>
           <PmEditorPage />
