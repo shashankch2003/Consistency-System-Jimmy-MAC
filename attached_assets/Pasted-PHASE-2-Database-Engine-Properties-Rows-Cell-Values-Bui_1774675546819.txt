@@ -1,0 +1,239 @@
+PHASE 2 — Database Engine (Properties, Rows, Cell Values)
+Build Notion-Style Database Engine — Add structured database support to the page system with properties (columns), rows, cell values, filtering, sorting, and grouping. Databases are created as a special block type inside pages.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. DATABASE TABLES (in shared/schema.ts)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+-- Table 1: pm_databases --
+export const pmDatabases = pgTable("pm_databases", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  pageId: integer("page_id").notNull(),
+  title: text("title").notNull().default("Untitled Database"),
+  icon: text("icon").default(""),
+  defaultView: text("default_view").notNull().default("table"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPmDatabaseSchema = createInsertSchema(pmDatabases);
+export type InsertPmDatabase = typeof pmDatabases.$inferInsert;
+export type PmDatabase = typeof pmDatabases.$inferSelect;
+
+defaultView values: "table", "board", "calendar", "timeline", "list"
+
+-- Table 2: pm_database_properties --
+export const pmDatabaseProperties = pgTable("pm_database_properties", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  databaseId: integer("database_id").notNull(),
+  name: text("name").notNull(),
+  type: text("type").notNull().default("text"),
+  config: jsonb("config").notNull().default({}),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isVisible: boolean("is_visible").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPmDatabasePropertySchema = createInsertSchema(pmDatabaseProperties);
+export type InsertPmDatabaseProperty = typeof pmDatabaseProperties.$inferInsert;
+export type PmDatabaseProperty = typeof pmDatabaseProperties.$inferSelect;
+
+Property type values: "text", "number", "select", "multiSelect", "date", "checkbox", "url", "email", "phone", "person", "status", "relation", "rollup", "formula", "createdTime", "lastEditedTime"
+
+Config JSON per type:
+- text: {}
+- number: { "format": "number|currency|percent", "currency": "USD" }
+- select: { "options": [{ "id": "uuid-string", "name": "Option 1", "color": "red|orange|yellow|green|blue|purple|pink|gray" }] }
+- multiSelect: { "options": [{ "id": "uuid-string", "name": "Tag 1", "color": "red" }] }
+- date: { "format": "full|month_day_year|relative", "includeTime": false }
+- checkbox: {}
+- url: {}
+- email: {}
+- phone: {}
+- person: {}
+- status: { "options": [{ "id": "uuid-string", "name": "Not Started", "color": "gray" }, { "id": "uuid-string", "name": "In Progress", "color": "blue" }, { "id": "uuid-string", "name": "Done", "color": "green" }] }
+- relation: { "relatedDatabaseId": 0 }
+- rollup: { "relationPropertyId": 0, "targetPropertyId": 0, "aggregation": "count|sum|average|min|max|showOriginal" }
+- formula: { "expression": "string" }
+- createdTime: {}
+- lastEditedTime: {}
+
+-- Table 3: pm_database_rows --
+export const pmDatabaseRows = pgTable("pm_database_rows", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  databaseId: integer("database_id").notNull(),
+  linkedPageId: integer("linked_page_id"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPmDatabaseRowSchema = createInsertSchema(pmDatabaseRows);
+export type InsertPmDatabaseRow = typeof pmDatabaseRows.$inferInsert;
+export type PmDatabaseRow = typeof pmDatabaseRows.$inferSelect;
+
+-- Table 4: pm_database_cells --
+export const pmDatabaseCells = pgTable("pm_database_cells", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  rowId: integer("row_id").notNull(),
+  propertyId: integer("property_id").notNull(),
+  value: jsonb("value").notNull().default({}),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPmDatabaseCellSchema = createInsertSchema(pmDatabaseCells);
+export type InsertPmDatabaseCell = typeof pmDatabaseCells.$inferInsert;
+export type PmDatabaseCell = typeof pmDatabaseCells.$inferSelect;
+
+Cell value JSON per property type:
+- text: { "text": "string" }
+- number: { "number": 0 }
+- select: { "selectedId": "uuid-string" }
+- multiSelect: { "selectedIds": ["uuid-string"] }
+- date: { "start": "2024-01-01", "end": "2024-01-02" }
+- checkbox: { "checked": false }
+- url: { "url": "string" }
+- email: { "email": "string" }
+- phone: { "phone": "string" }
+- person: { "userIds": ["string"] }
+- status: { "selectedId": "uuid-string" }
+- relation: { "rowIds": [0] }
+- rollup: (computed, not stored)
+- formula: (computed, not stored)
+- createdTime: (auto, not stored)
+- lastEditedTime: (auto, not stored)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. API ROUTES (add to server/routes.ts)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+All routes use isAuthenticated and filter by userId.
+
+Route 1: POST /api/pm-databases
+Creates a new database. Request body: z.object({ pageId: z.number(), title: z.string().optional(), defaultView: z.string().optional() }). Auto-create 3 default properties: "Name" (text, sortOrder 0), "Status" (status with default options Not Started/In Progress/Done, sortOrder 1), "Date" (date, sortOrder 2). Also create a block of type "database" in the page with content: { "databaseId": newDatabaseId }. Return the database with its properties.
+
+Route 2: GET /api/pm-databases/:id
+Returns a database by id with all its properties (ordered by sortOrder) and rows with their cell values.
+
+Route 3: PATCH /api/pm-databases/:id
+Updates database title or defaultView. Request body: z.object({ title: z.string().optional(), defaultView: z.string().optional(), icon: z.string().optional() }). Return updated database.
+
+Route 4: DELETE /api/pm-databases/:id
+Deletes a database, all its properties, rows, and cells. Also deletes the corresponding block from the page. Return { success: true }.
+
+Route 5: POST /api/pm-databases/:databaseId/properties
+Creates a new property. Request body: z.object({ name: z.string(), type: z.string(), config: z.any().optional() }). Set sortOrder to max + 1. Return created property.
+
+Route 6: PATCH /api/pm-database-properties/:id
+Updates a property name, type, config, sortOrder, or isVisible. Request body: z.object({ name: z.string().optional(), type: z.string().optional(), config: z.any().optional(), sortOrder: z.number().optional(), isVisible: z.boolean().optional() }). Return updated property.
+
+Route 7: DELETE /api/pm-database-properties/:id
+Deletes a property and all cell values for that property. Return { success: true }.
+
+Route 8: POST /api/pm-databases/:databaseId/rows
+Creates a new row. Request body: z.object({ cells: z.array(z.object({ propertyId: z.number(), value: z.any() })).optional() }). Set sortOrder to max + 1. If the database's first property is type "text", auto-create a linked page with that text as the title — set linkedPageId on the row. Create cell records for each provided cell value. Return created row with cells.
+
+Route 9: PATCH /api/pm-database-rows/:id
+Updates a row's sortOrder. Request body: z.object({ sortOrder: z.number() }). Set updatedAt to new Date(). Return updated row.
+
+Route 10: DELETE /api/pm-database-rows/:id
+Deletes a row, its cells, and its linked page (if linkedPageId is set). Return { success: true }.
+
+Route 11: PUT /api/pm-database-cells
+Creates or updates a cell value. Request body: z.object({ rowId: z.number(), propertyId: z.number(), value: z.any() }). Use upsert — if cell exists for this rowId+propertyId, update the value; otherwise create a new cell. Also set updatedAt on the row. Return the cell.
+
+Route 12: GET /api/pm-databases/:databaseId/rows
+Returns all rows for a database with their cells. Supports query params: sortBy (propertyId), sortDir ("asc"|"desc"), filterPropertyId, filterOperator ("equals"|"contains"|"isEmpty"|"isNotEmpty"|"gt"|"lt"), filterValue. Apply filtering and sorting in JS after fetching all rows+cells (since cell values are JSONB). Return array of rows, each with a "cells" array.
+
+Route 13: PATCH /api/pm-database-properties/reorder
+Request body: z.object({ properties: z.array(z.object({ id: z.number(), sortOrder: z.number() })) }). Update sortOrder for each property. Return { success: true }.
+
+Route 14: PATCH /api/pm-database-rows/reorder
+Request body: z.object({ rows: z.array(z.object({ id: z.number(), sortOrder: z.number() })) }). Update sortOrder for each row. Return { success: true }.
+
+Route 15: POST /api/pm-databases/:id/duplicate
+Duplicates a database with all properties, rows, and cells. New database title = original + " (Copy)". Return new database.
+
+Route 16: GET /api/pm-databases/by-page/:pageId
+Returns all databases that belong to a page. Used when rendering database blocks.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. FRONTEND — Database Table View Component
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File: client/src/components/pm/DatabaseTableView.tsx
+
+This component is rendered inside the block editor when a block of type "database" is encountered. It receives databaseId as a prop.
+
+Layout:
+A) Header bar:
+   - Database icon + title (editable inline, debounced 500ms)
+   - View switcher: 5 icon buttons (Table2, Columns, Calendar, GanttChart, List icons) to switch defaultView. Active view highlighted with bg-primary text-primary-foreground.
+   - Filter button (Filter icon): Opens a popover to add a filter. Filter UI: select a property dropdown, select an operator dropdown ("equals", "contains", "is empty", "is not empty", "greater than", "less than"), and a value input. Apply button applies filter as query params.
+   - Sort button (ArrowUpDown icon): Opens a popover to select a property and direction (asc/desc).
+   - "New Property" button (Plus icon): Opens a popover with a name input and type dropdown to add a new property.
+
+B) Table:
+   - Column headers: One column per visible property, ordered by sortOrder. Each column header shows property name and a dropdown on click with: Rename, Change type, Hide, Delete.
+   - Last column header: a "+" button to add a new property.
+   - Rows: One row per database row. Each cell is editable inline based on property type:
+     * text: contentEditable div
+     * number: input type="number"
+     * select: Click to show dropdown of options from config. Each option shows its color dot. Option to add new option.
+     * multiSelect: Click to show multi-select dropdown. Selected options shown as colored badges.
+     * date: Date picker (use input type="date")
+     * checkbox: Checkbox toggle
+     * url: Input with a link icon, clicking the icon opens URL in new tab
+     * email: Input with mailto link
+     * phone: Input with tel link
+     * status: Dropdown of status options with colored dots
+     * person: Show user avatar or initials
+     * createdTime: Read-only formatted date
+     * lastEditedTime: Read-only formatted date
+   - Each cell updates via PUT /api/pm-database-cells on blur or on selection change (for dropdowns).
+   - Last row: a "+" button row spanning all columns to add a new row. On click, creates a new row.
+
+C) Row actions: Hovering a row shows a 6-dot drag handle on the far left and a trash icon on the far right. Clicking trash deletes the row.
+
+Data fetching:
+- queryKey: ["pm-database", databaseId]
+- endpoint: GET /api/pm-databases/:id
+- queryKey: ["pm-database-rows", databaseId, { sortBy, sortDir, filterPropertyId, filterOperator, filterValue }]
+- endpoint: GET /api/pm-databases/:databaseId/rows (with query params)
+
+Mutations:
+- Update database: PATCH /api/pm-databases/:id, invalidate ["pm-database", databaseId]
+- Create property: POST /api/pm-databases/:databaseId/properties, invalidate ["pm-database", databaseId] and ["pm-database-rows", databaseId]
+- Update property: PATCH /api/pm-database-properties/:id, invalidate ["pm-database", databaseId]
+- Delete property: DELETE /api/pm-database-properties/:id, invalidate ["pm-database", databaseId] and ["pm-database-rows", databaseId]
+- Create row: POST /api/pm-databases/:databaseId/rows, invalidate ["pm-database-rows", databaseId]
+- Delete row: DELETE /api/pm-database-rows/:id, invalidate ["pm-database-rows", databaseId]
+- Update cell: PUT /api/pm-database-cells, invalidate ["pm-database-rows", databaseId]
+
+Loading state: Show a skeleton table with 3 columns and 5 rows.
+Empty state: Show "No rows yet. Click + to add your first row."
+
+data-testid: data-testid="db-table-{databaseId}", data-testid="db-add-row-{databaseId}", data-testid="db-cell-{rowId}-{propertyId}", data-testid="db-add-property-{databaseId}", data-testid="db-view-switcher-{view}".
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. INTEGRATION WITH BLOCK EDITOR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+In pm-editor.tsx, when rendering a block of type "database":
+- Import DatabaseTableView component
+- Render <DatabaseTableView databaseId={block.content.databaseId} /> 
+- The database block in the slash command menu gets a new entry: "Database" (Database icon from lucide-react) — "Add a new database with table view". When selected, it calls POST /api/pm-databases with the current pageId, then creates a block of type "database" with the returned databaseId.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. IMPORTANT NOTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- Cell value updates should debounce at 300ms for text/number cells.
+- Select/multiSelect dropdowns should support creating new options inline — type a new option name and press Enter to add it. This calls PATCH /api/pm-database-properties/:id to update the config.options array.
+- Use framer-motion AnimatePresence for row add/remove animations (fadeIn/fadeOut, 0.15s).
+- Do not create separate route files. All routes go in server/routes.ts.
+- Do not modify package.json, vite.config.ts, or drizzle.config.ts.

@@ -5,8 +5,9 @@ import {
   ArrowLeft, Plus, GripVertical, Trash2, ChevronRight,
   AlignLeft, Heading1, Heading2, Heading3, List, ListOrdered,
   CheckSquare, Quote, Code, Image, Minus, Loader2, Smile,
-  FileText, Star
+  FileText, Star, Table2
 } from "lucide-react";
+import DatabaseTableView from "@/components/pm/DatabaseTableView";
 import { Button } from "@/components/ui/button";
 import {
   useRef, useState, useEffect, useCallback, KeyboardEvent
@@ -48,6 +49,7 @@ const BLOCK_TYPES = [
   { type: "code",          icon: Code,            label: "Code",          desc: "Write code with syntax highlighting" },
   { type: "divider",       icon: Minus,           label: "Divider",       desc: "Visually divide the page" },
   { type: "image",         icon: Image,           label: "Image",         desc: "Embed an image by URL" },
+  { type: "database",      icon: Table2,          label: "Database",      desc: "Add a structured database table" },
 ];
 
 const EMOJIS = ["📝","📋","📌","🎯","💡","🔥","✅","🚀","⭐","💎","🎨","📊","🔧","💼","🌟","❤️","🎉","🏆","💪","🧠","📚","🌈","🎵","🍀","🦋","🌺","🎭","🏠","🌍","⚡"];
@@ -277,6 +279,10 @@ function BlockRenderer({
             />
           </div>
         );
+      case "database": {
+        const dbId = (block.content as any)?.databaseId;
+        return dbId ? <DatabaseTableView databaseId={dbId} /> : <div className="text-xs text-muted-foreground">Database not configured</div>;
+      }
       default:
         return (
           <div
@@ -388,6 +394,11 @@ export default function PmEditorPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pm-blocks", pageId] }),
   });
 
+  const createDatabase = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/pm-databases`, { pageId }).then(r => r.json()),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pm-blocks", pageId] }),
+  });
+
   const handleTitleBlur = () => {
     const newTitle = titleRef.current?.innerText?.trim() || "Untitled";
     if (newTitle !== page?.title) {
@@ -396,14 +407,23 @@ export default function PmEditorPage() {
   };
 
   const handleUpdateBlock = useCallback((id: number, content: Record<string, any>, type?: string) => {
+    if (type === "database") {
+      createDatabase.mutate();
+      deleteBlock.mutate(id);
+      return;
+    }
     updateBlock.mutate({ id, content, ...(type ? { type } : {}) });
-  }, [updateBlock]);
+  }, [updateBlock, createDatabase, deleteBlock]);
 
   const handleDeleteBlock = useCallback((id: number) => {
     deleteBlock.mutate(id);
   }, [deleteBlock]);
 
   const handleAddBelow = useCallback((afterBlock: PmBlock, type = "paragraph") => {
+    if (type === "database") {
+      createDatabase.mutate();
+      return;
+    }
     const sortedBlocks = [...(blocks || [])].sort((a, b) => a.sortOrder - b.sortOrder);
     const afterIndex = sortedBlocks.findIndex(b => b.id === afterBlock.id);
     const nextBlock = sortedBlocks[afterIndex + 1];
@@ -411,7 +431,7 @@ export default function PmEditorPage() {
       ? (afterBlock.sortOrder + nextBlock.sortOrder) / 2
       : afterBlock.sortOrder + 1;
     createBlock.mutate({ type, content: type === "divider" ? {} : { text: "" }, sortOrder: newOrder });
-  }, [blocks, createBlock]);
+  }, [blocks, createBlock, createDatabase]);
 
   const sortedBlocks = [...(blocks || [])].sort((a, b) => a.sortOrder - b.sortOrder);
 

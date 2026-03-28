@@ -2685,3 +2685,65 @@ export const pmPageActivity = pgTable("pm_page_activity", {
 export const insertPmPageActivitySchema = createInsertSchema(pmPageActivity).omit({ id: true, createdAt: true });
 export type InsertPmPageActivity = typeof pmPageActivity.$inferInsert;
 export type PmPageActivity = typeof pmPageActivity.$inferSelect;
+
+// ============================================================
+// PM WORKSPACE — Phase 2: Database Engine
+// ============================================================
+
+export const pmDatabases = pgTable("pm_databases", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  pageId: integer("page_id").notNull(),
+  title: text("title").notNull().default("Untitled Database"),
+  icon: text("icon").default(""),
+  defaultView: text("default_view").notNull().default("table"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPmDatabaseSchema = createInsertSchema(pmDatabases).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPmDatabase = typeof pmDatabases.$inferInsert;
+export type PmDatabase = typeof pmDatabases.$inferSelect;
+
+export const pmDatabaseProperties = pgTable("pm_database_properties", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  databaseId: integer("database_id").notNull(),
+  name: text("name").notNull(),
+  type: text("type").notNull().default("text"),
+  config: jsonb("config").notNull().default({}),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isVisible: boolean("is_visible").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPmDatabasePropertySchema = createInsertSchema(pmDatabaseProperties).omit({ id: true, createdAt: true });
+export type InsertPmDatabaseProperty = typeof pmDatabaseProperties.$inferInsert;
+export type PmDatabaseProperty = typeof pmDatabaseProperties.$inferSelect;
+
+export const pmDatabaseRows = pgTable("pm_database_rows", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  databaseId: integer("database_id").notNull(),
+  linkedPageId: integer("linked_page_id"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPmDatabaseRowSchema = createInsertSchema(pmDatabaseRows).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPmDatabaseRow = typeof pmDatabaseRows.$inferInsert;
+export type PmDatabaseRow = typeof pmDatabaseRows.$inferSelect;
+
+export const pmDatabaseCells = pgTable("pm_database_cells", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  rowId: integer("row_id").notNull(),
+  propertyId: integer("property_id").notNull(),
+  value: jsonb("value").notNull().default({}),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPmDatabaseCellSchema = createInsertSchema(pmDatabaseCells).omit({ id: true, createdAt: true });
+export type InsertPmDatabaseCell = typeof pmDatabaseCells.$inferInsert;
+export type PmDatabaseCell = typeof pmDatabaseCells.$inferSelect;

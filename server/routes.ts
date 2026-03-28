@@ -49,6 +49,7 @@ import {
   aiTemplates, voiceNotes, teamInsightSnapshots, externalIntegrations,
   onboardingProgress, workspaceMembers,
   pmPages, pmBlocks, pmPageActivity,
+  pmDatabases, pmDatabaseProperties, pmDatabaseRows, pmDatabaseCells,
 } from "../shared/schema";
 import { inArray, isNotNull } from "drizzle-orm";
 
@@ -7393,6 +7394,264 @@ Provide specific, actionable insights. Be encouraging but honest.`,
       await db.update(meetingIntelligence).set({ processingStatus: "failed", processingError: error.message }).where(eq(meetingIntelligence.id, intelligenceId));
     }
   }
+
+  // ============================================================
+  // PM WORKSPACE — Phase 2: Database Engine Routes
+  // ============================================================
+
+  const defaultStatusOptions = [
+    { id: crypto.randomUUID(), name: "Not Started", color: "gray" },
+    { id: crypto.randomUUID(), name: "In Progress", color: "blue" },
+    { id: crypto.randomUUID(), name: "Done", color: "green" },
+  ];
+
+  app.post("/api/pm-databases", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const body = z.object({ pageId: z.number(), title: z.string().optional(), defaultView: z.string().optional() }).parse(req.body);
+      const [db2] = await db.insert(pmDatabases).values({ userId, pageId: body.pageId, title: body.title || "Untitled Database", defaultView: body.defaultView || "table" }).returning();
+      await db.insert(pmDatabaseProperties).values([
+        { userId, databaseId: db2.id, name: "Name", type: "text", config: {}, sortOrder: 0 },
+        { userId, databaseId: db2.id, name: "Status", type: "status", config: { options: defaultStatusOptions }, sortOrder: 1 },
+        { userId, databaseId: db2.id, name: "Date", type: "date", config: { format: "full", includeTime: false }, sortOrder: 2 },
+      ]);
+      const blocks2 = await db.select({ sortOrder: pmBlocks.sortOrder }).from(pmBlocks).where(and(eq(pmBlocks.pageId, body.pageId), eq(pmBlocks.userId, userId)));
+      const maxBlockOrder = blocks2.reduce((m, b) => Math.max(m, b.sortOrder), -1);
+      await db.insert(pmBlocks).values({ userId, pageId: body.pageId, type: "database", content: { databaseId: db2.id }, sortOrder: maxBlockOrder + 1 });
+      const properties = await db.select().from(pmDatabaseProperties).where(eq(pmDatabaseProperties.databaseId, db2.id)).orderBy(asc(pmDatabaseProperties.sortOrder));
+      return res.json({ ...db2, properties });
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/pm-databases/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const [database] = await db.select().from(pmDatabases).where(and(eq(pmDatabases.id, id), eq(pmDatabases.userId, userId)));
+      if (!database) return res.status(404).json({ error: "Not found" });
+      const properties = await db.select().from(pmDatabaseProperties).where(and(eq(pmDatabaseProperties.databaseId, id), eq(pmDatabaseProperties.userId, userId))).orderBy(asc(pmDatabaseProperties.sortOrder));
+      const rows = await db.select().from(pmDatabaseRows).where(and(eq(pmDatabaseRows.databaseId, id), eq(pmDatabaseRows.userId, userId))).orderBy(asc(pmDatabaseRows.sortOrder));
+      const rowIds = rows.map(r => r.id);
+      const cells = rowIds.length ? await db.select().from(pmDatabaseCells).where(and(inArray(pmDatabaseCells.rowId, rowIds), eq(pmDatabaseCells.userId, userId))) : [];
+      const rowsWithCells = rows.map(r => ({ ...r, cells: cells.filter(c => c.rowId === r.id) }));
+      return res.json({ ...database, properties, rows: rowsWithCells });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.patch("/api/pm-databases/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const body = z.object({ title: z.string().optional(), defaultView: z.string().optional(), icon: z.string().optional() }).parse(req.body);
+      const [updated] = await db.update(pmDatabases).set({ ...body, updatedAt: new Date() }).where(and(eq(pmDatabases.id, id), eq(pmDatabases.userId, userId))).returning();
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      return res.json(updated);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.delete("/api/pm-databases/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const rows = await db.select({ id: pmDatabaseRows.id }).from(pmDatabaseRows).where(and(eq(pmDatabaseRows.databaseId, id), eq(pmDatabaseRows.userId, userId)));
+      const rowIds = rows.map(r => r.id);
+      if (rowIds.length) await db.delete(pmDatabaseCells).where(and(inArray(pmDatabaseCells.rowId, rowIds), eq(pmDatabaseCells.userId, userId)));
+      await db.delete(pmDatabaseRows).where(and(eq(pmDatabaseRows.databaseId, id), eq(pmDatabaseRows.userId, userId)));
+      await db.delete(pmDatabaseProperties).where(and(eq(pmDatabaseProperties.databaseId, id), eq(pmDatabaseProperties.userId, userId)));
+      const [deleted] = await db.delete(pmDatabases).where(and(eq(pmDatabases.id, id), eq(pmDatabases.userId, userId))).returning();
+      if (deleted) {
+        await db.delete(pmBlocks).where(and(eq(pmBlocks.pageId, deleted.pageId), eq(pmBlocks.userId, userId), eq(pmBlocks.type, "database")));
+      }
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/pm-databases/:databaseId/properties", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const databaseId = parseInt(req.params.databaseId);
+      const body = z.object({ name: z.string(), type: z.string(), config: z.any().optional() }).parse(req.body);
+      const existing = await db.select({ sortOrder: pmDatabaseProperties.sortOrder }).from(pmDatabaseProperties).where(and(eq(pmDatabaseProperties.databaseId, databaseId), eq(pmDatabaseProperties.userId, userId)));
+      const maxOrder = existing.reduce((m, p) => Math.max(m, p.sortOrder), -1);
+      const [prop] = await db.insert(pmDatabaseProperties).values({ userId, databaseId, name: body.name, type: body.type, config: body.config || {}, sortOrder: maxOrder + 1 }).returning();
+      return res.json(prop);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.patch("/api/pm-database-properties/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const body = z.object({ name: z.string().optional(), type: z.string().optional(), config: z.any().optional(), sortOrder: z.number().optional(), isVisible: z.boolean().optional() }).parse(req.body);
+      const [updated] = await db.update(pmDatabaseProperties).set({ ...body }).where(and(eq(pmDatabaseProperties.id, id), eq(pmDatabaseProperties.userId, userId))).returning();
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      return res.json(updated);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.delete("/api/pm-database-properties/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      await db.delete(pmDatabaseCells).where(and(eq(pmDatabaseCells.propertyId, id), eq(pmDatabaseCells.userId, userId)));
+      await db.delete(pmDatabaseProperties).where(and(eq(pmDatabaseProperties.id, id), eq(pmDatabaseProperties.userId, userId)));
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/pm-databases/:databaseId/rows", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const databaseId = parseInt(req.params.databaseId);
+      const body = z.object({ cells: z.array(z.object({ propertyId: z.number(), value: z.any() })).optional() }).parse(req.body);
+      const existing = await db.select({ sortOrder: pmDatabaseRows.sortOrder }).from(pmDatabaseRows).where(and(eq(pmDatabaseRows.databaseId, databaseId), eq(pmDatabaseRows.userId, userId)));
+      const maxOrder = existing.reduce((m, r) => Math.max(m, r.sortOrder), -1);
+      const firstProp = await db.select().from(pmDatabaseProperties).where(and(eq(pmDatabaseProperties.databaseId, databaseId), eq(pmDatabaseProperties.userId, userId))).orderBy(asc(pmDatabaseProperties.sortOrder)).limit(1);
+      let linkedPageId: number | undefined;
+      if (firstProp.length && firstProp[0].type === "text") {
+        const nameCellValue = body.cells?.find(c => c.propertyId === firstProp[0].id)?.value;
+        const rowTitle = (nameCellValue as any)?.text || "Untitled";
+        const dbInfo = await db.select().from(pmDatabases).where(and(eq(pmDatabases.id, databaseId), eq(pmDatabases.userId, userId))).limit(1);
+        if (dbInfo.length) {
+          const [linkedPage] = await db.insert(pmPages).values({ userId, title: rowTitle, parentPageId: null, sortOrder: 0 }).returning();
+          linkedPageId = linkedPage.id;
+        }
+      }
+      const [row] = await db.insert(pmDatabaseRows).values({ userId, databaseId, linkedPageId: linkedPageId ?? null, sortOrder: maxOrder + 1 }).returning();
+      const createdCells: any[] = [];
+      if (body.cells?.length) {
+        const inserted = await db.insert(pmDatabaseCells).values(body.cells.map(c => ({ userId, rowId: row.id, propertyId: c.propertyId, value: c.value }))).returning();
+        createdCells.push(...inserted);
+      }
+      return res.json({ ...row, cells: createdCells });
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.patch("/api/pm-database-rows/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const { sortOrder } = z.object({ sortOrder: z.number() }).parse(req.body);
+      const [updated] = await db.update(pmDatabaseRows).set({ sortOrder, updatedAt: new Date() }).where(and(eq(pmDatabaseRows.id, id), eq(pmDatabaseRows.userId, userId))).returning();
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      return res.json(updated);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.delete("/api/pm-database-rows/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const [row] = await db.select().from(pmDatabaseRows).where(and(eq(pmDatabaseRows.id, id), eq(pmDatabaseRows.userId, userId)));
+      await db.delete(pmDatabaseCells).where(and(eq(pmDatabaseCells.rowId, id), eq(pmDatabaseCells.userId, userId)));
+      await db.delete(pmDatabaseRows).where(and(eq(pmDatabaseRows.id, id), eq(pmDatabaseRows.userId, userId)));
+      if (row?.linkedPageId) await db.delete(pmPages).where(and(eq(pmPages.id, row.linkedPageId), eq(pmPages.userId, userId)));
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.put("/api/pm-database-cells", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const body = z.object({ rowId: z.number(), propertyId: z.number(), value: z.any() }).parse(req.body);
+      const [existing] = await db.select().from(pmDatabaseCells).where(and(eq(pmDatabaseCells.rowId, body.rowId), eq(pmDatabaseCells.propertyId, body.propertyId), eq(pmDatabaseCells.userId, userId)));
+      let cell;
+      if (existing) {
+        [cell] = await db.update(pmDatabaseCells).set({ value: body.value }).where(eq(pmDatabaseCells.id, existing.id)).returning();
+      } else {
+        [cell] = await db.insert(pmDatabaseCells).values({ userId, rowId: body.rowId, propertyId: body.propertyId, value: body.value }).returning();
+      }
+      await db.update(pmDatabaseRows).set({ updatedAt: new Date() }).where(eq(pmDatabaseRows.id, body.rowId));
+      return res.json(cell);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/pm-databases/:databaseId/rows", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const databaseId = parseInt(req.params.databaseId);
+      const { sortBy, sortDir, filterPropertyId, filterOperator, filterValue } = req.query as Record<string, string>;
+      const rows = await db.select().from(pmDatabaseRows).where(and(eq(pmDatabaseRows.databaseId, databaseId), eq(pmDatabaseRows.userId, userId))).orderBy(asc(pmDatabaseRows.sortOrder));
+      const rowIds = rows.map(r => r.id);
+      const cells = rowIds.length ? await db.select().from(pmDatabaseCells).where(and(inArray(pmDatabaseCells.rowId, rowIds), eq(pmDatabaseCells.userId, userId))) : [];
+      let rowsWithCells = rows.map(r => ({ ...r, cells: cells.filter(c => c.rowId === r.id) }));
+      if (filterPropertyId && filterOperator) {
+        const propId = parseInt(filterPropertyId);
+        rowsWithCells = rowsWithCells.filter(row => {
+          const cell = row.cells.find(c => c.propertyId === propId);
+          const val = (cell?.value as any)?.text ?? (cell?.value as any)?.number ?? "";
+          if (filterOperator === "isEmpty") return !val;
+          if (filterOperator === "isNotEmpty") return !!val;
+          if (filterOperator === "equals") return String(val) === String(filterValue);
+          if (filterOperator === "contains") return String(val).toLowerCase().includes(String(filterValue).toLowerCase());
+          if (filterOperator === "gt") return Number(val) > Number(filterValue);
+          if (filterOperator === "lt") return Number(val) < Number(filterValue);
+          return true;
+        });
+      }
+      if (sortBy) {
+        const propId = parseInt(sortBy);
+        rowsWithCells.sort((a, b) => {
+          const av = (a.cells.find(c => c.propertyId === propId)?.value as any)?.text ?? (a.cells.find(c => c.propertyId === propId)?.value as any)?.number ?? "";
+          const bv = (b.cells.find(c => c.propertyId === propId)?.value as any)?.text ?? (b.cells.find(c => c.propertyId === propId)?.value as any)?.number ?? "";
+          return sortDir === "desc" ? String(bv).localeCompare(String(av)) : String(av).localeCompare(String(bv));
+        });
+      }
+      return res.json(rowsWithCells);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.patch("/api/pm-database-properties/reorder", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { properties: propUpdates } = z.object({ properties: z.array(z.object({ id: z.number(), sortOrder: z.number() })) }).parse(req.body);
+      await Promise.all(propUpdates.map(p => db.update(pmDatabaseProperties).set({ sortOrder: p.sortOrder }).where(and(eq(pmDatabaseProperties.id, p.id), eq(pmDatabaseProperties.userId, userId)))));
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.patch("/api/pm-database-rows/reorder", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { rows: rowUpdates } = z.object({ rows: z.array(z.object({ id: z.number(), sortOrder: z.number() })) }).parse(req.body);
+      await Promise.all(rowUpdates.map(r => db.update(pmDatabaseRows).set({ sortOrder: r.sortOrder }).where(and(eq(pmDatabaseRows.id, r.id), eq(pmDatabaseRows.userId, userId)))));
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/pm-databases/:id/duplicate", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const [orig] = await db.select().from(pmDatabases).where(and(eq(pmDatabases.id, id), eq(pmDatabases.userId, userId)));
+      if (!orig) return res.status(404).json({ error: "Not found" });
+      const [newDb] = await db.insert(pmDatabases).values({ userId, pageId: orig.pageId, title: orig.title + " (Copy)", defaultView: orig.defaultView, icon: orig.icon || "" }).returning();
+      const props = await db.select().from(pmDatabaseProperties).where(and(eq(pmDatabaseProperties.databaseId, id), eq(pmDatabaseProperties.userId, userId)));
+      const propIdMap: Record<number, number> = {};
+      for (const p of props) {
+        const [newProp] = await db.insert(pmDatabaseProperties).values({ userId, databaseId: newDb.id, name: p.name, type: p.type, config: p.config as any, sortOrder: p.sortOrder }).returning();
+        propIdMap[p.id] = newProp.id;
+      }
+      const rows = await db.select().from(pmDatabaseRows).where(and(eq(pmDatabaseRows.databaseId, id), eq(pmDatabaseRows.userId, userId)));
+      for (const r of rows) {
+        const [newRow] = await db.insert(pmDatabaseRows).values({ userId, databaseId: newDb.id, sortOrder: r.sortOrder }).returning();
+        const cellsForRow = await db.select().from(pmDatabaseCells).where(and(eq(pmDatabaseCells.rowId, r.id), eq(pmDatabaseCells.userId, userId)));
+        if (cellsForRow.length) {
+          await db.insert(pmDatabaseCells).values(cellsForRow.map(c => ({ userId, rowId: newRow.id, propertyId: propIdMap[c.propertyId] ?? c.propertyId, value: c.value as any })));
+        }
+      }
+      return res.json(newDb);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/pm-databases/by-page/:pageId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const pageId = parseInt(req.params.pageId);
+      const databases = await db.select().from(pmDatabases).where(and(eq(pmDatabases.pageId, pageId), eq(pmDatabases.userId, userId)));
+      return res.json(databases);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
 
   // Register Sprint 1 AI cron jobs
   setupAiCronJobs();
