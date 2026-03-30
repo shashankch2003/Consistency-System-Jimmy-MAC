@@ -33,6 +33,7 @@ import BadHabitsPage from "@/pages/dashboard/bad-habits";
 import HourlyPage from "@/pages/dashboard/hourly";
 import TaskBankPage from "@/pages/dashboard/task-bank";
 import DailyScorePage from "@/pages/dashboard/daily-score";
+import AppBlockPage from "@/pages/dashboard/app-block";
 import NotesPage from "@/pages/dashboard/notes";
 import CommunityPage from "@/pages/dashboard/community";
 import AdminPage from "@/pages/dashboard/admin";
@@ -117,6 +118,11 @@ function Router() {
       <Route path="/dashboard/daily-score">
         <DashboardLayout>
           <DailyScorePage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/app-block">
+        <DashboardLayout>
+          <AppBlockPage />
         </DashboardLayout>
       </Route>
       <Route path="/dashboard/good-habits">
