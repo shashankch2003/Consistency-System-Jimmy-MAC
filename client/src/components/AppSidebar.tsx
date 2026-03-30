@@ -57,7 +57,6 @@ const menuItems = [
   { title: "Task Bank", icon: Lightbulb, url: "/dashboard/task-bank" },
   { title: "Daily Tasks", icon: Layout, url: "/dashboard/tasks" },
   { title: "Goals", icon: Target, url: "/dashboard/goals" },
-  { title: "OKR Goals", icon: Target, url: "/dashboard/okr-goals" },
   { title: "Good Habits", icon: CheckCircle, url: "/dashboard/good-habits" },
   { title: "Bad Habits", icon: XCircle, url: "/dashboard/bad-habits" },
   { title: "Hourly Tracker", icon: Clock, url: "/dashboard/hourly" },
