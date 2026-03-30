@@ -1,317 +1,732 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Bot, Sparkles, Search, Brain, Plus, MessageSquare, Trash2,
+  Settings, Send, Loader2, ChevronRight, MoreHorizontal, Pencil, Menu, X
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Bot, Plus, Send, ChevronDown, ChevronRight, Zap, Search, BookOpen, CheckSquare, MessageSquare, Loader2, X, Sparkles } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-const CAPABILITIES = [
-  { id: "read_tasks", label: "Read Tasks" },
-  { id: "write_tasks", label: "Write Tasks" },
-  { id: "search_workspace", label: "Search Workspace" },
-  { id: "read_pages", label: "Read Pages/Notes" },
-  { id: "send_messages", label: "Send Messages" },
-  { id: "read_messages", label: "Read Messages" },
-];
+type Provider = { id: string; name: string; icon: string; models: string[] };
+type Project = { id: number; userId: string; name: string; description: string; provider: string; model: string; systemPrompt: string; isArchived: boolean; createdAt: string; updatedAt: string };
+type Chat = { id: number; userId: string; projectId: number; title: string; provider: string; model: string; isArchived: boolean; createdAt: string; updatedAt: string };
+type Message = { id: number; userId: string; chatId: number; role: string; content: string; provider: string; model: string; tokenCount: number; createdAt: string };
 
-const TEMPLATES = [
-  { id: "sprint_status", label: "Sprint Status Bot", icon: "📊", desc: "Daily sprint status reports" },
-  { id: "qa_knowledge", label: "Q&A Knowledge Bot", icon: "🧠", desc: "Answer questions from workspace" },
-  { id: "meeting_prep", label: "Meeting Prep Agent", icon: "📅", desc: "Context before meetings" },
-  { id: "onboarding", label: "Onboarding Agent", icon: "👋", desc: "Guide new members" },
-  { id: "task_triage", label: "Task Triage Agent", icon: "🎯", desc: "Auto-prioritize tasks" },
-  { id: "weekly_digest", label: "Weekly Digest Agent", icon: "📰", desc: "Friday summary" },
-];
+const providerIcons: Record<string, LucideIcon> = {
+  chatgpt: Bot,
+  gemini: Sparkles,
+  perplexity: Search,
+  claude: Brain,
+};
+
+const providerColors: Record<string, string> = {
+  chatgpt: "#10A37F",
+  gemini: "#4285F4",
+  perplexity: "#20808D",
+  claude: "#D97706",
+};
+
+function ProviderIcon({ providerId, size = 16 }: { providerId: string; size?: number }) {
+  const Icon = providerIcons[providerId] || Bot;
+  return <Icon size={size} style={{ color: providerColors[providerId] || "currentColor" }} />;
+}
 
 export default function AiAgentsPage() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [selectedAgent, setSelectedAgent] = useState<any>(null);
-  const [chatInput, setChatInput] = useState("");
-  const [conversationId, setConversationId] = useState<number | null>(null);
-  const [messages, setMessages] = useState<any[]>([]);
-  const [showBuilder, setShowBuilder] = useState(false);
-  const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>({});
-  const [builderForm, setBuilderForm] = useState({ name: "", description: "", icon: "🤖", systemPrompt: "", model: "gpt-4o", temperature: 0.7, capabilities: [] as string[], triggerType: "manual", visibility: "workspace" });
-  const [generatingInstructions, setGeneratingInstructions] = useState(false);
 
-  const { data: agents = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/agents"] });
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const [selectedChatId, setSelectedChatId] = useState<number | null>(null);
+  const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set());
 
-  const chatMutation = useMutation({
-    mutationFn: async (msg: string) => apiRequest("POST", `/api/agents/${selectedAgent.id}/chat`, { message: msg, conversationId }),
-    onSuccess: (data: any) => {
-      setConversationId(data.conversationId);
-      setMessages(prev => [...prev, { role: "agent", content: data.response, steps: data.steps }]);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectDesc, setNewProjectDesc] = useState("");
+  const [newProjectProvider, setNewProjectProvider] = useState("chatgpt");
+  const [newProjectModel, setNewProjectModel] = useState("gpt-4o-mini");
+
+  const [messageInput, setMessageInput] = useState("");
+  const [editingProjectName, setEditingProjectName] = useState(false);
+  const [projectNameInput, setProjectNameInput] = useState("");
+  const [systemPromptInput, setSystemPromptInput] = useState("");
+  const [renamingChatId, setRenamingChatId] = useState<number | null>(null);
+  const [renameChatTitle, setRenameChatTitle] = useState("");
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const { data: providers = [] } = useQuery<Provider[]>({ queryKey: ["/api/ai-agent-providers"] });
+  const { data: projects = [], isLoading: projectsLoading } = useQuery<Project[]>({ queryKey: ["/api/ai-agent-projects"] });
+  const { data: chats = [] } = useQuery<Chat[]>({
+    queryKey: ["/api/ai-agent-projects", selectedProjectId, "chats"],
+    queryFn: () => fetch(`/api/ai-agent-projects/${selectedProjectId}/chats`).then(r => r.json()),
+    enabled: !!selectedProjectId,
+  });
+  const { data: messages = [] } = useQuery<Message[]>({
+    queryKey: ["/api/ai-agent-chats", selectedChatId, "messages"],
+    queryFn: () => fetch(`/api/ai-agent-chats/${selectedChatId}/messages`).then(r => r.json()),
+    enabled: !!selectedChatId,
+  });
+
+  const selectedProject = projects.find(p => p.id === selectedProjectId) || null;
+  const selectedChat = chats.find(c => c.id === selectedChatId) || null;
+
+  useEffect(() => {
+    if (selectedProject) setSystemPromptInput(selectedProject.systemPrompt);
+  }, [selectedProject?.id]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isSending]);
+
+  const createProjectMutation = useMutation({
+    mutationFn: (data: object) => apiRequest("POST", "/api/ai-agent-projects", data),
+    onSuccess: async (res) => {
+      const project = await res.json();
+      await queryClient.invalidateQueries({ queryKey: ["/api/ai-agent-projects"] });
+      setSelectedProjectId(project.id);
+      setSelectedChatId(null);
+      setExpandedProjects(prev => new Set([...prev, project.id]));
+      setIsNewProjectDialogOpen(false);
+      setNewProjectName("");
+      setNewProjectDesc("");
+      setNewProjectProvider("chatgpt");
+      setNewProjectModel("gpt-4o-mini");
     },
-    onError: () => toast({ title: "Chat failed", variant: "destructive" }),
+    onError: () => toast({ title: "Failed to create project. Please try again.", variant: "destructive" }),
   });
 
-  const createFromTemplate = useMutation({
-    mutationFn: (templateId: string) => apiRequest("POST", "/api/agents/from-template", { templateId }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/agents"] }); toast({ title: "Agent created from template" }); },
-    onError: () => toast({ title: "Failed to create agent", variant: "destructive" }),
+  const updateProjectMutation = useMutation({
+    mutationFn: ({ id, ...data }: { id: number } & Record<string, unknown>) =>
+      apiRequest("PATCH", `/api/ai-agent-projects/${id}`, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/ai-agent-projects"] }),
   });
 
-  const createAgent = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/agents", data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/agents"] }); setShowBuilder(false); toast({ title: "Agent created" }); },
-    onError: () => toast({ title: "Failed to create agent", variant: "destructive" }),
+  const deleteProjectMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/ai-agent-projects/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/ai-agent-projects"] });
+      setSelectedProjectId(null);
+      setSelectedChatId(null);
+    },
   });
 
-  const deleteAgent = useMutation({
-    mutationFn: (id: number) => apiRequest("DELETE", `/api/agents/${id}`, {}),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/agents"] }); setSelectedAgent(null); toast({ title: "Agent deactivated" }); },
+  const createChatMutation = useMutation({
+    mutationFn: ({ projectId, title }: { projectId: number; title?: string }) =>
+      apiRequest("POST", `/api/ai-agent-projects/${projectId}/chats`, { title }),
+    onSuccess: async (res) => {
+      const chat = await res.json();
+      await queryClient.invalidateQueries({ queryKey: ["/api/ai-agent-projects", selectedProjectId, "chats"] });
+      setSelectedChatId(chat.id);
+      setSidebarOpen(false);
+    },
+    onError: () => toast({ title: "Failed to create chat. Please try again.", variant: "destructive" }),
   });
 
-  async function generateInstructions() {
-    if (!builderForm.description) return;
-    setGeneratingInstructions(true);
+  const updateChatMutation = useMutation({
+    mutationFn: ({ id, title }: { id: number; title: string }) =>
+      apiRequest("PATCH", `/api/ai-agent-chats/${id}`, { title }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["/api/ai-agent-projects", selectedProjectId, "chats"] }),
+  });
+
+  const deleteChatMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/ai-agent-chats/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/ai-agent-projects", selectedProjectId, "chats"] });
+      setSelectedChatId(null);
+    },
+  });
+
+  const sendMessage = async () => {
+    if (!messageInput.trim() || isSending || !selectedChatId) return;
+    const content = messageInput.trim();
+    setMessageInput("");
+    setIsSending(true);
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
     try {
-      const data: any = await apiRequest("POST", "/api/agents/generate-instructions", { description: builderForm.description });
-      setBuilderForm(f => ({ ...f, systemPrompt: data.instructions }));
-    } finally { setGeneratingInstructions(false); }
-  }
+      await apiRequest("POST", `/api/ai-agent-chats/${selectedChatId}/messages`, { content });
+      await queryClient.invalidateQueries({ queryKey: ["/api/ai-agent-chats", selectedChatId, "messages"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/ai-agent-projects", selectedProjectId, "chats"] });
+    } catch {
+      toast({ title: "Failed to send message. Please try again.", variant: "destructive" });
+    } finally {
+      setIsSending(false);
+    }
+  };
 
-  function selectAgent(agent: any) {
-    setSelectedAgent(agent);
-    setMessages([]);
-    setConversationId(null);
-  }
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
 
-  function sendMessage() {
-    if (!chatInput.trim() || !selectedAgent) return;
-    const msg = chatInput.trim();
-    setMessages(prev => [...prev, { role: "user", content: msg }]);
-    setChatInput("");
-    chatMutation.mutate(msg);
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setMessageInput(e.target.value);
+    e.target.style.height = "auto";
+    e.target.style.height = Math.min(e.target.scrollHeight, 144) + "px";
+  };
+
+  const handleProviderForNewProject = (pid: string) => {
+    setNewProjectProvider(pid);
+    const p = providers.find(pr => pr.id === pid);
+    if (p) setNewProjectModel(p.models[0]);
+  };
+
+  const toggleProject = (id: number) => {
+    setExpandedProjects(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectProject = (id: number) => {
+    setSelectedProjectId(id);
+    setSelectedChatId(null);
+    if (!expandedProjects.has(id)) {
+      setExpandedProjects(prev => new Set([...prev, id]));
+    }
+    setSidebarOpen(false);
+  };
+
+  const selectChat = (chatId: number, projectId: number) => {
+    setSelectedProjectId(projectId);
+    setSelectedChatId(chatId);
+    setSidebarOpen(false);
+  };
+
+  const SidebarContent = () => (
+    <div className="flex flex-col h-full">
+      <div className="p-3 border-b">
+        <Dialog open={isNewProjectDialogOpen} onOpenChange={setIsNewProjectDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="w-full gap-2" size="sm" data-testid="ai-agents-new-project-btn">
+              <Plus size={14} /> New Project
+            </Button>
+          </DialogTrigger>
+          <DialogContent onKeyDown={e => { if (e.key === "Escape") setIsNewProjectDialogOpen(false); }}>
+            <DialogHeader>
+              <DialogTitle>Create New Project</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-3 mt-2">
+              <div>
+                <label className="text-sm font-medium mb-1 block">Project Name *</label>
+                <Input
+                  placeholder="My AI Project"
+                  value={newProjectName}
+                  onChange={e => setNewProjectName(e.target.value.slice(0, 100))}
+                  maxLength={100}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Description</label>
+                <Textarea
+                  placeholder="What is this project about?"
+                  value={newProjectDesc}
+                  onChange={e => setNewProjectDesc(e.target.value.slice(0, 1000))}
+                  rows={3}
+                  maxLength={1000}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">AI Provider</label>
+                <Select value={newProjectProvider} onValueChange={handleProviderForNewProject}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {providers.map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Model</label>
+                <Select value={newProjectModel} onValueChange={setNewProjectModel}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {(providers.find(p => p.id === newProjectProvider)?.models || []).map(m => (
+                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                className="mt-1"
+                disabled={!newProjectName.trim() || createProjectMutation.isPending}
+                onClick={() =>
+                  createProjectMutation.mutate({
+                    name: newProjectName.trim(),
+                    description: newProjectDesc,
+                    provider: newProjectProvider,
+                    model: newProjectModel,
+                  })
+                }
+              >
+                {createProjectMutation.isPending ? <Loader2 className="animate-spin mr-2" size={14} /> : null}
+                Create Project
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <ScrollArea className="flex-1">
+        <div className="p-2 space-y-1">
+          {projects.map(project => {
+            const isExpanded = expandedProjects.has(project.id);
+            const projectChats = selectedProjectId === project.id ? chats : [];
+            const isSelected = selectedProjectId === project.id && !selectedChatId;
+            return (
+              <div key={project.id}>
+                <div
+                  className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-accent/50 transition-colors group ${isSelected ? "bg-accent" : ""}`}
+                  data-testid={`ai-agents-project-item-${project.id}`}
+                  onClick={() => { toggleProject(project.id); selectProject(project.id); }}
+                >
+                  <ChevronRight
+                    size={12}
+                    className={`transition-transform flex-shrink-0 ${isExpanded ? "rotate-90" : ""}`}
+                  />
+                  <ProviderIcon providerId={project.provider} size={14} />
+                  <span className="text-sm flex-1 truncate font-medium">{project.name}</span>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
+                      <button className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-accent">
+                        <MoreHorizontal size={12} />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={() => deleteProjectMutation.mutate(project.id)}
+                        className="text-destructive"
+                      >
+                        Delete Project
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+                <AnimatePresence>
+                  {isExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="ml-4 pl-2 border-l border-border/50 space-y-0.5 py-1">
+                        {projectChats.map(chat => (
+                          <div
+                            key={chat.id}
+                            className={`flex items-center gap-2 px-2 py-1 rounded-md cursor-pointer hover:bg-accent/50 transition-colors group text-sm ${selectedChatId === chat.id ? "bg-accent/50" : ""}`}
+                            data-testid={`ai-agents-chat-item-${chat.id}`}
+                            onClick={() => selectChat(chat.id, project.id)}
+                          >
+                            <MessageSquare size={12} className="flex-shrink-0 text-muted-foreground" />
+                            {renamingChatId === chat.id ? (
+                              <input
+                                autoFocus
+                                className="flex-1 text-sm bg-transparent border-b border-border outline-none"
+                                value={renameChatTitle}
+                                onChange={e => setRenameChatTitle(e.target.value)}
+                                onBlur={() => {
+                                  if (renameChatTitle.trim())
+                                    updateChatMutation.mutate({ id: chat.id, title: renameChatTitle.trim() });
+                                  setRenamingChatId(null);
+                                }}
+                                onKeyDown={e => {
+                                  if (e.key === "Enter") {
+                                    if (renameChatTitle.trim())
+                                      updateChatMutation.mutate({ id: chat.id, title: renameChatTitle.trim() });
+                                    setRenamingChatId(null);
+                                  }
+                                  if (e.key === "Escape") setRenamingChatId(null);
+                                }}
+                                onClick={e => e.stopPropagation()}
+                              />
+                            ) : (
+                              <span className="flex-1 truncate">{chat.title}</span>
+                            )}
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
+                                <button className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-accent">
+                                  <MoreHorizontal size={12} />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setRenamingChatId(chat.id);
+                                    setRenameChatTitle(chat.title);
+                                  }}
+                                >
+                                  Rename
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="text-destructive"
+                                  onClick={() => deleteChatMutation.mutate(chat.id)}
+                                >
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        ))}
+                        <button
+                          className="flex items-center gap-1.5 px-2 py-1 w-full text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 rounded-md transition-colors"
+                          data-testid={`ai-agents-new-chat-btn-${project.id}`}
+                          onClick={e => {
+                            e.stopPropagation();
+                            createChatMutation.mutate({ projectId: project.id });
+                          }}
+                        >
+                          <Plus size={10} /> New Chat
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+
+  if (projectsLoading) {
+    return (
+      <div className="flex h-full w-full">
+        <div className="w-[280px] border-r p-3 space-y-2">
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-10 w-full rounded-md" />)}
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="animate-spin text-muted-foreground" size={32} />
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
-      {/* Left panel: agent list */}
-      <div className="w-72 border-r border-gray-800 flex flex-col bg-gray-950">
-        <div className="p-4 border-b border-gray-800 flex items-center justify-between">
-          <h2 className="font-semibold text-white flex items-center gap-2"><Bot className="w-4 h-4 text-violet-400" />AI Agents</h2>
-          <Button size="sm" onClick={() => setShowBuilder(true)} data-testid="button-new-agent"><Plus className="w-3 h-3" /></Button>
-        </div>
-        <ScrollArea className="flex-1">
-          {isLoading ? (
-            <div className="flex items-center justify-center p-8"><Loader2 className="w-5 h-5 animate-spin text-gray-500" /></div>
-          ) : agents.length === 0 ? (
-            <div className="p-4 text-center">
-              <p className="text-sm text-gray-500 mb-4">No agents yet. Start from a template:</p>
-              <div className="space-y-2">
-                {TEMPLATES.map(t => (
-                  <button key={t.id} className="w-full text-left p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm" onClick={() => createFromTemplate.mutate(t.id)} data-testid={`button-template-${t.id}`}>
-                    <span className="mr-2">{t.icon}</span><span className="text-white">{t.label}</span>
-                    <p className="text-xs text-gray-400 mt-0.5">{t.desc}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="p-2 space-y-1">
-              {(agents as any[]).map((agent: any) => (
-                <button key={agent.id} className={`w-full text-left p-3 rounded-lg transition-colors ${selectedAgent?.id === agent.id ? "bg-violet-900/40 border border-violet-700" : "hover:bg-gray-800"}`} onClick={() => selectAgent(agent)} data-testid={`button-agent-${agent.id}`}>
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">{agent.icon || "🤖"}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-white truncate">{agent.name}</p>
-                      <p className="text-xs text-gray-400 truncate">{agent.description || agent.triggerType}</p>
-                    </div>
-                    {agent.isActive && <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />}
-                  </div>
-                </button>
-              ))}
-              <div className="pt-2 border-t border-gray-800 mt-2">
-                <p className="text-xs text-gray-500 px-1 mb-2">Add from template</p>
-                {TEMPLATES.map(t => (
-                  <button key={t.id} className="w-full text-left p-2 rounded hover:bg-gray-800 text-sm text-gray-400 hover:text-white flex items-center gap-2" onClick={() => createFromTemplate.mutate(t.id)} data-testid={`button-tmpl-${t.id}`}>
-                    <span>{t.icon}</span><span>{t.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </ScrollArea>
+    <div className="flex h-full w-full overflow-hidden relative">
+      <div className="hidden md:flex w-[280px] flex-shrink-0 border-r flex-col h-full bg-background">
+        <SidebarContent />
       </div>
 
-      {/* Right panel: chat */}
-      <div className="flex-1 flex flex-col bg-gray-900">
-        {!selectedAgent ? (
-          <div className="flex-1 flex items-center justify-center flex-col gap-4">
-            <Bot className="w-16 h-16 text-gray-700" />
-            <p className="text-gray-500">Select an agent to start chatting</p>
-            <Button onClick={() => setShowBuilder(true)} variant="outline" data-testid="button-create-agent-empty">
-              <Plus className="w-4 h-4 mr-2" />Create New Agent
-            </Button>
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex">
+          <div className="w-[280px] bg-background border-r flex flex-col h-full relative z-10">
+            <button
+              className="absolute top-3 right-3 p-1 rounded hover:bg-accent"
+              onClick={() => setSidebarOpen(false)}
+            >
+              <X size={16} />
+            </button>
+            <SidebarContent />
           </div>
-        ) : (
-          <>
-            {/* Agent header */}
-            <div className="p-4 border-b border-gray-800 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">{selectedAgent.icon || "🤖"}</span>
-                <div>
-                  <h3 className="font-semibold text-white">{selectedAgent.name}</h3>
-                  <p className="text-xs text-gray-400">{(selectedAgent.capabilities || []).join(", ") || "No capabilities"}</p>
-                </div>
+          <div className="flex-1 bg-black/40" onClick={() => setSidebarOpen(false)} />
+        </div>
+      )}
+
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        {!selectedProjectId && (
+          <div
+            className="flex-1 flex flex-col items-center justify-center gap-4 p-8 text-center"
+            data-testid="ai-agents-empty-state"
+          >
+            <div className="md:hidden absolute top-4 left-4">
+              <button onClick={() => setSidebarOpen(true)} className="p-2 rounded hover:bg-accent">
+                <Menu size={18} />
+              </button>
+            </div>
+            <Bot size={48} className="text-muted-foreground/20" />
+            <h1 className="text-2xl font-bold">AI Agents Hub</h1>
+            <p className="text-muted-foreground max-w-md">
+              Create a project, choose your preferred AI provider, and start chatting. Your conversations are saved automatically.
+            </p>
+            <Button onClick={() => setIsNewProjectDialogOpen(true)}>Create Your First Project</Button>
+          </div>
+        )}
+
+        {selectedProjectId && !selectedChatId && selectedProject && (
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="max-w-2xl mx-auto space-y-6">
+              <div className="md:hidden mb-2">
+                <button onClick={() => setSidebarOpen(true)} className="p-2 rounded hover:bg-accent">
+                  <Menu size={18} />
+                </button>
               </div>
-              <Button variant="ghost" size="sm" className="text-red-400 hover:text-red-300" onClick={() => deleteAgent.mutate(selectedAgent.id)} data-testid="button-deactivate-agent">Deactivate</Button>
+              <div className="flex items-center gap-3" data-testid="ai-agents-project-header">
+                <ProviderIcon providerId={selectedProject.provider} size={24} />
+                {editingProjectName ? (
+                  <input
+                    autoFocus
+                    className="text-2xl font-bold bg-transparent border-b border-border outline-none flex-1"
+                    value={projectNameInput}
+                    onChange={e => setProjectNameInput(e.target.value)}
+                    onBlur={() => {
+                      if (projectNameInput.trim())
+                        updateProjectMutation.mutate({ id: selectedProject.id, name: projectNameInput.trim() });
+                      setEditingProjectName(false);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") {
+                        if (projectNameInput.trim())
+                          updateProjectMutation.mutate({ id: selectedProject.id, name: projectNameInput.trim() });
+                        setEditingProjectName(false);
+                      }
+                      if (e.key === "Escape") setEditingProjectName(false);
+                    }}
+                  />
+                ) : (
+                  <h1 className="text-2xl font-bold flex-1">{selectedProject.name}</h1>
+                )}
+                <button
+                  className="p-1 rounded hover:bg-accent"
+                  onClick={() => {
+                    setProjectNameInput(selectedProject.name);
+                    setEditingProjectName(true);
+                  }}
+                >
+                  <Pencil size={16} className="text-muted-foreground" />
+                </button>
+              </div>
+
+              <Card>
+                <CardHeader><CardTitle className="text-base">AI Provider & Model</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-3">
+                    {providers.map(provider => (
+                      <div
+                        key={provider.id}
+                        className={`border rounded-lg p-3 cursor-pointer transition-colors hover:bg-accent/50 ${selectedProject.provider === provider.id ? "border-blue-500 bg-blue-500/5" : "border-border"}`}
+                        data-testid={`ai-agents-provider-card-${provider.id}`}
+                        onClick={() =>
+                          updateProjectMutation.mutate({
+                            id: selectedProject.id,
+                            provider: provider.id,
+                            model: provider.models[0],
+                          })
+                        }
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <ProviderIcon providerId={provider.id} size={16} />
+                          <span className="font-medium text-sm">{provider.name}</span>
+                        </div>
+                        <div className="space-y-1">
+                          {provider.models.map(model => (
+                            <div
+                              key={model}
+                              className={`text-xs px-2 py-1 rounded cursor-pointer transition-colors ${selectedProject.provider === provider.id && selectedProject.model === model ? "bg-blue-500/20 text-blue-400 font-medium" : "text-muted-foreground hover:bg-accent"}`}
+                              onClick={e => {
+                                e.stopPropagation();
+                                updateProjectMutation.mutate({
+                                  id: selectedProject.id,
+                                  provider: provider.id,
+                                  model,
+                                });
+                              }}
+                            >
+                              {model}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader><CardTitle className="text-base">System Prompt</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  <Textarea
+                    data-testid="ai-agents-system-prompt-input"
+                    rows={5}
+                    maxLength={5000}
+                    value={systemPromptInput}
+                    onChange={e => setSystemPromptInput(e.target.value)}
+                    placeholder="You are a helpful AI assistant."
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      updateProjectMutation.mutate({ id: selectedProject.id, systemPrompt: systemPromptInput })
+                    }
+                    disabled={updateProjectMutation.isPending}
+                  >
+                    Save Prompt
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <div className="flex justify-center">
+                <Button
+                  size="lg"
+                  data-testid="ai-agents-start-chat-btn"
+                  onClick={() => createChatMutation.mutate({ projectId: selectedProject.id })}
+                  disabled={createChatMutation.isPending}
+                >
+                  {createChatMutation.isPending
+                    ? <Loader2 className="animate-spin mr-2" size={16} />
+                    : <MessageSquare className="mr-2" size={16} />
+                  }
+                  Start New Chat
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {selectedChatId && selectedChat && (
+          <div className="flex flex-col h-full overflow-hidden">
+            <div
+              className="h-14 border-b flex items-center justify-between px-4 flex-shrink-0"
+              data-testid="ai-agents-chat-header"
+            >
+              <div className="flex items-center gap-3">
+                <button
+                  className="md:hidden p-1 rounded hover:bg-accent mr-1"
+                  onClick={() => setSidebarOpen(true)}
+                >
+                  <Menu size={16} />
+                </button>
+                <span className="font-medium text-sm truncate max-w-[200px]">{selectedChat.title}</span>
+                <Badge
+                  variant="outline"
+                  className="text-xs gap-1 px-2"
+                  style={{
+                    borderColor: providerColors[selectedChat.provider],
+                    color: providerColors[selectedChat.provider],
+                  }}
+                >
+                  <ProviderIcon providerId={selectedChat.provider} size={10} />
+                  {providers.find(p => p.id === selectedChat.provider)?.name || selectedChat.provider}
+                </Badge>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setSelectedChatId(null)}
+                >
+                  <Settings size={15} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-destructive hover:text-destructive"
+                  onClick={() => deleteChatMutation.mutate(selectedChatId)}
+                >
+                  <Trash2 size={15} />
+                </Button>
+              </div>
             </div>
 
-            {/* Messages */}
-            <ScrollArea className="flex-1 p-4">
+            <ScrollArea className="flex-1 px-4 py-6">
+              {messages.length === 0 && !isSending && (
+                <div className="flex flex-col items-center justify-center h-32 gap-2 text-muted-foreground">
+                  <MessageSquare size={24} className="opacity-30" />
+                  <p className="text-sm">Send a message to start the conversation</p>
+                </div>
+              )}
               <div className="space-y-4 max-w-3xl mx-auto">
-                {messages.length === 0 && (
-                  <div className="text-center text-gray-500 py-8">
-                    <Sparkles className="w-8 h-8 mx-auto mb-2 text-violet-500" />
-                    <p>Start a conversation with {selectedAgent.name}</p>
-                  </div>
-                )}
-                {messages.map((msg, i) => (
-                  <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[80%] rounded-xl px-4 py-3 ${msg.role === "user" ? "bg-violet-600 text-white" : "bg-gray-800 text-gray-100"}`} data-testid={`msg-${msg.role}-${i}`}>
-                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                      {msg.steps && msg.steps.length > 0 && (
-                        <Collapsible className="mt-2">
-                          <CollapsibleTrigger className="text-xs text-gray-400 hover:text-gray-300 flex items-center gap-1" onClick={() => setExpandedSteps(s => ({ ...s, [i]: !s[i] }))}>
-                            {expandedSteps[i] ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                            {msg.steps.length} tool step{msg.steps.length !== 1 ? "s" : ""}
-                          </CollapsibleTrigger>
-                          <CollapsibleContent>
-                            <div className="mt-2 space-y-1 border-t border-gray-700 pt-2">
-                              {msg.steps.map((step: any, si: number) => (
-                                <div key={si} className="text-xs bg-gray-900 rounded p-2" data-testid={`step-${i}-${si}`}>
-                                  <span className="text-violet-400">{step.action}</span>
-                                  <pre className="text-gray-400 mt-1 overflow-auto text-xs">{JSON.stringify(step.output, null, 2).substring(0, 200)}</pre>
-                                </div>
-                              ))}
-                            </div>
-                          </CollapsibleContent>
-                        </Collapsible>
+                {messages.map(msg => (
+                  <motion.div
+                    key={msg.id}
+                    data-testid={`ai-agents-message-${msg.id}`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                  >
+                    <div
+                      className={`max-w-[90%] md:max-w-[80%] rounded-lg px-4 py-2 text-sm ${msg.role === "user" ? "bg-accent/30 ml-auto" : ""}`}
+                    >
+                      {msg.role === "assistant" ? (
+                        <div className="prose prose-sm dark:prose-invert max-w-none">
+                          {msg.content.split("\n").map((line, i) => (
+                            <p key={i} className={i > 0 ? "mt-2" : ""}>{line || <br />}</p>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="whitespace-pre-wrap">{msg.content}</span>
                       )}
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
-                {chatMutation.isPending && (
-                  <div className="flex justify-start">
-                    <div className="bg-gray-800 rounded-xl px-4 py-3 flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin text-violet-400" />
-                      <span className="text-sm text-gray-400">Thinking...</span>
+                {isSending && (
+                  <motion.div
+                    data-testid="ai-agents-typing-indicator"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex justify-start"
+                  >
+                    <div className="flex gap-1 px-4 py-3 rounded-lg bg-accent/20">
+                      {[0, 1, 2].map(i => (
+                        <motion.div
+                          key={i}
+                          className="w-2 h-2 rounded-full bg-muted-foreground"
+                          animate={{ opacity: [0.3, 1, 0.3] }}
+                          transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+                        />
+                      ))}
                     </div>
-                  </div>
+                  </motion.div>
                 )}
               </div>
+              <div ref={messagesEndRef} />
             </ScrollArea>
 
-            {/* Input */}
-            <div className="p-4 border-t border-gray-800">
-              <div className="max-w-3xl mx-auto flex gap-2">
-                <Input value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder={`Message ${selectedAgent.name}...`} onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendMessage()} className="bg-gray-800 border-gray-700" data-testid="input-chat-message" />
-                <Button onClick={sendMessage} disabled={chatMutation.isPending || !chatInput.trim()} data-testid="button-send-chat">
-                  <Send className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Agent Builder Dialog */}
-      <Dialog open={showBuilder} onOpenChange={setShowBuilder}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-gray-900 border-gray-700">
-          <DialogHeader><DialogTitle className="text-white">Create New Agent</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="text-gray-300">Name</Label>
-                <Input value={builderForm.name} onChange={e => setBuilderForm(f => ({ ...f, name: e.target.value }))} placeholder="Agent name" className="bg-gray-800 border-gray-700 mt-1" data-testid="input-agent-name" />
-              </div>
-              <div>
-                <Label className="text-gray-300">Icon</Label>
-                <Input value={builderForm.icon} onChange={e => setBuilderForm(f => ({ ...f, icon: e.target.value }))} placeholder="🤖" className="bg-gray-800 border-gray-700 mt-1" data-testid="input-agent-icon" />
-              </div>
-            </div>
-            <div>
-              <Label className="text-gray-300">Description</Label>
-              <Input value={builderForm.description} onChange={e => setBuilderForm(f => ({ ...f, description: e.target.value }))} placeholder="What does this agent do?" className="bg-gray-800 border-gray-700 mt-1" data-testid="input-agent-description" />
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <Label className="text-gray-300">Instructions (System Prompt)</Label>
-                <Button variant="ghost" size="sm" onClick={generateInstructions} disabled={!builderForm.description || generatingInstructions} className="text-violet-400 text-xs" data-testid="button-generate-instructions">
-                  {generatingInstructions ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Sparkles className="w-3 h-3 mr-1" />}Generate from description
-                </Button>
-              </div>
-              <Textarea value={builderForm.systemPrompt} onChange={e => setBuilderForm(f => ({ ...f, systemPrompt: e.target.value }))} placeholder="You are an AI agent that..." rows={5} className="bg-gray-800 border-gray-700" data-testid="input-agent-prompt" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="text-gray-300">Model</Label>
-                <Select value={builderForm.model} onValueChange={v => setBuilderForm(f => ({ ...f, model: v }))}>
-                  <SelectTrigger className="bg-gray-800 border-gray-700 mt-1" data-testid="select-agent-model"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-700">
-                    <SelectItem value="gpt-4o">GPT-4o</SelectItem>
-                    <SelectItem value="gpt-4o-mini">GPT-4o Mini</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-gray-300">Trigger</Label>
-                <Select value={builderForm.triggerType} onValueChange={v => setBuilderForm(f => ({ ...f, triggerType: v }))}>
-                  <SelectTrigger className="bg-gray-800 border-gray-700 mt-1" data-testid="select-agent-trigger"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-700">
-                    <SelectItem value="manual">Manual</SelectItem>
-                    <SelectItem value="scheduled">Scheduled</SelectItem>
-                    <SelectItem value="event">Event</SelectItem>
-                    <SelectItem value="message_in_channel">Message in Channel</SelectItem>
-                    <SelectItem value="webhook">Webhook</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div>
-              <Label className="text-gray-300 mb-2 block">Capabilities</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {CAPABILITIES.map(cap => (
-                  <div key={cap.id} className="flex items-center gap-2">
-                    <Checkbox id={cap.id} checked={builderForm.capabilities.includes(cap.id)} onCheckedChange={checked => setBuilderForm(f => ({ ...f, capabilities: checked ? [...f.capabilities, cap.id] : f.capabilities.filter(c => c !== cap.id) }))} data-testid={`checkbox-cap-${cap.id}`} />
-                    <Label htmlFor={cap.id} className="text-gray-300 text-sm cursor-pointer">{cap.label}</Label>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div>
-              <Label className="text-gray-300">Visibility</Label>
-              <Select value={builderForm.visibility} onValueChange={v => setBuilderForm(f => ({ ...f, visibility: v }))}>
-                <SelectTrigger className="bg-gray-800 border-gray-700 mt-1" data-testid="select-agent-visibility"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-gray-800 border-gray-700">
-                  <SelectItem value="workspace">Workspace</SelectItem>
-                  <SelectItem value="private">Private</SelectItem>
-                  <SelectItem value="specific_members">Specific Members</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex gap-2 justify-end pt-2">
-              <Button variant="outline" onClick={() => setShowBuilder(false)} className="border-gray-700" data-testid="button-cancel-agent">Cancel</Button>
-              <Button onClick={() => createAgent.mutate(builderForm)} disabled={!builderForm.name || !builderForm.systemPrompt || createAgent.isPending} data-testid="button-create-agent">
-                {createAgent.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}Create Agent
+            <div className="border-t p-4 flex gap-2 items-end flex-shrink-0">
+              <Textarea
+                ref={textareaRef}
+                data-testid="ai-agents-message-input"
+                placeholder="Type your message..."
+                value={messageInput}
+                onChange={handleTextareaChange}
+                onKeyDown={handleKeyDown}
+                rows={1}
+                className="resize-none min-h-[40px] max-h-[144px] flex-1"
+                disabled={isSending}
+              />
+              <Button
+                data-testid="ai-agents-send-btn"
+                size="icon"
+                onClick={sendMessage}
+                disabled={!messageInput.trim() || isSending}
+                className="flex-shrink-0 h-10 w-10"
+              >
+                {isSending ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
               </Button>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        )}
+      </div>
     </div>
   );
 }

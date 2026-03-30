@@ -1,0 +1,411 @@
+# AI Agents Feature — Replit Prompt
+
+Build **AI Agents Hub** — A full-featured AI agent workspace where users create projects, select an external AI provider (ChatGPT, Gemini, Perplexity, Claude), and chat with that provider through a professional multi-panel interface with chat history sidebar, project management, and new-chat creation.
+
+---
+
+## 1. DATABASE TABLES
+
+Add these three tables to `shared/schema.ts`:
+
+### Table: `aiAgentProjects`
+
+```ts
+import { pgTable, serial, text, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+
+export const aiAgentProjects = pgTable("ai_agent_projects", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  provider: text("provider").notNull().default("chatgpt"),
+  model: text("model").notNull().default("gpt-4o-mini"),
+  systemPrompt: text("system_prompt").notNull().default("You are a helpful AI assistant."),
+  isArchived: boolean("is_archived").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertAiAgentProjectSchema = createInsertSchema(aiAgentProjects).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAiAgentProject = typeof aiAgentProjects.$inferInsert;
+export type AiAgentProject = typeof aiAgentProjects.$inferSelect;
+```
+
+### Table: `aiAgentChats`
+
+```ts
+export const aiAgentChats = pgTable("ai_agent_chats", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  projectId: integer("project_id").notNull(),
+  title: text("title").notNull().default("New Chat"),
+  provider: text("provider").notNull().default("chatgpt"),
+  model: text("model").notNull().default("gpt-4o-mini"),
+  isArchived: boolean("is_archived").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertAiAgentChatSchema = createInsertSchema(aiAgentChats).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAiAgentChat = typeof aiAgentChats.$inferInsert;
+export type AiAgentChat = typeof aiAgentChats.$inferSelect;
+```
+
+### Table: `aiAgentMessages`
+
+```ts
+export const aiAgentMessages = pgTable("ai_agent_messages", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  chatId: integer("chat_id").notNull(),
+  role: text("role").notNull(),
+  content: text("content").notNull(),
+  provider: text("provider").notNull().default("chatgpt"),
+  model: text("model").notNull().default("gpt-4o-mini"),
+  tokenCount: integer("token_count").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertAiAgentMessageSchema = createInsertSchema(aiAgentMessages).omit({ id: true, createdAt: true });
+export type InsertAiAgentMessage = typeof aiAgentMessages.$inferInsert;
+export type AiAgentMessage = typeof aiAgentMessages.$inferSelect;
+```
+
+Add these import additions at the top of `shared/schema.ts` if not already present: `integer` from `drizzle-orm/pg-core`.
+
+---
+
+## 2. API ROUTES
+
+Add all routes inside `server/routes.ts`. Every route uses `isAuthenticated` middleware and filters by `eq(table.userId, req.user.claims.sub)`.
+
+### 2.1 Project Routes
+
+**GET `/api/ai-agent-projects`** — Returns all non-archived projects for the authenticated user, ordered by `createdAt` desc.
+
+```ts
+app.get("/api/ai-agent-projects", isAuthenticated, async (req, res) => {
+  const projects = await db.select().from(aiAgentProjects)
+    .where(and(eq(aiAgentProjects.userId, req.user.claims.sub), eq(aiAgentProjects.isArchived, false)))
+    .orderBy(desc(aiAgentProjects.createdAt));
+  res.json(projects);
+});
+```
+
+**POST `/api/ai-agent-projects`** — Creates a new project. Validates body with `insertAiAgentProjectSchema`. Sets `userId` from session.
+
+```ts
+app.post("/api/ai-agent-projects", isAuthenticated, async (req, res) => {
+  const parsed = insertAiAgentProjectSchema.parse({ ...req.body, userId: req.user.claims.sub });
+  const [project] = await db.insert(aiAgentProjects).values(parsed).returning();
+  res.json(project);
+});
+```
+
+**PATCH `/api/ai-agent-projects/:id`** — Updates project name, description, provider, model, or systemPrompt. Validates that the project belongs to the user.
+
+Request body Zod schema:
+```ts
+z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().max(1000).optional(),
+  provider: z.enum(["chatgpt", "gemini", "perplexity", "claude"]).optional(),
+  model: z.string().min(1).max(100).optional(),
+  systemPrompt: z.string().max(5000).optional(),
+})
+```
+
+**DELETE `/api/ai-agent-projects/:id`** — Soft-deletes the project by setting `isArchived` to `true`. Also soft-deletes all chats under this project.
+
+### 2.2 Chat Routes
+
+**GET `/api/ai-agent-projects/:projectId/chats`** — Returns all non-archived chats for a specific project belonging to the user, ordered by `updatedAt` desc.
+
+**POST `/api/ai-agent-projects/:projectId/chats`** — Creates a new chat under the given project. Sets `provider` and `model` from the project defaults. Validates body:
+```ts
+z.object({ title: z.string().min(1).max(200).optional() })
+```
+
+**PATCH `/api/ai-agent-chats/:id`** — Updates chat title. Validates owner. Body:
+```ts
+z.object({ title: z.string().min(1).max(200) })
+```
+
+**DELETE `/api/ai-agent-chats/:id`** — Soft-deletes the chat by setting `isArchived` to `true`.
+
+### 2.3 Message Routes
+
+**GET `/api/ai-agent-chats/:chatId/messages`** — Returns all messages for a chat belonging to the user, ordered by `createdAt` asc.
+
+**POST `/api/ai-agent-chats/:chatId/messages`** — Sends a user message, calls the AI provider via `aiService`, saves both user and assistant messages, and returns the assistant message. Validates body:
+```ts
+z.object({ content: z.string().min(1).max(10000) })
+```
+
+Implementation details for this route:
+1. Verify the chat belongs to the user.
+2. Fetch the chat to get `provider` and `model`.
+3. Fetch the parent project to get `systemPrompt`.
+4. Save the user message to `aiAgentMessages` with `role: "user"`.
+5. Fetch all previous messages for this chat (ordered by `createdAt` asc) to build the conversation context.
+6. Call `aiService.generateText` with the system prompt and all messages as context.
+7. Save the assistant response to `aiAgentMessages` with `role: "assistant"`.
+8. Update the chat `updatedAt` to `new Date()`.
+9. If this is the first message in the chat (only 1 user message exists before this), auto-generate a short title: call `aiService.generateText` with system prompt `"Generate a 3-6 word title for this conversation. Return only the title text, nothing else."` and user prompt being the user's first message. Update the chat title with the result.
+10. Return the assistant message object as JSON.
+
+**POST `/api/ai-agent-chats/:chatId/messages/stream`** — Same as above but uses `aiService.generateStream` and returns a Server-Sent Events stream. The frontend will use `EventSource` or `fetch` with `ReadableStream` to consume the response.
+
+### 2.4 Provider Info Route
+
+**GET `/api/ai-agent-providers`** — Returns a static JSON array of available providers:
+```ts
+[
+  { id: "chatgpt", name: "ChatGPT", icon: "bot", models: ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"] },
+  { id: "gemini", name: "Gemini", icon: "sparkles", models: ["gemini-1.5-flash", "gemini-1.5-pro"] },
+  { id: "perplexity", name: "Perplexity", icon: "search", models: ["llama-3.1-sonar-small-128k-online", "llama-3.1-sonar-large-128k-online"] },
+  { id: "claude", name: "Claude", icon: "brain", models: ["claude-3-haiku-20240307", "claude-3-sonnet-20240229"] },
+]
+```
+
+This route does NOT require `isAuthenticated`.
+
+---
+
+## 3. FRONTEND PAGE
+
+### File: `client/src/pages/dashboard/ai-agents.tsx`
+
+Page title: **AI Agents**
+
+### 3.1 Layout Structure
+
+The page uses a **three-panel layout** (full viewport height minus the top navbar):
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  LEFT SIDEBAR (280px)  │  MAIN CONTENT AREA              │
+│                        │                                  │
+│  [+ New Project] btn   │  (if no project selected)        │
+│                        │  → Empty state: "Select or       │
+│  PROJECT LIST          │    create a project to begin"    │
+│  ┌──────────────────┐  │                                  │
+│  │ Project Name     │  │  (if project selected, no chat)  │
+│  │   Chat 1        │  │  → Project settings panel with    │
+│  │   Chat 2        │  │    provider selector + new chat   │
+│  │   [+ New Chat]  │  │                                  │
+│  │ Project Name 2  │  │  (if chat selected)              │
+│  │   Chat 3        │  │  → Chat interface                │
+│  └──────────────────┘  │                                  │
+└──────────────────────────────────────────────────────────┘
+```
+
+### 3.2 Left Sidebar Panel (280px fixed width, full height, border-right)
+
+- **Top section**: A button labeled "New Project" with a `Plus` icon from lucide-react. `data-testid="ai-agents-new-project-btn"`. Clicking opens a dialog with a form: project name (text input, required, max 100 chars), description (textarea, max 1000 chars), provider (select dropdown from the providers list), model (select dropdown that updates based on selected provider). Submit calls `POST /api/ai-agent-projects`.
+
+- **Project list**: Scrollable list of all projects. Each project is a collapsible accordion item showing the project name and provider icon. `data-testid="ai-agents-project-item-{id}"`. Clicking a project expands it to show its chats and a "New Chat" button. The selected project is highlighted with a `bg-accent` background.
+
+- **Chat list under each project**: Shows each chat title with a `MessageSquare` icon. `data-testid="ai-agents-chat-item-{id}"`. Clicking a chat selects it and opens it in the main area. Each chat has a three-dot menu (on hover) with "Rename" and "Delete" options. The active chat is highlighted with `bg-accent/50`.
+
+- **New Chat button under each project**: Small button with `Plus` icon. `data-testid="ai-agents-new-chat-btn-{projectId}"`. Clicking creates a new chat via `POST /api/ai-agent-projects/:projectId/chats` and immediately selects it.
+
+### 3.3 Main Content Area — Project Settings View
+
+Shown when a project is selected but no chat is active. Contains:
+
+- **Project header**: Large text showing project name with an `Edit` (Pencil icon) button. `data-testid="ai-agents-project-header"`.
+- **Provider selection card**: A grid of 4 cards (2x2 on desktop, 1 column on mobile), one per provider (ChatGPT, Gemini, Perplexity, Claude). Each card shows the provider name and its available models in a radio group. The currently selected provider+model has a blue border. `data-testid="ai-agents-provider-card-{providerId}"`. Changing selection calls `PATCH /api/ai-agent-projects/:id`.
+- **System prompt card**: A textarea (5 rows, max 5000 chars) showing the project system prompt. Save button below it. `data-testid="ai-agents-system-prompt-input"`.
+- **"Start New Chat" button**: Large primary button centered below the cards. `data-testid="ai-agents-start-chat-btn"`. Creates a new chat and opens it.
+
+### 3.4 Main Content Area — Chat Interface View
+
+Shown when a chat is selected. Contains:
+
+- **Chat header bar** (h-14, border-bottom, flex items-center justify-between, px-4):
+  - Left: Chat title (editable on click) + provider badge (small colored pill showing "ChatGPT" / "Gemini" / etc).
+  - Right: A `Settings` (Cog icon) button to open project settings, and a `Trash2` icon button to delete the chat. `data-testid="ai-agents-chat-header"`.
+
+- **Messages area** (flex-1, overflow-y-auto, px-4 py-6):
+  - Each message is a full-width row. User messages: `bg-accent/30` rounded-lg, right-aligned text, `max-w-[80%] ml-auto`. Assistant messages: no background, left-aligned, `max-w-[80%]`. `data-testid="ai-agents-message-{id}"`.
+  - Assistant messages render Markdown using a simple prose class (`prose prose-sm dark:prose-invert max-w-none`).
+  - Show a typing indicator (three animated dots) while waiting for a response. `data-testid="ai-agents-typing-indicator"`.
+  - Auto-scroll to bottom on new messages using a `useRef` on the scroll container and `scrollIntoView({ behavior: "smooth" })`.
+
+- **Input area** (border-top, p-4, flex gap-2):
+  - Textarea (auto-expanding, min 1 row, max 6 rows) with placeholder "Type your message...". `data-testid="ai-agents-message-input"`.
+  - Send button with `Send` icon, disabled when textarea is empty or a request is pending. `data-testid="ai-agents-send-btn"`.
+  - Pressing Enter (without Shift) submits the message. Shift+Enter inserts a newline.
+
+### 3.5 Empty State
+
+When no projects exist at all, the main area shows:
+- A large `Bot` icon (48px, muted color)
+- Heading: "AI Agents Hub"
+- Description text: "Create a project, choose your preferred AI provider, and start chatting. Your conversations are saved automatically."
+- A primary button: "Create Your First Project" — opens the new project dialog.
+- `data-testid="ai-agents-empty-state"`
+
+### 3.6 Loading State
+
+While projects are loading, show a full-page skeleton:
+- Left sidebar: 4 skeleton rectangles (h-10, rounded-md)
+- Main area: centered `Loader2` icon with spin animation
+
+### 3.7 Data Fetching (TanStack React Query v5, object form only)
+
+```ts
+const { data: projects, isLoading: projectsLoading } = useQuery({
+  queryKey: ["/api/ai-agent-projects"],
+});
+
+const { data: chats } = useQuery({
+  queryKey: ["/api/ai-agent-projects", selectedProjectId, "chats"],
+  queryFn: () => fetch(`/api/ai-agent-projects/${selectedProjectId}/chats`).then(r => r.json()),
+  enabled: !!selectedProjectId,
+});
+
+const { data: messages } = useQuery({
+  queryKey: ["/api/ai-agent-chats", selectedChatId, "messages"],
+  queryFn: () => fetch(`/api/ai-agent-chats/${selectedChatId}/messages`).then(r => r.json()),
+  enabled: !!selectedChatId,
+});
+
+const { data: providers } = useQuery({
+  queryKey: ["/api/ai-agent-providers"],
+});
+```
+
+### 3.8 Mutations
+
+- **Create project**: `POST /api/ai-agent-projects`. On success, invalidate `["/api/ai-agent-projects"]`.
+- **Update project**: `PATCH /api/ai-agent-projects/:id`. On success, invalidate `["/api/ai-agent-projects"]`.
+- **Delete project**: `DELETE /api/ai-agent-projects/:id`. On success, invalidate `["/api/ai-agent-projects"]`. Reset selected project and chat to null.
+- **Create chat**: `POST /api/ai-agent-projects/:projectId/chats`. On success, invalidate `["/api/ai-agent-projects", projectId, "chats"]`. Set the new chat as selected.
+- **Update chat**: `PATCH /api/ai-agent-chats/:id`. On success, invalidate `["/api/ai-agent-projects", selectedProjectId, "chats"]`.
+- **Delete chat**: `DELETE /api/ai-agent-chats/:id`. On success, invalidate `["/api/ai-agent-projects", selectedProjectId, "chats"]`. Reset selected chat to null.
+- **Send message**: `POST /api/ai-agent-chats/:chatId/messages`. On success, invalidate `["/api/ai-agent-chats", chatId, "messages"]` and `["/api/ai-agent-projects", selectedProjectId, "chats"]` (because chat title may have changed).
+
+### 3.9 State Management (local React state)
+
+```ts
+const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+const [selectedChatId, setSelectedChatId] = useState<number | null>(null);
+const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState(false);
+const [isSending, setIsSending] = useState(false);
+```
+
+---
+
+## 4. SIDEBAR & ROUTING
+
+### AppSidebar.tsx
+
+Add this item in the sidebar after the existing AI-related section (or at the end of the main items list):
+
+```ts
+{ label: "AI Agents", icon: Bot, path: "/dashboard/ai-agents" }
+```
+
+Import `Bot` from `lucide-react`.
+
+### App.tsx
+
+Add route:
+```tsx
+import AiAgents from "./pages/dashboard/ai-agents";
+
+<Route path="/dashboard/ai-agents" component={AiAgents} />
+```
+
+---
+
+## 5. AI FEATURES
+
+### 5.1 Chat Completion
+
+Use `aiService.generateText` for the main chat functionality.
+
+**System prompt**: Use the project's `systemPrompt` field value (user-customizable per project).
+
+**User prompt**: Build the conversation context by mapping all previous messages into the standard `{ role, content }` array format, then append the new user message.
+
+**Model**: `gpt-4o-mini`
+
+**Response format**: Plain text string (the assistant's reply).
+
+### 5.2 Auto-Title Generation
+
+Use `aiService.generateText` when the first message is sent in a new chat.
+
+**System prompt**: `"Generate a concise 3-6 word title that summarizes the following conversation starter. Return only the title text with no quotes, no punctuation at the end, and no extra explanation."`
+
+**User prompt**: The content of the user's first message.
+
+**Model**: `gpt-4o-mini`
+
+**Response format**: Plain text string (used to update `aiAgentChats.title`).
+
+---
+
+## 6. CONNECTIONS TO EXISTING FEATURES
+
+- This feature does NOT read from or write to any existing tables.
+- This feature does NOT call any existing API routes.
+- This feature uses the existing `aiService` from `server/services/ai-service.ts` (specifically `generateText` and optionally `generateStream`).
+- This feature uses the existing `isAuthenticated` middleware from `./replit_integrations/auth`.
+- This feature uses existing shadcn/ui components: `Button`, `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogTrigger`, `Input`, `Textarea`, `Select`, `SelectContent`, `SelectItem`, `SelectTrigger`, `SelectValue`, `Card`, `CardContent`, `CardHeader`, `CardTitle`, `DropdownMenu`, `DropdownMenuContent`, `DropdownMenuItem`, `DropdownMenuTrigger`, `Skeleton`, `Badge`, `ScrollArea`, `Separator`, `Tooltip`, `TooltipContent`, `TooltipTrigger`.
+
+---
+
+## 7. ADDITIONAL IMPLEMENTATION DETAILS
+
+### 7.1 Provider Icon Mapping
+
+In the frontend, map provider IDs to lucide-react icons:
+```ts
+const providerIcons: Record<string, LucideIcon> = {
+  chatgpt: Bot,
+  gemini: Sparkles,
+  perplexity: Search,
+  claude: Brain,
+};
+```
+
+### 7.2 Provider Color Mapping
+
+```ts
+const providerColors: Record<string, string> = {
+  chatgpt: "#10A37F",
+  gemini: "#4285F4",
+  perplexity: "#20808D",
+  claude: "#D97706",
+};
+```
+
+### 7.3 Keyboard Shortcuts
+
+- `Enter` in the message textarea: sends the message (calls the send mutation).
+- `Shift+Enter` in the message textarea: inserts a newline.
+- `Escape` in any open dialog: closes the dialog.
+
+### 7.4 Error Handling
+
+- If `POST /api/ai-agent-chats/:chatId/messages` fails, show a toast notification using the existing toast system with the message: "Failed to send message. Please try again."
+- If project creation fails, show toast: "Failed to create project. Please try again."
+- If chat creation fails, show toast: "Failed to create chat. Please try again."
+- All API routes return `{ error: string }` with status 400 for validation errors, 404 if the resource is not found or does not belong to the user, and 500 for server errors.
+
+### 7.5 Responsive Behavior
+
+- On screens below 768px width, the left sidebar collapses into a slide-over drawer triggered by a hamburger button in the top-left of the main content area.
+- The message area uses `max-w-[80%]` on desktop and `max-w-[90%]` on mobile for message bubbles.
+
+### 7.6 Animations
+
+Use `framer-motion` for:
+- Message appearance: `initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}`
+- Sidebar project expand/collapse: `AnimatePresence` with height animation.
+- Typing indicator: three dots with staggered `animate={{ y: [0, -6, 0] }}` and `transition={{ repeat: Infinity, duration: 0.6, delay: index * 0.15 }}`.

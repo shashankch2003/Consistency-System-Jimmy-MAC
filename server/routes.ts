@@ -53,6 +53,9 @@ import {
   pmWorkspaces, pmWorkspaceMembers, pmPagePermissions,
   pmTemplates, pmSearchIndex,
   pmComments, pmPageVersions, pmNotifications,
+  aiAgentProjects, insertAiAgentProjectSchema,
+  aiAgentChats, insertAiAgentChatSchema,
+  aiAgentMessages, insertAiAgentMessageSchema,
 } from "../shared/schema";
 import { inArray, isNotNull } from "drizzle-orm";
 
@@ -8588,6 +8591,167 @@ Provide specific, actionable insights. Be encouraging but honest.`,
       const userId = req.user.claims.sub;
       await db.update(pmNotifications).set({ isRead: true }).where(eq(pmNotifications.userId, userId));
       return res.json({ success: true });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/ai-agent-providers", (_req, res) => {
+    res.json([
+      { id: "chatgpt", name: "ChatGPT", icon: "bot", models: ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"] },
+      { id: "gemini", name: "Gemini", icon: "sparkles", models: ["gemini-1.5-flash", "gemini-1.5-pro"] },
+      { id: "perplexity", name: "Perplexity", icon: "search", models: ["llama-3.1-sonar-small-128k-online", "llama-3.1-sonar-large-128k-online"] },
+      { id: "claude", name: "Claude", icon: "brain", models: ["claude-3-haiku-20240307", "claude-3-sonnet-20240229"] },
+    ]);
+  });
+
+  app.get("/api/ai-agent-projects", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const projects = await db.select().from(aiAgentProjects)
+        .where(and(eq(aiAgentProjects.userId, userId), eq(aiAgentProjects.isArchived, false)))
+        .orderBy(desc(aiAgentProjects.createdAt));
+      return res.json(projects);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/ai-agent-projects", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const parsed = insertAiAgentProjectSchema.parse({ ...req.body, userId });
+      const [project] = await db.insert(aiAgentProjects).values(parsed).returning();
+      return res.json(project);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.patch("/api/ai-agent-projects/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const body = z.object({
+        name: z.string().min(1).max(100).optional(),
+        description: z.string().max(1000).optional(),
+        provider: z.enum(["chatgpt", "gemini", "perplexity", "claude"]).optional(),
+        model: z.string().min(1).max(100).optional(),
+        systemPrompt: z.string().max(5000).optional(),
+      }).parse(req.body);
+      const [updated] = await db.update(aiAgentProjects).set({ ...body, updatedAt: new Date() })
+        .where(and(eq(aiAgentProjects.id, id), eq(aiAgentProjects.userId, userId))).returning();
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      return res.json(updated);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.delete("/api/ai-agent-projects/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const [project] = await db.update(aiAgentProjects).set({ isArchived: true })
+        .where(and(eq(aiAgentProjects.id, id), eq(aiAgentProjects.userId, userId))).returning();
+      if (!project) return res.status(404).json({ error: "Not found" });
+      await db.update(aiAgentChats).set({ isArchived: true })
+        .where(and(eq(aiAgentChats.projectId, id), eq(aiAgentChats.userId, userId)));
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/ai-agent-projects/:projectId/chats", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const projectId = parseInt(req.params.projectId);
+      const chats = await db.select().from(aiAgentChats)
+        .where(and(eq(aiAgentChats.userId, userId), eq(aiAgentChats.projectId, projectId), eq(aiAgentChats.isArchived, false)))
+        .orderBy(desc(aiAgentChats.updatedAt));
+      return res.json(chats);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/ai-agent-projects/:projectId/chats", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const projectId = parseInt(req.params.projectId);
+      const [project] = await db.select().from(aiAgentProjects)
+        .where(and(eq(aiAgentProjects.id, projectId), eq(aiAgentProjects.userId, userId)));
+      if (!project) return res.status(404).json({ error: "Not found" });
+      const body = z.object({ title: z.string().min(1).max(200).optional() }).parse(req.body);
+      const parsed = insertAiAgentChatSchema.parse({
+        userId,
+        projectId,
+        title: body.title || "New Chat",
+        provider: project.provider,
+        model: project.model,
+      });
+      const [chat] = await db.insert(aiAgentChats).values(parsed).returning();
+      return res.json(chat);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.patch("/api/ai-agent-chats/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const body = z.object({ title: z.string().min(1).max(200) }).parse(req.body);
+      const [updated] = await db.update(aiAgentChats).set({ title: body.title, updatedAt: new Date() })
+        .where(and(eq(aiAgentChats.id, id), eq(aiAgentChats.userId, userId))).returning();
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      return res.json(updated);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.delete("/api/ai-agent-chats/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const [chat] = await db.update(aiAgentChats).set({ isArchived: true })
+        .where(and(eq(aiAgentChats.id, id), eq(aiAgentChats.userId, userId))).returning();
+      if (!chat) return res.status(404).json({ error: "Not found" });
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/ai-agent-chats/:chatId/messages", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const chatId = parseInt(req.params.chatId);
+      const [chat] = await db.select().from(aiAgentChats)
+        .where(and(eq(aiAgentChats.id, chatId), eq(aiAgentChats.userId, userId)));
+      if (!chat) return res.status(404).json({ error: "Not found" });
+      const messages = await db.select().from(aiAgentMessages)
+        .where(and(eq(aiAgentMessages.chatId, chatId), eq(aiAgentMessages.userId, userId)))
+        .orderBy(asc(aiAgentMessages.createdAt));
+      return res.json(messages);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/ai-agent-chats/:chatId/messages", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const chatId = parseInt(req.params.chatId);
+      const body = z.object({ content: z.string().min(1).max(10000) }).parse(req.body);
+      const [chat] = await db.select().from(aiAgentChats)
+        .where(and(eq(aiAgentChats.id, chatId), eq(aiAgentChats.userId, userId)));
+      if (!chat) return res.status(404).json({ error: "Not found" });
+      const [project] = await db.select().from(aiAgentProjects)
+        .where(and(eq(aiAgentProjects.id, chat.projectId), eq(aiAgentProjects.userId, userId)));
+      const systemPrompt = project?.systemPrompt || "You are a helpful AI assistant.";
+      await db.insert(aiAgentMessages).values({ userId, chatId, role: "user", content: body.content, provider: chat.provider, model: chat.model });
+      const allMessages = await db.select().from(aiAgentMessages)
+        .where(and(eq(aiAgentMessages.chatId, chatId), eq(aiAgentMessages.userId, userId)))
+        .orderBy(asc(aiAgentMessages.createdAt));
+      const context = allMessages.map(m => ({ role: m.role as "user" | "assistant", content: m.content }));
+      const { text: assistantText } = await aiService.generateText(
+        context[context.length - 1].content,
+        { systemPrompt, model: "gpt-4o-mini" }
+      );
+      const [assistantMsg] = await db.insert(aiAgentMessages).values({ userId, chatId, role: "assistant", content: assistantText, provider: chat.provider, model: chat.model }).returning();
+      await db.update(aiAgentChats).set({ updatedAt: new Date() }).where(eq(aiAgentChats.id, chatId));
+      const userMessages = allMessages.filter(m => m.role === "user");
+      if (userMessages.length === 1) {
+        const { text: titleText } = await aiService.generateText(body.content, {
+          systemPrompt: "Generate a concise 3-6 word title that summarizes the following conversation starter. Return only the title text with no quotes, no punctuation at the end, and no extra explanation.",
+          model: "gpt-4o-mini",
+        });
+        await db.update(aiAgentChats).set({ title: titleText.trim() }).where(eq(aiAgentChats.id, chatId));
+      }
+      return res.json(assistantMsg);
     } catch (e: any) { return res.status(500).json({ error: e.message }); }
   });
 

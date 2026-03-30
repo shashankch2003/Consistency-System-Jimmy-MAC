@@ -2888,3 +2888,49 @@ export const pmNotifications = pgTable("pm_notifications", {
 export const insertPmNotificationSchema = createInsertSchema(pmNotifications);
 export type InsertPmNotification = typeof pmNotifications.$inferInsert;
 export type PmNotification = typeof pmNotifications.$inferSelect;
+
+export const aiAgentProjects = pgTable("ai_agent_projects", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  provider: text("provider").notNull().default("chatgpt"),
+  model: text("model").notNull().default("gpt-4o-mini"),
+  systemPrompt: text("system_prompt").notNull().default("You are a helpful AI assistant."),
+  isArchived: boolean("is_archived").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+export const insertAiAgentProjectSchema = createInsertSchema(aiAgentProjects).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAiAgentProject = typeof aiAgentProjects.$inferInsert;
+export type AiAgentProject = typeof aiAgentProjects.$inferSelect;
+
+export const aiAgentChats = pgTable("ai_agent_chats", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  projectId: integer("project_id").notNull(),
+  title: text("title").notNull().default("New Chat"),
+  provider: text("provider").notNull().default("chatgpt"),
+  model: text("model").notNull().default("gpt-4o-mini"),
+  isArchived: boolean("is_archived").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+export const insertAiAgentChatSchema = createInsertSchema(aiAgentChats).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAiAgentChat = typeof aiAgentChats.$inferInsert;
+export type AiAgentChat = typeof aiAgentChats.$inferSelect;
+
+export const aiAgentMessages = pgTable("ai_agent_messages", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  chatId: integer("chat_id").notNull(),
+  role: text("role").notNull(),
+  content: text("content").notNull(),
+  provider: text("provider").notNull().default("chatgpt"),
+  model: text("model").notNull().default("gpt-4o-mini"),
+  tokenCount: integer("token_count").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export const insertAiAgentMessageSchema = createInsertSchema(aiAgentMessages).omit({ id: true, createdAt: true });
+export type InsertAiAgentMessage = typeof aiAgentMessages.$inferInsert;
+export type AiAgentMessage = typeof aiAgentMessages.$inferSelect;
