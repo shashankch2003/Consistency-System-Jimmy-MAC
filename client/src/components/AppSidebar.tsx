@@ -123,16 +123,6 @@ export function AppSidebar({ onOpenSearch }: AppSidebarProps) {
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
-              {/* 2. AI Agents */}
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive("/dashboard/ai-agents")} className="data-[active=true]:bg-white/10 data-[active=true]:text-white">
-                  <Link href="/dashboard/ai-agents" className="flex items-center gap-3 px-3 py-2" data-testid="nav-ai-agents">
-                    <Bot className="w-4 h-4" />
-                    <span>AI Agents</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
               {/* 3. Daily Tasks */}
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isActive("/dashboard/tasks")} className="data-[active=true]:bg-white/10 data-[active=true]:text-white">
