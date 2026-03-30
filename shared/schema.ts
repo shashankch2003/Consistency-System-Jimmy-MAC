@@ -2934,3 +2934,34 @@ export const aiAgentMessages = pgTable("ai_agent_messages", {
 export const insertAiAgentMessageSchema = createInsertSchema(aiAgentMessages).omit({ id: true, createdAt: true });
 export type InsertAiAgentMessage = typeof aiAgentMessages.$inferInsert;
 export type AiAgentMessage = typeof aiAgentMessages.$inferSelect;
+
+export const lessonNotes = pgTable("lesson_notes", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  title: text("title").notNull().default("Untitled"),
+  content: text("content").notNull().default(""),
+  emoji: text("emoji").notNull().default("📝"),
+  coverColor: text("cover_color").notNull().default("#6366f1"),
+  isFavorite: boolean("is_favorite").notNull().default(false),
+  isArchived: boolean("is_archived").notNull().default(false),
+  isPublic: boolean("is_public").notNull().default(false),
+  publicSlug: text("public_slug"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  lastEditedAt: timestamp("last_edited_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export const insertLessonNoteSchema = createInsertSchema(lessonNotes).omit({ id: true, createdAt: true, lastEditedAt: true });
+export type InsertLessonNote = typeof lessonNotes.$inferInsert;
+export type LessonNote = typeof lessonNotes.$inferSelect;
+
+export const lessonNoteVersions = pgTable("lesson_note_versions", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  noteId: integer("note_id").notNull(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export const insertLessonNoteVersionSchema = createInsertSchema(lessonNoteVersions).omit({ id: true, createdAt: true });
+export type InsertLessonNoteVersion = typeof lessonNoteVersions.$inferInsert;
+export type LessonNoteVersion = typeof lessonNoteVersions.$inferSelect;

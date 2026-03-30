@@ -56,7 +56,9 @@ import {
   aiAgentProjects, insertAiAgentProjectSchema,
   aiAgentChats, insertAiAgentChatSchema,
   aiAgentMessages, insertAiAgentMessageSchema,
+  lessonNotes, lessonNoteVersions,
 } from "../shared/schema";
+import TurndownService from "turndown";
 import { inArray, isNotNull } from "drizzle-orm";
 
 const ADMIN_USER_ID = process.env.ADMIN_USER_ID || "";
@@ -8752,6 +8754,227 @@ Provide specific, actionable insights. Be encouraging but honest.`,
         await db.update(aiAgentChats).set({ title: titleText.trim() }).where(eq(aiAgentChats.id, chatId));
       }
       return res.json(assistantMsg);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  const lessonNotesUploadDir = path.join(process.cwd(), "uploads", "lesson-notes");
+  if (!fs.existsSync(lessonNotesUploadDir)) fs.mkdirSync(lessonNotesUploadDir, { recursive: true });
+  const lessonNotesUpload = multer({
+    storage: multer.diskStorage({
+      destination: lessonNotesUploadDir,
+      filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname);
+        const name = crypto.randomBytes(16).toString("hex");
+        cb(null, `${name}${ext}`);
+      },
+    }),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+      const allowed = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"];
+      const ext = path.extname(file.originalname).toLowerCase();
+      if (allowed.includes(ext)) cb(null, true);
+      else cb(new Error("Only image files are allowed"));
+    },
+  });
+
+  app.get("/api/lesson-notes/public/:slug", async (req: any, res) => {
+    try {
+      const slug = req.params.slug;
+      const [note] = await db.select({
+        title: lessonNotes.title,
+        emoji: lessonNotes.emoji,
+        coverColor: lessonNotes.coverColor,
+        content: lessonNotes.content,
+        createdAt: lessonNotes.createdAt,
+        lastEditedAt: lessonNotes.lastEditedAt,
+      }).from(lessonNotes)
+        .where(and(eq(lessonNotes.publicSlug, slug), eq(lessonNotes.isPublic, true), eq(lessonNotes.isArchived, false)));
+      if (!note) return res.status(404).json({ error: "Note not found" });
+      return res.json(note);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/lesson-notes", isAuthenticated, async (req: any, res) => {
+    try {
+      const notes = await db.select({
+        id: lessonNotes.id,
+        title: lessonNotes.title,
+        emoji: lessonNotes.emoji,
+        coverColor: lessonNotes.coverColor,
+        isFavorite: lessonNotes.isFavorite,
+        isArchived: lessonNotes.isArchived,
+        sortOrder: lessonNotes.sortOrder,
+        lastEditedAt: lessonNotes.lastEditedAt,
+        createdAt: lessonNotes.createdAt,
+      }).from(lessonNotes)
+        .where(and(eq(lessonNotes.userId, req.user.claims.sub), eq(lessonNotes.isArchived, false)))
+        .orderBy(desc(lessonNotes.lastEditedAt));
+      return res.json(notes);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/lesson-notes/upload-image", isAuthenticated, lessonNotesUpload.single("image"), (req: any, res) => {
+    if (!req.file) return res.status(400).json({ error: "No image file provided" });
+    const url = `/uploads/lesson-notes/${req.file.filename}`;
+    return res.json({ url });
+  });
+
+  app.post("/api/lesson-notes/ai-enhance", isAuthenticated, async (req: any, res) => {
+    try {
+      const schema = z.object({
+        text: z.string().min(1).max(5000),
+        action: z.enum(["improve", "fix-grammar", "make-shorter", "make-longer", "summarize", "explain"]),
+      });
+      const { text, action } = schema.parse(req.body);
+      const prompts: Record<string, string> = {
+        "improve": "Improve the writing quality of the following text. Keep the same meaning but make it clearer and more professional. Return only the improved text.",
+        "fix-grammar": "Fix all grammar, spelling, and punctuation errors in the following text. Return only the corrected text.",
+        "make-shorter": "Make the following text more concise while keeping the key points. Return only the shortened text.",
+        "make-longer": "Expand the following text with more detail and examples while keeping the same topic. Return only the expanded text.",
+        "summarize": "Write a brief summary of the following text in 2-3 sentences. Return only the summary.",
+        "explain": "Explain the following text in simpler terms that a beginner would understand. Return only the explanation.",
+      };
+      const { text: resultText } = await aiService.generateText(text, { systemPrompt: prompts[action], model: "gpt-4o-mini" });
+      return res.json({ result: resultText });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/lesson-notes/:id/versions", isAuthenticated, async (req: any, res) => {
+    try {
+      const noteId = parseInt(req.params.id);
+      if (isNaN(noteId)) return res.status(400).json({ error: "Invalid note ID" });
+      const [note] = await db.select({ id: lessonNotes.id }).from(lessonNotes)
+        .where(and(eq(lessonNotes.id, noteId), eq(lessonNotes.userId, req.user.claims.sub)));
+      if (!note) return res.status(404).json({ error: "Note not found" });
+      const versions = await db.select().from(lessonNoteVersions)
+        .where(and(eq(lessonNoteVersions.noteId, noteId), eq(lessonNoteVersions.userId, req.user.claims.sub)))
+        .orderBy(desc(lessonNoteVersions.createdAt))
+        .limit(50);
+      return res.json(versions);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/lesson-notes/:id/versions/:versionId/restore", isAuthenticated, async (req: any, res) => {
+    try {
+      const noteId = parseInt(req.params.id);
+      const versionId = parseInt(req.params.versionId);
+      if (isNaN(noteId) || isNaN(versionId)) return res.status(400).json({ error: "Invalid ID" });
+      const userId = req.user.claims.sub;
+      const [note] = await db.select().from(lessonNotes)
+        .where(and(eq(lessonNotes.id, noteId), eq(lessonNotes.userId, userId)));
+      if (!note) return res.status(404).json({ error: "Note not found" });
+      const [version] = await db.select().from(lessonNoteVersions)
+        .where(and(eq(lessonNoteVersions.id, versionId), eq(lessonNoteVersions.noteId, noteId), eq(lessonNoteVersions.userId, userId)));
+      if (!version) return res.status(404).json({ error: "Version not found" });
+      await db.insert(lessonNoteVersions).values({ userId, noteId, title: note.title, content: note.content });
+      const [updated] = await db.update(lessonNotes)
+        .set({ title: version.title, content: version.content, lastEditedAt: new Date() })
+        .where(eq(lessonNotes.id, noteId)).returning();
+      return res.json(updated);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/lesson-notes/:id/export", isAuthenticated, async (req: any, res) => {
+    try {
+      const noteId = parseInt(req.params.id);
+      if (isNaN(noteId)) return res.status(400).json({ error: "Invalid note ID" });
+      const format = req.query.format as string;
+      if (!format || !["html", "markdown"].includes(format)) return res.status(400).json({ error: "Format must be html or markdown" });
+      const [note] = await db.select().from(lessonNotes)
+        .where(and(eq(lessonNotes.id, noteId), eq(lessonNotes.userId, req.user.claims.sub)));
+      if (!note) return res.status(404).json({ error: "Note not found" });
+      if (format === "html") {
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${note.title}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.6;color:#1a1a1a}h1{font-size:2em;margin-top:1em}h2{font-size:1.5em;margin-top:0.8em}h3{font-size:1.25em;margin-top:0.6em}img{max-width:100%;border-radius:8px;margin:1em 0}ul,ol{padding-left:1.5em}blockquote{border-left:3px solid #d1d5db;padding-left:1em;color:#6b7280}code{background:#f3f4f6;padding:2px 6px;border-radius:4px;font-size:0.9em}pre{background:#1e1e1e;color:#d4d4d4;padding:16px;border-radius:8px;overflow-x:auto}details{margin:0.5em 0;border:1px solid #e5e7eb;border-radius:6px;padding:0.5em 1em}summary{cursor:pointer;font-weight:600}</style></head><body><h1>${note.emoji} ${note.title}</h1>${note.content}</body></html>`;
+        res.setHeader("Content-Type", "text/html");
+        res.setHeader("Content-Disposition", `attachment; filename="${note.title.replace(/[^a-zA-Z0-9 ]/g, "")}.html"`);
+        return res.send(html);
+      } else {
+        const turndownService = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
+        const markdown = `# ${note.emoji} ${note.title}\n\n${turndownService.turndown(note.content || "")}`;
+        res.setHeader("Content-Type", "text/markdown");
+        res.setHeader("Content-Disposition", `attachment; filename="${note.title.replace(/[^a-zA-Z0-9 ]/g, "")}.md"`);
+        return res.send(markdown);
+      }
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/lesson-notes/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const noteId = parseInt(req.params.id);
+      if (isNaN(noteId)) return res.status(400).json({ error: "Invalid note ID" });
+      const [note] = await db.select().from(lessonNotes)
+        .where(and(eq(lessonNotes.id, noteId), eq(lessonNotes.userId, req.user.claims.sub)));
+      if (!note) return res.status(404).json({ error: "Note not found" });
+      return res.json(note);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/lesson-notes", isAuthenticated, async (req: any, res) => {
+    try {
+      const schema = z.object({
+        title: z.string().min(1).max(200).optional(),
+        emoji: z.string().max(10).optional(),
+        coverColor: z.string().max(20).optional(),
+      });
+      const parsed = schema.parse(req.body);
+      const userId = req.user.claims.sub;
+      const [countResult] = await db.select({ count: drizzleSql<number>`count(*)` }).from(lessonNotes).where(eq(lessonNotes.userId, userId));
+      const sortOrder = Number(countResult.count);
+      const [note] = await db.insert(lessonNotes).values({
+        userId,
+        title: parsed.title || "Untitled",
+        emoji: parsed.emoji || "📝",
+        coverColor: parsed.coverColor || "#6366f1",
+        sortOrder,
+        content: "",
+      }).returning();
+      return res.json(note);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.patch("/api/lesson-notes/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const noteId = parseInt(req.params.id);
+      if (isNaN(noteId)) return res.status(400).json({ error: "Invalid note ID" });
+      const userId = req.user.claims.sub;
+      const [existingNote] = await db.select().from(lessonNotes)
+        .where(and(eq(lessonNotes.id, noteId), eq(lessonNotes.userId, userId)));
+      if (!existingNote) return res.status(404).json({ error: "Note not found" });
+      const schema = z.object({
+        title: z.string().min(1).max(200).optional(),
+        content: z.string().optional(),
+        emoji: z.string().max(10).optional(),
+        coverColor: z.string().max(20).optional(),
+        isFavorite: z.boolean().optional(),
+        isPublic: z.boolean().optional(),
+        sortOrder: z.number().int().min(0).optional(),
+      });
+      const parsed = schema.parse(req.body);
+      if (parsed.content !== undefined && parsed.content !== existingNote.content) {
+        await db.insert(lessonNoteVersions).values({ userId, noteId, title: existingNote.title, content: existingNote.content });
+      }
+      const updateData: any = { ...parsed, lastEditedAt: new Date() };
+      if (parsed.isPublic === true && !existingNote.publicSlug) {
+        updateData.publicSlug = `${noteId}-${Date.now().toString(36)}`;
+      }
+      const [updated] = await db.update(lessonNotes)
+        .set(updateData)
+        .where(and(eq(lessonNotes.id, noteId), eq(lessonNotes.userId, userId)))
+        .returning();
+      return res.json(updated);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.delete("/api/lesson-notes/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const noteId = parseInt(req.params.id);
+      if (isNaN(noteId)) return res.status(400).json({ error: "Invalid note ID" });
+      const [updated] = await db.update(lessonNotes)
+        .set({ isArchived: true })
+        .where(and(eq(lessonNotes.id, noteId), eq(lessonNotes.userId, req.user.claims.sub)))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Note not found" });
+      return res.json({ success: true });
     } catch (e: any) { return res.status(500).json({ error: e.message }); }
   });
 

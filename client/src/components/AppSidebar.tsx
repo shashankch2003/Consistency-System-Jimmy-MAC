@@ -39,6 +39,7 @@ import {
   Folder,
   Plus,
   Ban,
+  NotebookPen,
 } from "lucide-react";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
 import { PmNotificationBell } from "@/components/pm/PmNotificationBell";
@@ -209,6 +210,16 @@ export function AppSidebar({ onOpenSearch }: AppSidebarProps) {
                     <Plus className="w-3.5 h-3.5" />
                   </button>
                 </div>
+              </SidebarMenuItem>
+
+              {/* 9. Lesson Notes */}
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive("/dashboard/lesson-notes")} className="data-[active=true]:bg-white/10 data-[active=true]:text-white">
+                  <Link href="/dashboard/lesson-notes" className="flex items-center gap-3 px-3 py-2" data-testid="nav-lesson-notes">
+                    <NotebookPen className="w-4 h-4" />
+                    <span>Lesson Notes</span>
+                  </Link>
+                </SidebarMenuButton>
               </SidebarMenuItem>
 
               {adminCheck?.isAdmin && (

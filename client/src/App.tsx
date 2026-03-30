@@ -65,6 +65,7 @@ import MyDayPage from "@/pages/dashboard/my-day";
 import AiHabitsPage from "@/pages/dashboard/ai-habits";
 import FocusCoachPage from "@/pages/dashboard/focus-coach";
 import AiAgentsPage from "@/pages/dashboard/ai-agents";
+import LessonNotesPage from "@/pages/dashboard/lesson-notes";
 import AiWorkflowsPage from "@/pages/dashboard/ai-workflows";
 import ProjectManagerPage from "@/pages/dashboard/project-manager";
 import TaskIntelPage from "@/pages/dashboard/task-intel";
@@ -294,6 +295,11 @@ function Router() {
       <Route path="/dashboard/ai-agents">
         <DashboardLayout>
           <AiAgentsPage />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/lesson-notes">
+        <DashboardLayout>
+          <LessonNotesPage />
         </DashboardLayout>
       </Route>
       <Route path="/dashboard/ai-workflows">

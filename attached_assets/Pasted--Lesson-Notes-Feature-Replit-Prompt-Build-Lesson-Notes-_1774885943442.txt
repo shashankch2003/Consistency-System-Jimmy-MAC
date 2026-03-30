@@ -1,0 +1,826 @@
+# Lesson Notes Feature — Replit Prompt
+
+Build **Lesson Notes** — A polished, practical note-taking feature where users create pages and write rich content using a TipTap-based editor with slash commands, headings (H1/H2/H3), bullet lists, numbered lists, toggle blocks, image embedding, undo/redo, and export/sharing. The editor must feel smooth and simple like Notion but only implement the most-used features listed below — no database-backed blocks, no drag-and-drop reordering, no nested pages.
+
+---
+
+## 0. PACKAGE INSTALLATION (do this first before writing any code)
+
+Run this command in the shell before building anything:
+
+```bash
+npm install @tiptap/react @tiptap/starter-kit @tiptap/extension-placeholder @tiptap/extension-image @tiptap/extension-underline @tiptap/extension-text-align @tiptap/extension-highlight @tiptap/extension-typography @tiptap/extension-code-block-lowlight @tiptap/pm lowlight turndown
+```
+
+Do NOT modify package.json manually. Run the command above and let npm handle it.
+
+---
+
+## 1. DATABASE TABLES
+
+Add these tables to `shared/schema.ts`. Do not modify any existing tables.
+
+### Table: `lessonNotes`
+
+```ts
+export const lessonNotes = pgTable("lesson_notes", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  title: text("title").notNull().default("Untitled"),
+  content: text("content").notNull().default(""),
+  emoji: text("emoji").notNull().default("📝"),
+  coverColor: text("cover_color").notNull().default("#6366f1"),
+  isFavorite: boolean("is_favorite").notNull().default(false),
+  isArchived: boolean("is_archived").notNull().default(false),
+  isPublic: boolean("is_public").notNull().default(false),
+  publicSlug: text("public_slug"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  lastEditedAt: timestamp("last_edited_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertLessonNoteSchema = createInsertSchema(lessonNotes).omit({ id: true, createdAt: true, lastEditedAt: true });
+export type InsertLessonNote = typeof lessonNotes.$inferInsert;
+export type LessonNote = typeof lessonNotes.$inferSelect;
+```
+
+### Table: `lessonNoteVersions`
+
+```ts
+export const lessonNoteVersions = pgTable("lesson_note_versions", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  noteId: integer("note_id").notNull(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertLessonNoteVersionSchema = createInsertSchema(lessonNoteVersions).omit({ id: true, createdAt: true });
+export type InsertLessonNoteVersion = typeof lessonNoteVersions.$inferInsert;
+export type LessonNoteVersion = typeof lessonNoteVersions.$inferSelect;
+```
+
+After adding both tables, run:
+```bash
+npx drizzle-kit push
+```
+
+---
+
+## 2. API ROUTES
+
+Add ALL of the following routes inside `server/routes.ts`. Every route uses `isAuthenticated` middleware and filters by `eq(table.userId, req.user.claims.sub)` unless stated otherwise. Add the necessary imports at the top of routes.ts:
+
+```ts
+import { lessonNotes, insertLessonNoteSchema, lessonNoteVersions } from "@shared/schema";
+```
+
+### 2.1 Note CRUD Routes
+
+**GET `/api/lesson-notes`** — Returns all non-archived notes for the user, ordered by `lastEditedAt` desc. Select only these columns: `id`, `title`, `emoji`, `coverColor`, `isFavorite`, `isArchived`, `sortOrder`, `lastEditedAt`, `createdAt`. Do NOT select `content` in this list query (it can be large).
+
+```ts
+app.get("/api/lesson-notes", isAuthenticated, async (req, res) => {
+  const notes = await db.select({
+    id: lessonNotes.id,
+    title: lessonNotes.title,
+    emoji: lessonNotes.emoji,
+    coverColor: lessonNotes.coverColor,
+    isFavorite: lessonNotes.isFavorite,
+    isArchived: lessonNotes.isArchived,
+    sortOrder: lessonNotes.sortOrder,
+    lastEditedAt: lessonNotes.lastEditedAt,
+    createdAt: lessonNotes.createdAt,
+  }).from(lessonNotes)
+    .where(and(eq(lessonNotes.userId, req.user.claims.sub), eq(lessonNotes.isArchived, false)))
+    .orderBy(desc(lessonNotes.lastEditedAt));
+  res.json(notes);
+});
+```
+
+**GET `/api/lesson-notes/:id`** — Returns a single note with full content. Validates the note belongs to the user. Returns 404 with `{ error: "Note not found" }` if not found or not owned by user.
+
+```ts
+app.get("/api/lesson-notes/:id", isAuthenticated, async (req, res) => {
+  const noteId = parseInt(req.params.id);
+  if (isNaN(noteId)) return res.status(400).json({ error: "Invalid note ID" });
+  const [note] = await db.select().from(lessonNotes)
+    .where(and(eq(lessonNotes.id, noteId), eq(lessonNotes.userId, req.user.claims.sub)));
+  if (!note) return res.status(404).json({ error: "Note not found" });
+  res.json(note);
+});
+```
+
+**POST `/api/lesson-notes`** — Creates a new note. Sets `userId` from session. Validates body:
+
+```ts
+z.object({
+  title: z.string().min(1).max(200).optional(),
+  emoji: z.string().max(10).optional(),
+  coverColor: z.string().max(20).optional(),
+})
+```
+
+Returns the full created note object. Sets `sortOrder` to the current count of the user's notes (so newest goes to end).
+
+```ts
+app.post("/api/lesson-notes", isAuthenticated, async (req, res) => {
+  const schema = z.object({
+    title: z.string().min(1).max(200).optional(),
+    emoji: z.string().max(10).optional(),
+    coverColor: z.string().max(20).optional(),
+  });
+  const parsed = schema.parse(req.body);
+  const userId = req.user.claims.sub;
+  const [countResult] = await db.select({ count: sql<number>`count(*)` }).from(lessonNotes).where(eq(lessonNotes.userId, userId));
+  const sortOrder = Number(countResult.count);
+  const [note] = await db.insert(lessonNotes).values({
+    userId,
+    title: parsed.title || "Untitled",
+    emoji: parsed.emoji || "📝",
+    coverColor: parsed.coverColor || "#6366f1",
+    sortOrder,
+    content: "",
+  }).returning();
+  res.json(note);
+});
+```
+
+**PATCH `/api/lesson-notes/:id`** — Updates a note. Validates owner. Before updating `content`, save the current version to `lessonNoteVersions` (only if content actually changed). Update `lastEditedAt` to `new Date()` on every PATCH.
+
+Validates body:
+```ts
+z.object({
+  title: z.string().min(1).max(200).optional(),
+  content: z.string().optional(),
+  emoji: z.string().max(10).optional(),
+  coverColor: z.string().max(20).optional(),
+  isFavorite: z.boolean().optional(),
+  isPublic: z.boolean().optional(),
+  sortOrder: z.number().int().min(0).optional(),
+})
+```
+
+Implementation:
+```ts
+app.patch("/api/lesson-notes/:id", isAuthenticated, async (req, res) => {
+  const noteId = parseInt(req.params.id);
+  if (isNaN(noteId)) return res.status(400).json({ error: "Invalid note ID" });
+  const userId = req.user.claims.sub;
+
+  const [existingNote] = await db.select().from(lessonNotes)
+    .where(and(eq(lessonNotes.id, noteId), eq(lessonNotes.userId, userId)));
+  if (!existingNote) return res.status(404).json({ error: "Note not found" });
+
+  const schema = z.object({
+    title: z.string().min(1).max(200).optional(),
+    content: z.string().optional(),
+    emoji: z.string().max(10).optional(),
+    coverColor: z.string().max(20).optional(),
+    isFavorite: z.boolean().optional(),
+    isPublic: z.boolean().optional(),
+    sortOrder: z.number().int().min(0).optional(),
+  });
+  const parsed = schema.parse(req.body);
+
+  if (parsed.content !== undefined && parsed.content !== existingNote.content) {
+    await db.insert(lessonNoteVersions).values({
+      userId,
+      noteId,
+      title: existingNote.title,
+      content: existingNote.content,
+    });
+  }
+
+  if (parsed.isPublic === true && !existingNote.publicSlug) {
+    const slug = `${noteId}-${Date.now().toString(36)}`;
+    (parsed as any).publicSlug = slug;
+  }
+
+  const [updated] = await db.update(lessonNotes)
+    .set({ ...parsed, lastEditedAt: new Date() })
+    .where(and(eq(lessonNotes.id, noteId), eq(lessonNotes.userId, userId)))
+    .returning();
+  res.json(updated);
+});
+```
+
+**DELETE `/api/lesson-notes/:id`** — Soft-deletes by setting `isArchived` to `true`. Validates owner.
+
+```ts
+app.delete("/api/lesson-notes/:id", isAuthenticated, async (req, res) => {
+  const noteId = parseInt(req.params.id);
+  if (isNaN(noteId)) return res.status(400).json({ error: "Invalid note ID" });
+  const [updated] = await db.update(lessonNotes)
+    .set({ isArchived: true })
+    .where(and(eq(lessonNotes.id, noteId), eq(lessonNotes.userId, req.user.claims.sub)))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "Note not found" });
+  res.json({ success: true });
+});
+```
+
+### 2.2 Version History Routes
+
+**GET `/api/lesson-notes/:id/versions`** — Returns all versions for a note, ordered by `createdAt` desc. Limit to 50 most recent. Validates the note belongs to the user.
+
+```ts
+app.get("/api/lesson-notes/:id/versions", isAuthenticated, async (req, res) => {
+  const noteId = parseInt(req.params.id);
+  if (isNaN(noteId)) return res.status(400).json({ error: "Invalid note ID" });
+  const [note] = await db.select({ id: lessonNotes.id }).from(lessonNotes)
+    .where(and(eq(lessonNotes.id, noteId), eq(lessonNotes.userId, req.user.claims.sub)));
+  if (!note) return res.status(404).json({ error: "Note not found" });
+  const versions = await db.select().from(lessonNoteVersions)
+    .where(and(eq(lessonNoteVersions.noteId, noteId), eq(lessonNoteVersions.userId, req.user.claims.sub)))
+    .orderBy(desc(lessonNoteVersions.createdAt))
+    .limit(50);
+  res.json(versions);
+});
+```
+
+**POST `/api/lesson-notes/:id/versions/:versionId/restore`** — Restores a note to a previous version. Saves the current state as a new version first, then overwrites content and title from the selected version.
+
+```ts
+app.post("/api/lesson-notes/:id/versions/:versionId/restore", isAuthenticated, async (req, res) => {
+  const noteId = parseInt(req.params.id);
+  const versionId = parseInt(req.params.versionId);
+  if (isNaN(noteId) || isNaN(versionId)) return res.status(400).json({ error: "Invalid ID" });
+  const userId = req.user.claims.sub;
+
+  const [note] = await db.select().from(lessonNotes)
+    .where(and(eq(lessonNotes.id, noteId), eq(lessonNotes.userId, userId)));
+  if (!note) return res.status(404).json({ error: "Note not found" });
+
+  const [version] = await db.select().from(lessonNoteVersions)
+    .where(and(eq(lessonNoteVersions.id, versionId), eq(lessonNoteVersions.noteId, noteId), eq(lessonNoteVersions.userId, userId)));
+  if (!version) return res.status(404).json({ error: "Version not found" });
+
+  await db.insert(lessonNoteVersions).values({
+    userId,
+    noteId,
+    title: note.title,
+    content: note.content,
+  });
+
+  const [updated] = await db.update(lessonNotes)
+    .set({ title: version.title, content: version.content, lastEditedAt: new Date() })
+    .where(eq(lessonNotes.id, noteId))
+    .returning();
+  res.json(updated);
+});
+```
+
+### 2.3 Image Upload Route
+
+**POST `/api/lesson-notes/upload-image`** — Accepts a multipart form upload with a single file field named `image`. Saves the file to the server and returns a URL. Use `multer` for parsing.
+
+```ts
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+import crypto from "crypto";
+
+const uploadDir = path.join(process.cwd(), "uploads", "lesson-notes");
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+const lessonNotesUpload = multer({
+  storage: multer.diskStorage({
+    destination: uploadDir,
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      const name = crypto.randomBytes(16).toString("hex");
+      cb(null, `${name}${ext}`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) cb(null, true);
+    else cb(new Error("Only image files are allowed"));
+  },
+});
+
+app.post("/api/lesson-notes/upload-image", isAuthenticated, lessonNotesUpload.single("image"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No image file provided" });
+  const url = `/uploads/lesson-notes/${req.file.filename}`;
+  res.json({ url });
+});
+```
+
+Also add a static file serving line (place near the top of routes, after express.json middleware):
+```ts
+app.use("/uploads/lesson-notes", express.static(path.join(process.cwd(), "uploads", "lesson-notes")));
+```
+
+### 2.4 Public Share Route
+
+**GET `/api/lesson-notes/public/:slug`** — Returns a public note by its slug. Does NOT require authentication. Only returns `title`, `emoji`, `coverColor`, `content`, `createdAt`, `lastEditedAt`. Returns 404 if the note is not public or the slug does not exist.
+
+```ts
+app.get("/api/lesson-notes/public/:slug", async (req, res) => {
+  const slug = req.params.slug;
+  const [note] = await db.select({
+    title: lessonNotes.title,
+    emoji: lessonNotes.emoji,
+    coverColor: lessonNotes.coverColor,
+    content: lessonNotes.content,
+    createdAt: lessonNotes.createdAt,
+    lastEditedAt: lessonNotes.lastEditedAt,
+  }).from(lessonNotes)
+    .where(and(eq(lessonNotes.publicSlug, slug), eq(lessonNotes.isPublic, true), eq(lessonNotes.isArchived, false)));
+  if (!note) return res.status(404).json({ error: "Note not found" });
+  res.json(note);
+});
+```
+
+### 2.5 Export Route
+
+**GET `/api/lesson-notes/:id/export?format=html|markdown`** — Exports the note content. For HTML, returns the raw TipTap HTML content wrapped in a styled HTML document. For Markdown, converts the HTML to Markdown using `turndown` library on the server.
+
+```ts
+import TurndownService from "turndown";
+
+app.get("/api/lesson-notes/:id/export", isAuthenticated, async (req, res) => {
+  const noteId = parseInt(req.params.id);
+  if (isNaN(noteId)) return res.status(400).json({ error: "Invalid note ID" });
+  const format = req.query.format as string;
+  if (!format || !["html", "markdown"].includes(format)) {
+    return res.status(400).json({ error: "Format must be html or markdown" });
+  }
+  const [note] = await db.select().from(lessonNotes)
+    .where(and(eq(lessonNotes.id, noteId), eq(lessonNotes.userId, req.user.claims.sub)));
+  if (!note) return res.status(404).json({ error: "Note not found" });
+
+  if (format === "html") {
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${note.title}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.6;color:#1a1a1a}h1{font-size:2em;margin-top:1em}h2{font-size:1.5em;margin-top:0.8em}h3{font-size:1.25em;margin-top:0.6em}img{max-width:100%;border-radius:8px;margin:1em 0}ul,ol{padding-left:1.5em}blockquote{border-left:3px solid #d1d5db;padding-left:1em;color:#6b7280}code{background:#f3f4f6;padding:2px 6px;border-radius:4px;font-size:0.9em}pre{background:#1e1e1e;color:#d4d4d4;padding:16px;border-radius:8px;overflow-x:auto}details{margin:0.5em 0;border:1px solid #e5e7eb;border-radius:6px;padding:0.5em 1em}summary{cursor:pointer;font-weight:600}</style></head><body><h1>${note.emoji} ${note.title}</h1>${note.content}</body></html>`;
+    res.setHeader("Content-Type", "text/html");
+    res.setHeader("Content-Disposition", `attachment; filename="${note.title.replace(/[^a-zA-Z0-9 ]/g, "")}.html"`);
+    res.send(html);
+  } else {
+    const turndownService = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
+    const markdown = `# ${note.emoji} ${note.title}\n\n${turndownService.turndown(note.content || "")}`;
+    res.setHeader("Content-Type", "text/markdown");
+    res.setHeader("Content-Disposition", `attachment; filename="${note.title.replace(/[^a-zA-Z0-9 ]/g, "")}.md"`);
+    res.send(markdown);
+  }
+});
+```
+
+### 2.6 AI Enhance Route
+
+**POST `/api/lesson-notes/ai-enhance`** — Uses AI to improve selected text. Validates body:
+```ts
+z.object({
+  text: z.string().min(1).max(5000),
+  action: z.enum(["improve", "fix-grammar", "make-shorter", "make-longer", "summarize", "explain"]),
+})
+```
+
+```ts
+app.post("/api/lesson-notes/ai-enhance", isAuthenticated, async (req, res) => {
+  const schema = z.object({
+    text: z.string().min(1).max(5000),
+    action: z.enum(["improve", "fix-grammar", "make-shorter", "make-longer", "summarize", "explain"]),
+  });
+  const { text, action } = schema.parse(req.body);
+  const prompts: Record<string, string> = {
+    "improve": "Improve the writing quality of the following text. Keep the same meaning but make it clearer and more professional. Return only the improved text.",
+    "fix-grammar": "Fix all grammar, spelling, and punctuation errors in the following text. Return only the corrected text.",
+    "make-shorter": "Make the following text more concise while keeping the key points. Return only the shortened text.",
+    "make-longer": "Expand the following text with more detail and examples while keeping the same topic. Return only the expanded text.",
+    "summarize": "Write a brief summary of the following text in 2-3 sentences. Return only the summary.",
+    "explain": "Explain the following text in simpler terms that a beginner would understand. Return only the explanation.",
+  };
+  const result = await aiService.generateText({
+    model: "gpt-4o-mini",
+    system: prompts[action],
+    prompt: text,
+  });
+  res.json({ result });
+});
+```
+
+---
+
+## 3. FRONTEND PAGE
+
+### File: `client/src/pages/dashboard/lesson-notes.tsx`
+
+Page title: **Lesson Notes**
+
+This is a single-page component with two panels: a left sidebar listing all notes, and a main editor area.
+
+### 3.1 Overall Layout Structure
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  LEFT SIDEBAR (260px)       │  MAIN EDITOR AREA               │
+│  ┌────────────────────────┐ │  ┌────────────────────────────┐  │
+│  │ 🔍 Search notes...     │ │  │ Cover color bar (h-1.5)    │  │
+│  │ [+ New Note] button    │ │  │ Emoji picker + Title input │  │
+│  ├────────────────────────┤ │  │                            │  │
+│  │ ⭐ FAVORITES           │ │  │ ── Toolbar ──              │  │
+│  │   📝 Note title 1     │ │  │ H1 H2 H3 | B I U S | BL   │  │
+│  │   📝 Note title 2     │ │  │ NL | Quote Code | Img | AI │  │
+│  ├────────────────────────┤ │  │                            │  │
+│  │ 📄 ALL NOTES           │ │  │ ── Editor content ──       │  │
+│  │   📝 Note title 3     │ │  │ Type / for slash commands   │  │
+│  │   📝 Note title 4     │ │  │                            │  │
+│  │   📝 Note title 5     │ │  │                            │  │
+│  └────────────────────────┘ │  └────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### 3.2 Left Sidebar (260px, fixed width, h-full, border-r, flex flex-col)
+
+**Top bar (p-3, flex flex-col gap-2)**:
+- Search input: `Input` component with `Search` icon, placeholder "Search notes...", filters the note list by title on every keystroke using local state. `data-testid="lesson-notes-search"`.
+- New Note button: Full-width `Button` variant="default" with `Plus` icon and text "New Note". Calls `POST /api/lesson-notes`. On success, selects the new note. `data-testid="lesson-notes-new-btn"`.
+
+**Favorites section (only shown if user has any favorited notes)**:
+- Section header: Small muted text "FAVORITES" with `Star` icon, px-3, pt-3, pb-1, text-xs, font-semibold, text-muted-foreground, uppercase, tracking-wide.
+- List of favorited notes, each as a clickable row.
+
+**All Notes section**:
+- Section header: Small muted text "ALL NOTES", same styling as Favorites header.
+- Scrollable list (`ScrollArea`, flex-1) of all non-favorited notes.
+
+**Each note item in the sidebar** (px-3, py-2, flex items-center gap-2, rounded-md, cursor-pointer, hover:bg-accent, transition-colors):
+- Left: The note emoji (text-base).
+- Center: The note title (text-sm, truncate, flex-1). If title is "Untitled", show it in muted color (text-muted-foreground italic).
+- Right (shown on hover only, using group/group-hover): A `MoreHorizontal` icon button (16px) that opens a `DropdownMenu` with these items:
+  - "Add to Favorites" / "Remove from Favorites" (toggles `isFavorite` via PATCH)
+  - "Duplicate" (creates a new note with same title + " (Copy)" and same content via POST then PATCH)
+  - Separator
+  - "Delete" (red text, calls DELETE, shows confirmation via `AlertDialog` first)
+- The currently selected note has `bg-accent` background.
+- `data-testid="lesson-notes-item-{id}"`
+
+**Bottom section (p-3, border-t)**:
+- Small muted text showing total note count: "{count} notes" with `FileText` icon. `data-testid="lesson-notes-count"`.
+
+### 3.3 Main Editor Area (flex-1, flex flex-col, h-full)
+
+When NO note is selected, show an empty state:
+- Centered vertically and horizontally.
+- `NotebookPen` icon (48px, text-muted-foreground/40).
+- Heading: "Lesson Notes" (text-2xl, font-bold).
+- Text: "Create a new note or select one from the sidebar to start writing." (text-muted-foreground, text-center, max-w-sm).
+- Button: "Create New Note" with `Plus` icon. Same action as sidebar "New Note" button.
+- `data-testid="lesson-notes-empty-state"`.
+
+When a note IS selected, show the editor view:
+
+#### 3.3.1 Cover Color Bar
+
+A thin colored bar at the very top of the editor area, `h-1.5 w-full`, background color set to the note's `coverColor`. Clicking it opens a small popover with 8 color circles the user can pick from:
+
+```ts
+const coverColors = ["#6366f1", "#8b5cf6", "#ec4899", "#ef4444", "#f59e0b", "#22c55e", "#06b6d4", "#3b82f6"];
+```
+
+Selecting a color calls `PATCH /api/lesson-notes/:id` with `{ coverColor: selectedColor }`.
+`data-testid="lesson-notes-cover-bar"`.
+
+#### 3.3.2 Title Area (px-12, pt-8)
+
+- **Emoji button**: Displays the current note emoji in a 40px clickable button. Clicking opens a small popover grid (6 columns) of these 24 emojis the user can pick from:
+```ts
+const emojiOptions = ["📝", "📓", "📒", "📕", "📗", "📘", "📙", "📖", "📚", "✏️", "🖊️", "💡", "🎯", "📌", "📋", "📊", "🗂️", "💻", "🎓", "📐", "🧪", "🔬", "🏗️", "⚡"];
+```
+  Selecting an emoji calls PATCH. `data-testid="lesson-notes-emoji-picker"`.
+
+- **Title input**: A large text input (text-4xl, font-bold, border-none, outline-none, bg-transparent, w-full, placeholder "Untitled"). On blur, save the title via PATCH if it changed. Also save on Enter key press. `data-testid="lesson-notes-title-input"`.
+
+#### 3.3.3 Toolbar (px-12, py-2, border-b, flex items-center gap-1, flex-wrap, sticky top-0 bg-background z-10)
+
+A horizontal toolbar with icon buttons grouped by separators. Each button is 32x32px, rounded-md, with a tooltip. Active formatting states have `bg-accent` background.
+
+**Group 1 — Headings**:
+- H1 button: `Heading1` icon. Toggles heading level 1. `data-testid="lesson-notes-toolbar-h1"`.
+- H2 button: `Heading2` icon. Toggles heading level 2. `data-testid="lesson-notes-toolbar-h2"`.
+- H3 button: `Heading3` icon. Toggles heading level 3. `data-testid="lesson-notes-toolbar-h3"`.
+
+**Separator**: A vertical line, `w-px h-6 bg-border mx-1`.
+
+**Group 2 — Inline formatting**:
+- Bold: `Bold` icon. Toggles bold. `data-testid="lesson-notes-toolbar-bold"`.
+- Italic: `Italic` icon. Toggles italic. `data-testid="lesson-notes-toolbar-italic"`.
+- Underline: `Underline` icon. Toggles underline. `data-testid="lesson-notes-toolbar-underline"`.
+- Strikethrough: `Strikethrough` icon. Toggles strike. `data-testid="lesson-notes-toolbar-strike"`.
+- Highlight: `Highlighter` icon. Toggles highlight (yellow background). `data-testid="lesson-notes-toolbar-highlight"`.
+
+**Separator**.
+
+**Group 3 — Lists and blocks**:
+- Bullet list: `List` icon. Toggles bullet list. `data-testid="lesson-notes-toolbar-bullet"`.
+- Numbered list: `ListOrdered` icon. Toggles ordered list. `data-testid="lesson-notes-toolbar-numbered"`.
+- Toggle block: `ChevronRight` icon. Inserts a `<details><summary>Toggle heading</summary><p>Toggle content</p></details>`. `data-testid="lesson-notes-toolbar-toggle"`.
+- Blockquote: `Quote` icon. Toggles blockquote. `data-testid="lesson-notes-toolbar-quote"`.
+- Code block: `Code` icon. Toggles code block. `data-testid="lesson-notes-toolbar-code"`.
+
+**Separator**.
+
+**Group 4 — Insert and actions**:
+- Image: `ImageIcon` icon. Opens a file picker dialog (accept=".jpg,.jpeg,.png,.gif,.webp,.svg"). On file select, uploads via `POST /api/lesson-notes/upload-image` (multipart/form-data), then inserts the returned URL as an image node in the editor. `data-testid="lesson-notes-toolbar-image"`.
+- Horizontal rule: `Minus` icon. Inserts a horizontal rule. `data-testid="lesson-notes-toolbar-hr"`.
+
+**Separator**.
+
+**Group 5 — Utility**:
+- Undo: `Undo` icon. Calls `editor.chain().focus().undo().run()`. Disabled when undo history is empty. `data-testid="lesson-notes-toolbar-undo"`.
+- Redo: `Redo` icon. Calls `editor.chain().focus().redo().run()`. Disabled when redo history is empty. `data-testid="lesson-notes-toolbar-redo"`.
+
+**Separator**.
+
+**Group 6 — AI and Export (right-aligned, ml-auto)**:
+- AI button: `Sparkles` icon with text "AI". Opens a dropdown menu with these options: "Improve writing", "Fix grammar", "Make shorter", "Make longer", "Summarize", "Explain simply". When clicked, takes the currently selected text (or all text if nothing selected), calls `POST /api/lesson-notes/ai-enhance` with the selected action, and replaces the selected text with the result. Shows a loading spinner in the button while processing. `data-testid="lesson-notes-toolbar-ai"`.
+- Export button: `Download` icon. Opens a dropdown with "Export as HTML" and "Export as Markdown". Clicking either calls `GET /api/lesson-notes/:id/export?format=html` or `GET /api/lesson-notes/:id/export?format=markdown` and triggers a file download. `data-testid="lesson-notes-toolbar-export"`.
+- Share button: `Share2` icon. Opens a popover with a toggle switch labeled "Share publicly". When enabled, shows the public URL as a read-only text input with a "Copy" button next to it. The URL format is: `{window.location.origin}/shared/note/{publicSlug}`. Toggling calls PATCH with `{ isPublic: true/false }`. `data-testid="lesson-notes-toolbar-share"`.
+- Version history button: `History` icon. Opens a sheet (slide-over panel from right, 400px wide) showing a list of previous versions. Each version row shows the date/time and a "Restore" button. Clicking "Restore" calls `POST /api/lesson-notes/:id/versions/:versionId/restore`, then refetches the note. `data-testid="lesson-notes-toolbar-history"`.
+
+#### 3.3.4 Editor Content Area (flex-1, overflow-y-auto, px-12, py-6)
+
+This is the TipTap editor area. Use the `@tiptap/react` `useEditor` hook with these extensions:
+
+```ts
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import Placeholder from "@tiptap/extension-placeholder";
+import Image from "@tiptap/extension-image";
+import Underline from "@tiptap/extension-underline";
+import TextAlign from "@tiptap/extension-text-align";
+import Highlight from "@tiptap/extension-highlight";
+import Typography from "@tiptap/extension-typography";
+import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
+
+const editor = useEditor({
+  extensions: [
+    StarterKit.configure({
+      heading: { levels: [1, 2, 3] },
+      codeBlock: false,
+    }),
+    Placeholder.configure({ placeholder: 'Type "/" for commands, or just start writing...' }),
+    Image.configure({ inline: false, allowBase64: false }),
+    Underline,
+    TextAlign.configure({ types: ["heading", "paragraph"] }),
+    Highlight.configure({ multicolor: false }),
+    Typography,
+    CodeBlockLowlight.configure({ lowlight }),
+  ],
+  content: note.content || "",
+  editorProps: {
+    attributes: {
+      class: "prose prose-lg dark:prose-invert max-w-none focus:outline-none min-h-[500px]",
+      "data-testid": "lesson-notes-editor",
+    },
+  },
+  onUpdate: ({ editor }) => {
+    debouncedSave(editor.getHTML());
+  },
+});
+```
+
+**Auto-save**: Use a `useCallback` with a 1000ms debounce (using `setTimeout`/`clearTimeout`). Every time the editor content changes, wait 1000ms of inactivity, then call `PATCH /api/lesson-notes/:id` with the new content. Show a small "Saving..." indicator (text-xs, text-muted-foreground) in the top-right corner of the editor area that appears during save and changes to "Saved" with a `Check` icon for 2 seconds after successful save. `data-testid="lesson-notes-save-status"`.
+
+**Slash command menu**: Implement a custom slash command menu that appears when the user types "/" at the beginning of a new line or after a space. This is a floating popup positioned below the cursor, with a list of these commands:
+
+| Command label | Icon | Description shown | Action |
+|---|---|---|---|
+| Heading 1 | `Heading1` | "Large heading" | `editor.chain().focus().toggleHeading({ level: 1 }).run()` |
+| Heading 2 | `Heading2` | "Medium heading" | `editor.chain().focus().toggleHeading({ level: 2 }).run()` |
+| Heading 3 | `Heading3` | "Small heading" | `editor.chain().focus().toggleHeading({ level: 3 }).run()` |
+| Bullet List | `List` | "Unordered list" | `editor.chain().focus().toggleBulletList().run()` |
+| Numbered List | `ListOrdered` | "Ordered list" | `editor.chain().focus().toggleOrderedList().run()` |
+| Quote | `Quote` | "Block quote" | `editor.chain().focus().toggleBlockquote().run()` |
+| Code Block | `Code` | "Code snippet" | `editor.chain().focus().toggleCodeBlock().run()` |
+| Image | `ImageIcon` | "Upload an image" | Opens file picker, uploads, inserts |
+| Divider | `Minus` | "Horizontal rule" | `editor.chain().focus().setHorizontalRule().run()` |
+
+The slash menu should:
+- Appear as a floating card (`bg-popover border rounded-lg shadow-lg p-1 w-72`) positioned below the text cursor.
+- Filter items as the user types after "/" (e.g., "/hea" shows only the three heading options).
+- Navigate with arrow keys (up/down), select with Enter, dismiss with Escape.
+- After selecting a command, delete the "/" and any filter text from the editor, then execute the command.
+- `data-testid="lesson-notes-slash-menu"`.
+
+Implementation approach for slash commands: Use a TipTap extension or listen for the `keydown` event on the editor. When "/" is typed, record the cursor position and open the menu. On each subsequent keystroke, update the filter. On Enter/click, run the command. On Escape or clicking outside, close the menu. Delete the "/..." text before running the command using `editor.chain().focus().deleteRange({ from: slashPosition, to: currentPosition }).run()`.
+
+### 3.4 Mobile Responsive Behavior
+
+- On screens below 768px, the left sidebar is hidden by default.
+- A floating button with `PanelLeftOpen` icon (40x40, rounded-full, shadow-lg, fixed bottom-4 left-4, z-50) opens the sidebar as a slide-over drawer (full height, 280px wide, bg-background, shadow-xl, z-40).
+- Selecting a note on mobile closes the drawer automatically.
+- The toolbar wraps to multiple lines on smaller screens using `flex-wrap`.
+- The editor padding reduces from `px-12` to `px-4` on mobile.
+
+### 3.5 Data Fetching
+
+```ts
+const { data: notes, isLoading: notesLoading } = useQuery({
+  queryKey: ["/api/lesson-notes"],
+});
+
+const { data: activeNote, isLoading: noteLoading } = useQuery({
+  queryKey: ["/api/lesson-notes", selectedNoteId],
+  queryFn: () => fetch(`/api/lesson-notes/${selectedNoteId}`).then(r => r.json()),
+  enabled: !!selectedNoteId,
+});
+
+const { data: versions } = useQuery({
+  queryKey: ["/api/lesson-notes", selectedNoteId, "versions"],
+  queryFn: () => fetch(`/api/lesson-notes/${selectedNoteId}/versions`).then(r => r.json()),
+  enabled: !!selectedNoteId && isHistoryOpen,
+});
+```
+
+### 3.6 Mutations
+
+All mutations use `apiRequest` from `@/lib/queryClient` and invalidate cache on success.
+
+- **Create note**: `POST /api/lesson-notes`. Invalidate `["/api/lesson-notes"]`. Set returned note ID as `selectedNoteId`.
+- **Update note**: `PATCH /api/lesson-notes/:id`. Invalidate `["/api/lesson-notes"]` and `["/api/lesson-notes", noteId]`.
+- **Delete note**: `DELETE /api/lesson-notes/:id`. Invalidate `["/api/lesson-notes"]`. Set `selectedNoteId` to `null`.
+- **Upload image**: `POST /api/lesson-notes/upload-image`. No cache invalidation needed (returns a URL).
+- **AI enhance**: `POST /api/lesson-notes/ai-enhance`. No cache invalidation needed (returns text).
+- **Restore version**: `POST /api/lesson-notes/:id/versions/:versionId/restore`. Invalidate `["/api/lesson-notes"]`, `["/api/lesson-notes", noteId]`, and `["/api/lesson-notes", noteId, "versions"]`.
+
+### 3.7 Local State
+
+```ts
+const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
+const [searchQuery, setSearchQuery] = useState("");
+const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+const [isAiProcessing, setIsAiProcessing] = useState(false);
+```
+
+### 3.8 Important Editor Behavior
+
+- When `activeNote` data loads or changes (different note selected), call `editor.commands.setContent(activeNote.content || "")` to load the content into TipTap. Do this inside a `useEffect` that depends on `activeNote?.id` and `activeNote?.content`. Use a ref to track the current note ID to avoid resetting content during auto-save (only set content when the note ID changes, not when content changes from auto-save).
+- The title input is NOT part of the TipTap editor. It is a separate `input` element above the editor.
+- When creating a new note, focus the title input automatically after creation using a ref.
+
+### 3.9 Loading States
+
+- While `notesLoading` is true: Show 5 `Skeleton` rectangles (h-10 w-full) in the sidebar.
+- While `noteLoading` is true (note selected but content not yet loaded): Show a centered `Loader2` icon with `animate-spin` in the main editor area.
+
+### 3.10 Error Handling
+
+- If note save fails, show toast: "Failed to save note. Your changes may be lost."
+- If image upload fails, show toast: "Failed to upload image. Please try a smaller file."
+- If AI enhance fails, show toast: "AI enhancement failed. Please try again."
+- If export fails, show toast: "Failed to export note. Please try again."
+
+---
+
+## 4. SIDEBAR & ROUTING
+
+### AppSidebar.tsx
+
+Add this sidebar item after the existing notes-related section or at the end of the main items:
+
+```ts
+{ label: "Lesson Notes", icon: NotebookPen, path: "/dashboard/lesson-notes" }
+```
+
+Import `NotebookPen` from `lucide-react`.
+
+### App.tsx
+
+Add route:
+```tsx
+import LessonNotes from "./pages/dashboard/lesson-notes";
+
+<Route path="/dashboard/lesson-notes" component={LessonNotes} />
+```
+
+---
+
+## 5. AI FEATURES
+
+### 5.1 AI Text Enhancement
+
+Use `aiService.generateText` from `server/services/ai-service.ts`.
+
+**Model**: `gpt-4o-mini`
+
+**System prompts** (one per action, listed in section 2.6 above):
+- "improve": "Improve the writing quality of the following text. Keep the same meaning but make it clearer and more professional. Return only the improved text."
+- "fix-grammar": "Fix all grammar, spelling, and punctuation errors in the following text. Return only the corrected text."
+- "make-shorter": "Make the following text more concise while keeping the key points. Return only the shortened text."
+- "make-longer": "Expand the following text with more detail and examples while keeping the same topic. Return only the expanded text."
+- "summarize": "Write a brief summary of the following text in 2-3 sentences. Return only the summary."
+- "explain": "Explain the following text in simpler terms that a beginner would understand. Return only the explanation."
+
+**User prompt**: The selected text content from the editor.
+
+**Response format**: Plain text string. The frontend replaces the selected text in the editor with this returned string.
+
+---
+
+## 6. CONNECTIONS TO EXISTING FEATURES
+
+- This feature does NOT read from or write to any existing tables.
+- This feature does NOT call any existing API routes.
+- This feature uses the existing `aiService` from `server/services/ai-service.ts` (specifically `generateText`).
+- This feature uses the existing `isAuthenticated` middleware from `./replit_integrations/auth`.
+- This feature uses existing shadcn/ui components: `Button`, `Input`, `Textarea`, `ScrollArea`, `Skeleton`, `Separator`, `DropdownMenu`, `DropdownMenuContent`, `DropdownMenuItem`, `DropdownMenuTrigger`, `DropdownMenuSeparator`, `Popover`, `PopoverContent`, `PopoverTrigger`, `Sheet`, `SheetContent`, `SheetHeader`, `SheetTitle`, `SheetTrigger`, `AlertDialog`, `AlertDialogAction`, `AlertDialogCancel`, `AlertDialogContent`, `AlertDialogDescription`, `AlertDialogFooter`, `AlertDialogHeader`, `AlertDialogTitle`, `AlertDialogTrigger`, `Tooltip`, `TooltipContent`, `TooltipTrigger`, `Switch`, `Badge`.
+
+---
+
+## 7. CRITICAL IMPLEMENTATION NOTES
+
+### 7.1 TipTap Editor Styling
+
+Add these CSS styles to the page component (either in a `<style>` tag within the component or as a CSS module):
+
+```css
+.ProseMirror {
+  min-height: 500px;
+  outline: none;
+}
+.ProseMirror p.is-editor-empty:first-child::before {
+  color: #adb5bd;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+.ProseMirror img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 1em 0;
+  cursor: pointer;
+}
+.ProseMirror img.ProseMirror-selectednode {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+.ProseMirror h1 { font-size: 2em; font-weight: 700; margin-top: 1em; margin-bottom: 0.25em; }
+.ProseMirror h2 { font-size: 1.5em; font-weight: 600; margin-top: 0.8em; margin-bottom: 0.2em; }
+.ProseMirror h3 { font-size: 1.25em; font-weight: 600; margin-top: 0.6em; margin-bottom: 0.15em; }
+.ProseMirror ul { list-style-type: disc; padding-left: 1.5em; }
+.ProseMirror ol { list-style-type: decimal; padding-left: 1.5em; }
+.ProseMirror blockquote { border-left: 3px solid #d1d5db; padding-left: 1em; color: #6b7280; font-style: italic; }
+.ProseMirror pre { background: #1e1e1e; color: #d4d4d4; padding: 16px; border-radius: 8px; overflow-x: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.9em; }
+.ProseMirror code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+.ProseMirror hr { border: none; border-top: 2px solid #e5e7eb; margin: 1.5em 0; }
+.ProseMirror mark { background-color: #fef08a; padding: 2px 0; }
+```
+
+### 7.2 Toggle Block Implementation
+
+Since TipTap does not have a built-in toggle/details extension, implement toggle blocks by inserting raw HTML using `editor.chain().focus().insertContent()`:
+
+```ts
+editor.chain().focus().insertContent(
+  '<details><summary>Toggle heading</summary><p>Toggle content here</p></details>'
+).run();
+```
+
+The `<details>` element works natively in HTML and will render as a collapsible section in both the editor and exported HTML.
+
+### 7.3 Auto-save Debounce Implementation
+
+```ts
+const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+const debouncedSave = useCallback((html: string) => {
+  if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+  setSaveStatus("saving");
+  saveTimerRef.current = setTimeout(async () => {
+    if (!selectedNoteId) return;
+    try {
+      await apiRequest("PATCH", `/api/lesson-notes/${selectedNoteId}`, { content: html });
+      queryClient.invalidateQueries({ queryKey: ["/api/lesson-notes"] });
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 2000);
+    } catch {
+      toast({ title: "Failed to save note. Your changes may be lost.", variant: "destructive" });
+      setSaveStatus("idle");
+    }
+  }, 1000);
+}, [selectedNoteId]);
+```
+
+### 7.4 Keyboard Shortcuts
+
+TipTap's StarterKit already includes these keyboard shortcuts by default — do NOT reimplement them:
+- `Ctrl+Z` / `Cmd+Z`: Undo
+- `Ctrl+Shift+Z` / `Cmd+Shift+Z`: Redo
+- `Ctrl+B` / `Cmd+B`: Bold
+- `Ctrl+I` / `Cmd+I`: Italic
+- `Ctrl+U` / `Cmd+U`: Underline (from Underline extension)
+
+### 7.5 Animations
+
+Use `framer-motion` for:
+- Sidebar note items entering: `initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.15 }}`
+- Save status indicator: `AnimatePresence` with fade in/out.
+- Slash command menu: `initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.1 }}`
