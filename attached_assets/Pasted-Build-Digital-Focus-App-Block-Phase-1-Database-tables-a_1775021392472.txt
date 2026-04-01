@@ -1,0 +1,175 @@
+Build Digital Focus & App Block — Phase 1: Database tables and schemas only. Do not create routes or pages yet.
+Add all 9 tables below to shared/schema.ts. After the tables, add insert schemas, insert types, and select types for each table using createInsertSchema from drizzle-zod. Run db:push after adding.
+tsimport { pgTable, serial, text, integer, boolean, timestamp, date, real, jsonb } from "drizzle-orm/pg-core";
+
+export const focusProfiles = pgTable("focus_profiles", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  name: text("name").notNull(),
+  emoji: text("emoji").notNull().default("🎯"),
+  color: text("color").notNull().default("#3B82F6"),
+  mode: text("mode").notNull().default("relaxed"),
+  isActive: boolean("is_active").notNull().default(false),
+  strictModeEnabled: boolean("strict_mode_enabled").notNull().default(false),
+  strictModeUnlockMethod: text("strict_mode_unlock_method").default("cooldown"),
+  strictModeCooldownMinutes: integer("strict_mode_cooldown_minutes").default(5),
+  strictModeLockedUntil: timestamp("strict_mode_locked_until"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const focusSchedules = pgTable("focus_schedules", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  profileId: integer("profile_id").notNull(),
+  daysMask: integer("days_mask").notNull().default(31),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  isEnabled: boolean("is_enabled").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const focusTargets = pgTable("focus_targets", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  profileId: integer("profile_id").notNull(),
+  targetType: text("target_type").notNull(),
+  value: text("value").notNull(),
+  category: text("category").default("distractive"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const focusUsageLimits = pgTable("focus_usage_limits", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  profileId: integer("profile_id").notNull(),
+  dailyTimeLimitMinutes: integer("daily_time_limit_minutes").default(30),
+  dailyLaunchLimit: integer("daily_launch_limit").default(15),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const focusSessions = pgTable("focus_sessions", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  profileId: integer("profile_id"),
+  sessionType: text("session_type").notNull().default("quick_block"),
+  status: text("status").notNull().default("active"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  endedAt: timestamp("ended_at"),
+  plannedDurationMinutes: integer("planned_duration_minutes").notNull(),
+  actualDurationMinutes: integer("actual_duration_minutes"),
+  pomodoroWorkMinutes: integer("pomodoro_work_minutes").default(25),
+  pomodoroBreakMinutes: integer("pomodoro_break_minutes").default(5),
+  pomodoroRoundsTotal: integer("pomodoro_rounds_total").default(4),
+  pomodoroRoundsCompleted: integer("pomodoro_rounds_completed").default(0),
+  wasInterrupted: boolean("was_interrupted").notNull().default(false),
+  interruptionCount: integer("interruption_count").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const focusDailyLogs = pgTable("focus_daily_logs", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  logDate: date("log_date").notNull(),
+  totalScreenTimeMinutes: integer("total_screen_time_minutes").notNull().default(0),
+  totalFocusTimeMinutes: integer("total_focus_time_minutes").notNull().default(0),
+  totalDistractiveMinutes: integer("total_distractive_minutes").notNull().default(0),
+  totalNeutralMinutes: integer("total_neutral_minutes").notNull().default(0),
+  totalProductiveMinutes: integer("total_productive_minutes").notNull().default(0),
+  totalPickups: integer("total_pickups").notNull().default(0),
+  totalNotifications: integer("total_notifications").notNull().default(0),
+  longestFocusStreak: integer("longest_focus_streak").notNull().default(0),
+  longestContinuousUse: integer("longest_continuous_use").notNull().default(0),
+  sessionsCompleted: integer("sessions_completed").notNull().default(0),
+  sessionsAbandoned: integer("sessions_abandoned").notNull().default(0),
+  mood: text("mood"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const focusAppUsage = pgTable("focus_app_usage", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  logDate: date("log_date").notNull(),
+  appName: text("app_name").notNull(),
+  appCategory: text("app_category").notNull().default("neutral"),
+  timeSpentMinutes: integer("time_spent_minutes").notNull().default(0),
+  launchCount: integer("launch_count").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const focusWeeklyReports = pgTable("focus_weekly_reports", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  weekStartDate: date("week_start_date").notNull(),
+  weekEndDate: date("week_end_date").notNull(),
+  avgScreenTimeMinutes: integer("avg_screen_time_minutes").notNull().default(0),
+  avgFocusTimeMinutes: integer("avg_focus_time_minutes").notNull().default(0),
+  totalSessionsCompleted: integer("total_sessions_completed").notNull().default(0),
+  screenTimeChangePercent: real("screen_time_change_percent").default(0),
+  topTimeSaverApps: jsonb("top_time_saver_apps").default([]),
+  topTimeIncreaseApps: jsonb("top_time_increase_apps").default([]),
+  distractivePercent: real("distractive_percent").default(0),
+  neutralPercent: real("neutral_percent").default(0),
+  productivePercent: real("productive_percent").default(0),
+  aiSummary: text("ai_summary"),
+  aiRecommendations: text("ai_recommendations"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const focusOnboarding = pgTable("focus_onboarding", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  estimatedDailyScreenTime: integer("estimated_daily_screen_time").default(0),
+  primaryGoal: text("primary_goal"),
+  topDistractingApps: text("top_distracting_apps").array(),
+  preferredBlockType: text("preferred_block_type").default("time"),
+  onboardingCompleted: boolean("onboarding_completed").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+Now add insert schemas and types for each table:
+tsexport const insertFocusProfileSchema = createInsertSchema(focusProfiles);
+export type InsertFocusProfile = z.infer<typeof insertFocusProfileSchema>;
+export type FocusProfile = typeof focusProfiles.$inferSelect;
+
+export const insertFocusScheduleSchema = createInsertSchema(focusSchedules);
+export type InsertFocusSchedule = z.infer<typeof insertFocusScheduleSchema>;
+export type FocusSchedule = typeof focusSchedules.$inferSelect;
+
+export const insertFocusTargetSchema = createInsertSchema(focusTargets);
+export type InsertFocusTarget = z.infer<typeof insertFocusTargetSchema>;
+export type FocusTarget = typeof focusTargets.$inferSelect;
+
+export const insertFocusUsageLimitSchema = createInsertSchema(focusUsageLimits);
+export type InsertFocusUsageLimit = z.infer<typeof insertFocusUsageLimitSchema>;
+export type FocusUsageLimit = typeof focusUsageLimits.$inferSelect;
+
+export const insertFocusSessionSchema = createInsertSchema(focusSessions);
+export type InsertFocusSession = z.infer<typeof insertFocusSessionSchema>;
+export type FocusSession = typeof focusSessions.$inferSelect;
+
+export const insertFocusDailyLogSchema = createInsertSchema(focusDailyLogs);
+export type InsertFocusDailyLog = z.infer<typeof insertFocusDailyLogSchema>;
+export type FocusDailyLog = typeof focusDailyLogs.$inferSelect;
+
+export const insertFocusAppUsageSchema = createInsertSchema(focusAppUsage);
+export type InsertFocusAppUsage = z.infer<typeof insertFocusAppUsageSchema>;
+export type FocusAppUsage = typeof focusAppUsage.$inferSelect;
+
+export const insertFocusWeeklyReportSchema = createInsertSchema(focusWeeklyReports);
+export type InsertFocusWeeklyReport = z.infer<typeof insertFocusWeeklyReportSchema>;
+export type FocusWeeklyReport = typeof focusWeeklyReports.$inferSelect;
+
+export const insertFocusOnboardingSchema = createInsertSchema(focusOnboarding);
+export type InsertFocusOnboarding = z.infer<typeof insertFocusOnboardingSchema>;
+export type FocusOnboarding = typeof focusOnboarding.$inferSelect;
+Key enums for reference (do not create separate enum types, just use these values in Zod validation later):
+
+mode: "relaxed" | "scheduled" | "timer" | "strict"
+targetType: "app" | "website" | "keyword"
+category / appCategory: "distractive" | "neutral" | "productive"
+sessionType: "quick_block" | "scheduled" | "pomodoro" | "timer"
+status: "active" | "completed" | "abandoned" | "paused"
+strictModeUnlockMethod: "cooldown" | "pin" | "timer" | "approval"
+mood: "great" | "good" | "okay" | "bad" | "terrible"
+daysMask bitmask: Monday=1, Tuesday=2, Wednesday=4, Thursday=8, Friday=16, Saturday=32, Sunday=64
+
+Do not modify any existing tables. Do not create routes or frontend pages.

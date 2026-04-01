@@ -2965,3 +2965,134 @@ export const lessonNoteVersions = pgTable("lesson_note_versions", {
 export const insertLessonNoteVersionSchema = createInsertSchema(lessonNoteVersions).omit({ id: true, createdAt: true });
 export type InsertLessonNoteVersion = typeof lessonNoteVersions.$inferInsert;
 export type LessonNoteVersion = typeof lessonNoteVersions.$inferSelect;
+
+// ─── Digital Focus & App Block ─────────────────────────────────────────────
+
+export const focusProfiles = pgTable("focus_profiles", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  name: text("name").notNull(),
+  emoji: text("emoji").notNull().default("🎯"),
+  color: text("color").notNull().default("#3B82F6"),
+  mode: text("mode").notNull().default("relaxed"),
+  isActive: boolean("is_active").notNull().default(false),
+  strictModeEnabled: boolean("strict_mode_enabled").notNull().default(false),
+  strictModeUnlockMethod: text("strict_mode_unlock_method").default("cooldown"),
+  strictModeCooldownMinutes: integer("strict_mode_cooldown_minutes").default(5),
+  strictModeLockedUntil: timestamp("strict_mode_locked_until"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export const insertFocusProfileSchema = createInsertSchema(focusProfiles).omit({ id: true, createdAt: true });
+export type InsertFocusProfile = z.infer<typeof insertFocusProfileSchema>;
+export type FocusProfile = typeof focusProfiles.$inferSelect;
+
+export const focusSchedules = pgTable("focus_schedules", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  profileId: integer("profile_id").notNull(),
+  daysMask: integer("days_mask").notNull().default(31),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  isEnabled: boolean("is_enabled").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export const insertFocusScheduleSchema = createInsertSchema(focusSchedules).omit({ id: true, createdAt: true });
+export type InsertFocusSchedule = z.infer<typeof insertFocusScheduleSchema>;
+export type FocusSchedule = typeof focusSchedules.$inferSelect;
+
+export const focusTargets = pgTable("focus_targets", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  profileId: integer("profile_id").notNull(),
+  targetType: text("target_type").notNull(),
+  value: text("value").notNull(),
+  category: text("category").default("distractive"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export const insertFocusTargetSchema = createInsertSchema(focusTargets).omit({ id: true, createdAt: true });
+export type InsertFocusTarget = z.infer<typeof insertFocusTargetSchema>;
+export type FocusTarget = typeof focusTargets.$inferSelect;
+
+export const focusUsageLimits = pgTable("focus_usage_limits", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  profileId: integer("profile_id").notNull(),
+  dailyTimeLimitMinutes: integer("daily_time_limit_minutes").default(30),
+  dailyLaunchLimit: integer("daily_launch_limit").default(15),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export const insertFocusUsageLimitSchema = createInsertSchema(focusUsageLimits).omit({ id: true, createdAt: true });
+export type InsertFocusUsageLimit = z.infer<typeof insertFocusUsageLimitSchema>;
+export type FocusUsageLimit = typeof focusUsageLimits.$inferSelect;
+
+export const focusDailyLogs = pgTable("focus_daily_logs", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  logDate: date("log_date").notNull(),
+  totalScreenTimeMinutes: integer("total_screen_time_minutes").notNull().default(0),
+  totalFocusTimeMinutes: integer("total_focus_time_minutes").notNull().default(0),
+  totalDistractiveMinutes: integer("total_distractive_minutes").notNull().default(0),
+  totalNeutralMinutes: integer("total_neutral_minutes").notNull().default(0),
+  totalProductiveMinutes: integer("total_productive_minutes").notNull().default(0),
+  totalPickups: integer("total_pickups").notNull().default(0),
+  totalNotifications: integer("total_notifications").notNull().default(0),
+  longestFocusStreak: integer("longest_focus_streak").notNull().default(0),
+  longestContinuousUse: integer("longest_continuous_use").notNull().default(0),
+  sessionsCompleted: integer("sessions_completed").notNull().default(0),
+  sessionsAbandoned: integer("sessions_abandoned").notNull().default(0),
+  mood: text("mood"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export const insertFocusDailyLogSchema = createInsertSchema(focusDailyLogs).omit({ id: true, createdAt: true });
+export type InsertFocusDailyLog = z.infer<typeof insertFocusDailyLogSchema>;
+export type FocusDailyLog = typeof focusDailyLogs.$inferSelect;
+
+export const focusAppUsage = pgTable("focus_app_usage", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  logDate: date("log_date").notNull(),
+  appName: text("app_name").notNull(),
+  appCategory: text("app_category").notNull().default("neutral"),
+  timeSpentMinutes: integer("time_spent_minutes").notNull().default(0),
+  launchCount: integer("launch_count").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export const insertFocusAppUsageSchema = createInsertSchema(focusAppUsage).omit({ id: true, createdAt: true });
+export type InsertFocusAppUsage = z.infer<typeof insertFocusAppUsageSchema>;
+export type FocusAppUsage = typeof focusAppUsage.$inferSelect;
+
+export const focusWeeklyReports = pgTable("focus_weekly_reports", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  weekStartDate: date("week_start_date").notNull(),
+  weekEndDate: date("week_end_date").notNull(),
+  avgScreenTimeMinutes: integer("avg_screen_time_minutes").notNull().default(0),
+  avgFocusTimeMinutes: integer("avg_focus_time_minutes").notNull().default(0),
+  totalSessionsCompleted: integer("total_sessions_completed").notNull().default(0),
+  screenTimeChangePercent: real("screen_time_change_percent").default(0),
+  topTimeSaverApps: jsonb("top_time_saver_apps").default([]),
+  topTimeIncreaseApps: jsonb("top_time_increase_apps").default([]),
+  distractivePercent: real("distractive_percent").default(0),
+  neutralPercent: real("neutral_percent").default(0),
+  productivePercent: real("productive_percent").default(0),
+  aiSummary: text("ai_summary"),
+  aiRecommendations: text("ai_recommendations"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export const insertFocusWeeklyReportSchema = createInsertSchema(focusWeeklyReports).omit({ id: true, createdAt: true });
+export type InsertFocusWeeklyReport = z.infer<typeof insertFocusWeeklyReportSchema>;
+export type FocusWeeklyReport = typeof focusWeeklyReports.$inferSelect;
+
+export const focusOnboarding = pgTable("focus_onboarding", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  estimatedDailyScreenTime: integer("estimated_daily_screen_time").default(0),
+  primaryGoal: text("primary_goal"),
+  topDistractingApps: text("top_distracting_apps").array(),
+  preferredBlockType: text("preferred_block_type").default("time"),
+  onboardingCompleted: boolean("onboarding_completed").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export const insertFocusOnboardingSchema = createInsertSchema(focusOnboarding).omit({ id: true, createdAt: true });
+export type InsertFocusOnboarding = z.infer<typeof insertFocusOnboardingSchema>;
+export type FocusOnboarding = typeof focusOnboarding.$inferSelect;
