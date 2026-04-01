@@ -3096,3 +3096,25 @@ export const focusOnboarding = pgTable("focus_onboarding", {
 export const insertFocusOnboardingSchema = createInsertSchema(focusOnboarding).omit({ id: true, createdAt: true });
 export type InsertFocusOnboarding = z.infer<typeof insertFocusOnboardingSchema>;
 export type FocusOnboarding = typeof focusOnboarding.$inferSelect;
+
+export const focusBlockSessions = pgTable("focus_block_sessions", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  profileId: integer("profile_id"),
+  sessionType: text("session_type").notNull().default("quick_block"),
+  status: text("status").notNull().default("active"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  endedAt: timestamp("ended_at"),
+  plannedDurationMinutes: integer("planned_duration_minutes").notNull(),
+  actualDurationMinutes: integer("actual_duration_minutes"),
+  pomodoroWorkMinutes: integer("pomodoro_work_minutes").default(25),
+  pomodoroBreakMinutes: integer("pomodoro_break_minutes").default(5),
+  pomodoroRoundsTotal: integer("pomodoro_rounds_total").default(4),
+  pomodoroRoundsCompleted: integer("pomodoro_rounds_completed").default(0),
+  wasInterrupted: boolean("was_interrupted").notNull().default(false),
+  interruptionCount: integer("interruption_count").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export const insertFocusBlockSessionSchema = createInsertSchema(focusBlockSessions).omit({ id: true, createdAt: true });
+export type InsertFocusBlockSession = z.infer<typeof insertFocusBlockSessionSchema>;
+export type FocusBlockSession = typeof focusBlockSessions.$inferSelect;

@@ -44,6 +44,10 @@ import {
   channelMessages, users, aiRiskAlerts,
 } from "../shared/schema";
 import {
+  focusProfiles, focusSchedules, focusTargets, focusUsageLimits,
+  focusBlockSessions, focusDailyLogs, focusAppUsage, focusWeeklyReports, focusOnboarding,
+} from "../shared/schema";
+import {
   aiGoals, keyResults, calendarEvents, calendarOptimizationRules,
   taskDurationEstimates, aiNotificationItems, notificationPreferences,
   aiTemplates, voiceNotes, teamInsightSnapshots, externalIntegrations,
@@ -8975,6 +8979,716 @@ Provide specific, actionable insights. Be encouraging but honest.`,
         .returning();
       if (!updated) return res.status(404).json({ error: "Note not found" });
       return res.json({ success: true });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  async function checkFocusStrictLock(profileId: number, userId: string): Promise<{ locked: boolean; profile: any }> {
+    const [profile] = await db.select().from(focusProfiles)
+      .where(and(eq(focusProfiles.id, profileId), eq(focusProfiles.userId, userId)))
+      .limit(1);
+    if (!profile) return { locked: false, profile: null };
+    if (profile.strictModeEnabled && profile.strictModeLockedUntil && new Date(profile.strictModeLockedUntil as any) > new Date()) {
+      return { locked: true, profile };
+    }
+    return { locked: false, profile };
+  }
+
+  function getTodayStr(): string {
+    return new Date().toISOString().split("T")[0];
+  }
+
+  async function upsertDailyLog(userId: string, updates: Record<string, number>) {
+    const today = getTodayStr();
+    const [existing] = await db.select().from(focusDailyLogs)
+      .where(and(eq(focusDailyLogs.userId, userId), eq(focusDailyLogs.logDate, today)))
+      .limit(1);
+    if (existing) {
+      const patch: Record<string, number> = {};
+      for (const [k, v] of Object.entries(updates)) {
+        patch[k] = ((existing as any)[k] ?? 0) + v;
+      }
+      const [updated] = await db.update(focusDailyLogs).set(patch)
+        .where(and(eq(focusDailyLogs.userId, userId), eq(focusDailyLogs.logDate, today)))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(focusDailyLogs)
+        .values({ userId, logDate: today, ...updates } as any)
+        .returning();
+      return created;
+    }
+  }
+
+  app.get("/api/focus-onboarding", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [record] = await db.select().from(focusOnboarding).where(eq(focusOnboarding.userId, userId)).limit(1);
+      return res.json(record ?? null);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/focus-onboarding", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const schema = z.object({
+        estimatedDailyScreenTime: z.number().int().min(0).max(1440),
+        primaryGoal: z.string().min(1).max(200),
+        topDistractingApps: z.array(z.string()).max(10),
+        preferredBlockType: z.enum(["time", "usage_limit", "launch_count", "location", "wifi"]),
+        onboardingCompleted: z.boolean(),
+      });
+      const parsed = schema.parse(req.body);
+      const [existing] = await db.select().from(focusOnboarding).where(eq(focusOnboarding.userId, userId)).limit(1);
+      if (existing) {
+        const [updated] = await db.update(focusOnboarding).set(parsed)
+          .where(eq(focusOnboarding.userId, userId)).returning();
+        return res.json(updated);
+      }
+      const [created] = await db.insert(focusOnboarding).values({ userId, ...parsed }).returning();
+      return res.json(created);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/focus-profiles", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profiles = await db.select().from(focusProfiles)
+        .where(eq(focusProfiles.userId, userId))
+        .orderBy(desc(focusProfiles.createdAt));
+      return res.json(profiles);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/focus-profiles/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profileId = parseInt(req.params.id);
+      if (isNaN(profileId)) return res.status(400).json({ error: "Invalid profile ID" });
+      const [profile] = await db.select().from(focusProfiles)
+        .where(and(eq(focusProfiles.id, profileId), eq(focusProfiles.userId, userId))).limit(1);
+      if (!profile) return res.status(404).json({ error: "Profile not found" });
+      const [schedules, targets, usageLimits] = await Promise.all([
+        db.select().from(focusSchedules).where(eq(focusSchedules.profileId, profileId)),
+        db.select().from(focusTargets).where(eq(focusTargets.profileId, profileId)),
+        db.select().from(focusUsageLimits).where(eq(focusUsageLimits.profileId, profileId)),
+      ]);
+      return res.json({ ...profile, schedules, targets, usageLimits });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/focus-profiles", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const schema = z.object({
+        name: z.string().min(1).max(100),
+        emoji: z.string().max(10).default("🎯"),
+        color: z.string().max(20).default("#3B82F6"),
+        mode: z.enum(["relaxed", "scheduled", "timer", "strict"]).default("relaxed"),
+      });
+      const parsed = schema.parse(req.body);
+      const [created] = await db.insert(focusProfiles).values({ userId, ...parsed }).returning();
+      return res.status(201).json(created);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.patch("/api/focus-profiles/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profileId = parseInt(req.params.id);
+      if (isNaN(profileId)) return res.status(400).json({ error: "Invalid profile ID" });
+      const { locked } = await checkFocusStrictLock(profileId, userId);
+      if (locked) return res.status(403).json({ error: "Profile is locked by Strict Mode." });
+      const schema = z.object({
+        name: z.string().min(1).max(100).optional(),
+        emoji: z.string().max(10).optional(),
+        color: z.string().max(20).optional(),
+        mode: z.enum(["relaxed", "scheduled", "timer", "strict"]).optional(),
+        isActive: z.boolean().optional(),
+        strictModeEnabled: z.boolean().optional(),
+        strictModeUnlockMethod: z.enum(["cooldown", "pin", "timer", "approval"]).optional(),
+        strictModeCooldownMinutes: z.number().int().min(1).max(1440).optional(),
+        strictModeLockedUntil: z.string().optional(),
+      });
+      const parsed = schema.parse(req.body);
+      const patch: any = { ...parsed };
+      if (parsed.strictModeLockedUntil) patch.strictModeLockedUntil = new Date(parsed.strictModeLockedUntil);
+      const [updated] = await db.update(focusProfiles).set(patch)
+        .where(and(eq(focusProfiles.id, profileId), eq(focusProfiles.userId, userId)))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Profile not found" });
+      return res.json(updated);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.delete("/api/focus-profiles/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profileId = parseInt(req.params.id);
+      if (isNaN(profileId)) return res.status(400).json({ error: "Invalid profile ID" });
+      const { locked } = await checkFocusStrictLock(profileId, userId);
+      if (locked) return res.status(403).json({ error: "Profile is locked by Strict Mode." });
+      await db.delete(focusSchedules).where(eq(focusSchedules.profileId, profileId));
+      await db.delete(focusTargets).where(eq(focusTargets.profileId, profileId));
+      await db.delete(focusUsageLimits).where(eq(focusUsageLimits.profileId, profileId));
+      await db.delete(focusProfiles)
+        .where(and(eq(focusProfiles.id, profileId), eq(focusProfiles.userId, userId)));
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/focus-profiles/:id/activate-strict", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profileId = parseInt(req.params.id);
+      if (isNaN(profileId)) return res.status(400).json({ error: "Invalid profile ID" });
+      const [profile] = await db.select().from(focusProfiles)
+        .where(and(eq(focusProfiles.id, profileId), eq(focusProfiles.userId, userId))).limit(1);
+      if (!profile) return res.status(404).json({ error: "Profile not found" });
+      const cooldown = profile.strictModeCooldownMinutes ?? 5;
+      const lockedUntil = new Date(Date.now() + cooldown * 60 * 1000);
+      const [updated] = await db.update(focusProfiles)
+        .set({ strictModeEnabled: true, strictModeLockedUntil: lockedUntil })
+        .where(eq(focusProfiles.id, profileId)).returning();
+      return res.json(updated);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/focus-profiles/:id/deactivate-strict", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profileId = parseInt(req.params.id);
+      if (isNaN(profileId)) return res.status(400).json({ error: "Invalid profile ID" });
+      const [profile] = await db.select().from(focusProfiles)
+        .where(and(eq(focusProfiles.id, profileId), eq(focusProfiles.userId, userId))).limit(1);
+      if (!profile) return res.status(404).json({ error: "Profile not found" });
+      if (profile.strictModeLockedUntil && new Date(profile.strictModeLockedUntil as any) > new Date()) {
+        return res.status(403).json({ error: "Strict Mode is still locked. Wait until the cooldown expires." });
+      }
+      const [updated] = await db.update(focusProfiles)
+        .set({ strictModeEnabled: false, strictModeLockedUntil: null })
+        .where(eq(focusProfiles.id, profileId)).returning();
+      return res.json(updated);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/focus-schedules", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const schema = z.object({
+        profileId: z.number().int(),
+        daysMask: z.number().int().min(0).max(127),
+        startTime: z.string().regex(/^\d{2}:\d{2}$/),
+        endTime: z.string().regex(/^\d{2}:\d{2}$/),
+        isEnabled: z.boolean().default(true),
+      });
+      const parsed = schema.parse(req.body);
+      const [profile] = await db.select().from(focusProfiles)
+        .where(and(eq(focusProfiles.id, parsed.profileId), eq(focusProfiles.userId, userId))).limit(1);
+      if (!profile) return res.status(404).json({ error: "Profile not found" });
+      const [created] = await db.insert(focusSchedules).values({ userId, ...parsed }).returning();
+      return res.status(201).json(created);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.patch("/api/focus-schedules/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const scheduleId = parseInt(req.params.id);
+      if (isNaN(scheduleId)) return res.status(400).json({ error: "Invalid ID" });
+      const [schedule] = await db.select().from(focusSchedules)
+        .where(and(eq(focusSchedules.id, scheduleId), eq(focusSchedules.userId, userId))).limit(1);
+      if (!schedule) return res.status(404).json({ error: "Schedule not found" });
+      const { locked } = await checkFocusStrictLock(schedule.profileId, userId);
+      if (locked) return res.status(403).json({ error: "Profile is locked by Strict Mode." });
+      const schema = z.object({
+        daysMask: z.number().int().min(0).max(127).optional(),
+        startTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+        endTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+        isEnabled: z.boolean().optional(),
+      });
+      const parsed = schema.parse(req.body);
+      const [updated] = await db.update(focusSchedules).set(parsed)
+        .where(eq(focusSchedules.id, scheduleId)).returning();
+      return res.json(updated);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.delete("/api/focus-schedules/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const scheduleId = parseInt(req.params.id);
+      if (isNaN(scheduleId)) return res.status(400).json({ error: "Invalid ID" });
+      const [schedule] = await db.select().from(focusSchedules)
+        .where(and(eq(focusSchedules.id, scheduleId), eq(focusSchedules.userId, userId))).limit(1);
+      if (!schedule) return res.status(404).json({ error: "Schedule not found" });
+      const { locked } = await checkFocusStrictLock(schedule.profileId, userId);
+      if (locked) return res.status(403).json({ error: "Profile is locked by Strict Mode." });
+      await db.delete(focusSchedules).where(eq(focusSchedules.id, scheduleId));
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/focus-targets", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const schema = z.object({
+        profileId: z.number().int(),
+        targetType: z.enum(["app", "website", "keyword"]),
+        value: z.string().min(1).max(500),
+        category: z.enum(["distractive", "neutral", "productive"]).default("distractive"),
+      });
+      const parsed = schema.parse(req.body);
+      const [profile] = await db.select().from(focusProfiles)
+        .where(and(eq(focusProfiles.id, parsed.profileId), eq(focusProfiles.userId, userId))).limit(1);
+      if (!profile) return res.status(404).json({ error: "Profile not found" });
+      const [created] = await db.insert(focusTargets).values({ userId, ...parsed }).returning();
+      return res.status(201).json(created);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/focus-targets/bulk", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const schema = z.object({
+        profileId: z.number().int(),
+        targets: z.array(z.object({
+          targetType: z.enum(["app", "website", "keyword"]),
+          value: z.string().min(1).max(500),
+          category: z.enum(["distractive", "neutral", "productive"]).default("distractive"),
+        })).min(1).max(50),
+      });
+      const parsed = schema.parse(req.body);
+      const [profile] = await db.select().from(focusProfiles)
+        .where(and(eq(focusProfiles.id, parsed.profileId), eq(focusProfiles.userId, userId))).limit(1);
+      if (!profile) return res.status(404).json({ error: "Profile not found" });
+      const rows = parsed.targets.map(t => ({ userId, profileId: parsed.profileId, ...t }));
+      const inserted = await db.insert(focusTargets).values(rows).returning();
+      return res.status(201).json(inserted);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.delete("/api/focus-targets/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const targetId = parseInt(req.params.id);
+      if (isNaN(targetId)) return res.status(400).json({ error: "Invalid ID" });
+      const [target] = await db.select().from(focusTargets)
+        .where(and(eq(focusTargets.id, targetId), eq(focusTargets.userId, userId))).limit(1);
+      if (!target) return res.status(404).json({ error: "Target not found" });
+      const { locked } = await checkFocusStrictLock(target.profileId, userId);
+      if (locked) return res.status(403).json({ error: "Profile is locked by Strict Mode." });
+      await db.delete(focusTargets).where(eq(focusTargets.id, targetId));
+      return res.json({ success: true });
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/focus-usage-limits", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const schema = z.object({
+        profileId: z.number().int(),
+        dailyTimeLimitMinutes: z.number().int().min(1).max(1440).default(30),
+        dailyLaunchLimit: z.number().int().min(1).max(500).default(15),
+      });
+      const parsed = schema.parse(req.body);
+      const [profile] = await db.select().from(focusProfiles)
+        .where(and(eq(focusProfiles.id, parsed.profileId), eq(focusProfiles.userId, userId))).limit(1);
+      if (!profile) return res.status(404).json({ error: "Profile not found" });
+      const [created] = await db.insert(focusUsageLimits).values({ userId, ...parsed }).returning();
+      return res.status(201).json(created);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.patch("/api/focus-usage-limits/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const limitId = parseInt(req.params.id);
+      if (isNaN(limitId)) return res.status(400).json({ error: "Invalid ID" });
+      const [limit] = await db.select().from(focusUsageLimits)
+        .where(and(eq(focusUsageLimits.id, limitId), eq(focusUsageLimits.userId, userId))).limit(1);
+      if (!limit) return res.status(404).json({ error: "Usage limit not found" });
+      const { locked } = await checkFocusStrictLock(limit.profileId, userId);
+      if (locked) return res.status(403).json({ error: "Profile is locked by Strict Mode." });
+      const schema = z.object({
+        dailyTimeLimitMinutes: z.number().int().min(1).max(1440).optional(),
+        dailyLaunchLimit: z.number().int().min(1).max(500).optional(),
+      });
+      const parsed = schema.parse(req.body);
+      const [updated] = await db.update(focusUsageLimits).set(parsed)
+        .where(eq(focusUsageLimits.id, limitId)).returning();
+      return res.json(updated);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/focus-sessions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const sessions = await db.select().from(focusBlockSessions)
+        .where(eq(focusBlockSessions.userId, userId))
+        .orderBy(desc(focusBlockSessions.startedAt))
+        .limit(50);
+      return res.json(sessions);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/focus-sessions/active", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [session] = await db.select().from(focusBlockSessions)
+        .where(and(eq(focusBlockSessions.userId, userId), eq(focusBlockSessions.status, "active")))
+        .limit(1);
+      return res.json(session ?? null);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/focus-sessions/start", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [existing] = await db.select().from(focusBlockSessions)
+        .where(and(eq(focusBlockSessions.userId, userId), eq(focusBlockSessions.status, "active")))
+        .limit(1);
+      if (existing) return res.status(409).json({ error: "A session is already active." });
+      const schema = z.object({
+        profileId: z.number().int().optional(),
+        sessionType: z.enum(["quick_block", "scheduled", "pomodoro", "timer"]),
+        plannedDurationMinutes: z.number().int().min(1).max(1440),
+        pomodoroWorkMinutes: z.number().int().min(1).max(120).optional(),
+        pomodoroBreakMinutes: z.number().int().min(1).max(60).optional(),
+        pomodoroRoundsTotal: z.number().int().min(1).max(20).optional(),
+      });
+      const parsed = schema.parse(req.body);
+      const [created] = await db.insert(focusBlockSessions).values({ userId, ...parsed }).returning();
+      return res.status(201).json(created);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/focus-sessions/:id/complete", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const sessionId = parseInt(req.params.id);
+      if (isNaN(sessionId)) return res.status(400).json({ error: "Invalid ID" });
+      const [session] = await db.select().from(focusBlockSessions)
+        .where(and(eq(focusBlockSessions.id, sessionId), eq(focusBlockSessions.userId, userId))).limit(1);
+      if (!session) return res.status(404).json({ error: "Session not found" });
+      const now = new Date();
+      const actualDurationMinutes = Math.round((now.getTime() - new Date(session.startedAt).getTime()) / 60000);
+      const [updated] = await db.update(focusBlockSessions)
+        .set({ status: "completed", endedAt: now, actualDurationMinutes })
+        .where(eq(focusBlockSessions.id, sessionId)).returning();
+      await upsertDailyLog(userId, { sessionsCompleted: 1, totalFocusTimeMinutes: actualDurationMinutes });
+      return res.json(updated);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/focus-sessions/:id/abandon", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const sessionId = parseInt(req.params.id);
+      if (isNaN(sessionId)) return res.status(400).json({ error: "Invalid ID" });
+      const [session] = await db.select().from(focusBlockSessions)
+        .where(and(eq(focusBlockSessions.id, sessionId), eq(focusBlockSessions.userId, userId))).limit(1);
+      if (!session) return res.status(404).json({ error: "Session not found" });
+      const now = new Date();
+      const actualDurationMinutes = Math.round((now.getTime() - new Date(session.startedAt).getTime()) / 60000);
+      const [updated] = await db.update(focusBlockSessions)
+        .set({ status: "abandoned", endedAt: now, actualDurationMinutes, wasInterrupted: true })
+        .where(eq(focusBlockSessions.id, sessionId)).returning();
+      await upsertDailyLog(userId, { sessionsAbandoned: 1 });
+      return res.json(updated);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/focus-sessions/:id/interrupt", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const sessionId = parseInt(req.params.id);
+      if (isNaN(sessionId)) return res.status(400).json({ error: "Invalid ID" });
+      const [session] = await db.select().from(focusBlockSessions)
+        .where(and(eq(focusBlockSessions.id, sessionId), eq(focusBlockSessions.userId, userId))).limit(1);
+      if (!session) return res.status(404).json({ error: "Session not found" });
+      const [updated] = await db.update(focusBlockSessions)
+        .set({ interruptionCount: (session.interruptionCount ?? 0) + 1 })
+        .where(eq(focusBlockSessions.id, sessionId)).returning();
+      return res.json(updated);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/focus-sessions/:id/pomodoro-round", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const sessionId = parseInt(req.params.id);
+      if (isNaN(sessionId)) return res.status(400).json({ error: "Invalid ID" });
+      const [session] = await db.select().from(focusBlockSessions)
+        .where(and(eq(focusBlockSessions.id, sessionId), eq(focusBlockSessions.userId, userId))).limit(1);
+      if (!session) return res.status(404).json({ error: "Session not found" });
+      const newRounds = (session.pomodoroRoundsCompleted ?? 0) + 1;
+      if (newRounds >= (session.pomodoroRoundsTotal ?? 4)) {
+        const now = new Date();
+        const actualDurationMinutes = Math.round((now.getTime() - new Date(session.startedAt).getTime()) / 60000);
+        const [updated] = await db.update(focusBlockSessions)
+          .set({ pomodoroRoundsCompleted: newRounds, status: "completed", endedAt: now, actualDurationMinutes })
+          .where(eq(focusBlockSessions.id, sessionId)).returning();
+        await upsertDailyLog(userId, { sessionsCompleted: 1, totalFocusTimeMinutes: actualDurationMinutes });
+        return res.json(updated);
+      }
+      const [updated] = await db.update(focusBlockSessions)
+        .set({ pomodoroRoundsCompleted: newRounds })
+        .where(eq(focusBlockSessions.id, sessionId)).returning();
+      return res.json(updated);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/focus-daily-logs", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { startDate, endDate } = req.query as { startDate?: string; endDate?: string };
+      let start: string;
+      let end: string;
+      if (startDate && endDate) {
+        start = startDate;
+        end = endDate;
+      } else {
+        const d = new Date();
+        end = d.toISOString().split("T")[0];
+        d.setDate(d.getDate() - 29);
+        start = d.toISOString().split("T")[0];
+      }
+      const logs = await db.select().from(focusDailyLogs)
+        .where(and(eq(focusDailyLogs.userId, userId), gte(focusDailyLogs.logDate, start), lte(focusDailyLogs.logDate, end)))
+        .orderBy(desc(focusDailyLogs.logDate));
+      return res.json(logs);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/focus-daily-logs/today", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const today = getTodayStr();
+      const [existing] = await db.select().from(focusDailyLogs)
+        .where(and(eq(focusDailyLogs.userId, userId), eq(focusDailyLogs.logDate, today))).limit(1);
+      if (existing) return res.json(existing);
+      const [created] = await db.insert(focusDailyLogs).values({ userId, logDate: today }).returning();
+      return res.json(created);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/focus-daily-logs", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const schema = z.object({
+        totalScreenTimeMinutes: z.number().int().min(0).max(1440).optional(),
+        totalFocusTimeMinutes: z.number().int().min(0).max(1440).optional(),
+        totalDistractiveMinutes: z.number().int().min(0).max(1440).optional(),
+        totalNeutralMinutes: z.number().int().min(0).max(1440).optional(),
+        totalProductiveMinutes: z.number().int().min(0).max(1440).optional(),
+        totalPickups: z.number().int().min(0).max(1000).optional(),
+        totalNotifications: z.number().int().min(0).max(5000).optional(),
+        longestFocusStreak: z.number().int().min(0).max(1440).optional(),
+        longestContinuousUse: z.number().int().min(0).max(1440).optional(),
+        mood: z.enum(["great", "good", "okay", "bad", "terrible"]).optional(),
+      });
+      const parsed = schema.parse(req.body);
+      const today = getTodayStr();
+      const [existing] = await db.select().from(focusDailyLogs)
+        .where(and(eq(focusDailyLogs.userId, userId), eq(focusDailyLogs.logDate, today))).limit(1);
+      if (existing) {
+        const [updated] = await db.update(focusDailyLogs).set(parsed)
+          .where(and(eq(focusDailyLogs.userId, userId), eq(focusDailyLogs.logDate, today)))
+          .returning();
+        return res.json(updated);
+      }
+      const [created] = await db.insert(focusDailyLogs).values({ userId, logDate: today, ...parsed }).returning();
+      return res.json(created);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/focus-app-usage", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const date = (req.query.date as string) || getTodayStr();
+      const rows = await db.select().from(focusAppUsage)
+        .where(and(eq(focusAppUsage.userId, userId), eq(focusAppUsage.logDate, date)))
+        .orderBy(desc(focusAppUsage.timeSpentMinutes));
+      return res.json(rows);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/focus-app-usage/weekly", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const today = new Date();
+      const day = today.getDay();
+      const daysFromMonday = day === 0 ? 6 : day - 1;
+      const monday = new Date(today);
+      monday.setDate(today.getDate() - daysFromMonday);
+      const weekStart = monday.toISOString().split("T")[0];
+      const rows = await db.select().from(focusAppUsage)
+        .where(and(eq(focusAppUsage.userId, userId), gte(focusAppUsage.logDate, weekStart)));
+      const agg: Record<string, { appName: string; appCategory: string; timeSpentMinutes: number; launchCount: number }> = {};
+      for (const row of rows) {
+        if (!agg[row.appName]) {
+          agg[row.appName] = { appName: row.appName, appCategory: row.appCategory, timeSpentMinutes: 0, launchCount: 0 };
+        }
+        agg[row.appName].timeSpentMinutes += row.timeSpentMinutes;
+        agg[row.appName].launchCount += row.launchCount;
+      }
+      const sorted = Object.values(agg).sort((a, b) => b.timeSpentMinutes - a.timeSpentMinutes);
+      return res.json(sorted);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/focus-app-usage", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const schema = z.object({
+        appName: z.string().min(1).max(200),
+        appCategory: z.enum(["distractive", "neutral", "productive"]),
+        timeSpentMinutes: z.number().int().min(0).max(1440),
+        launchCount: z.number().int().min(0).max(500).default(0),
+      });
+      const parsed = schema.parse(req.body);
+      const today = getTodayStr();
+      const [existing] = await db.select().from(focusAppUsage)
+        .where(and(eq(focusAppUsage.userId, userId), eq(focusAppUsage.logDate, today), eq(focusAppUsage.appName, parsed.appName)))
+        .limit(1);
+      if (existing) {
+        const [updated] = await db.update(focusAppUsage)
+          .set({ timeSpentMinutes: existing.timeSpentMinutes + parsed.timeSpentMinutes, launchCount: existing.launchCount + parsed.launchCount })
+          .where(eq(focusAppUsage.id, existing.id)).returning();
+        return res.json(updated);
+      }
+      const [created] = await db.insert(focusAppUsage).values({ userId, logDate: today, ...parsed }).returning();
+      return res.status(201).json(created);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.post("/api/focus-app-usage/bulk", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const schema = z.object({
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        entries: z.array(z.object({
+          appName: z.string().min(1).max(200),
+          appCategory: z.enum(["distractive", "neutral", "productive"]),
+          timeSpentMinutes: z.number().int().min(0).max(1440),
+          launchCount: z.number().int().min(0).max(500).default(0),
+        })).min(1).max(50),
+      });
+      const parsed = schema.parse(req.body);
+      const logDate = parsed.date ?? getTodayStr();
+      const results = [];
+      for (const entry of parsed.entries) {
+        const [existing] = await db.select().from(focusAppUsage)
+          .where(and(eq(focusAppUsage.userId, userId), eq(focusAppUsage.logDate, logDate), eq(focusAppUsage.appName, entry.appName)))
+          .limit(1);
+        if (existing) {
+          const [updated] = await db.update(focusAppUsage)
+            .set({ timeSpentMinutes: existing.timeSpentMinutes + entry.timeSpentMinutes, launchCount: existing.launchCount + entry.launchCount })
+            .where(eq(focusAppUsage.id, existing.id)).returning();
+          results.push(updated);
+        } else {
+          const [created] = await db.insert(focusAppUsage).values({ userId, logDate, ...entry }).returning();
+          results.push(created);
+        }
+      }
+      return res.json(results);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+  });
+
+  app.get("/api/focus-weekly-reports", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const reports = await db.select().from(focusWeeklyReports)
+        .where(eq(focusWeeklyReports.userId, userId))
+        .orderBy(desc(focusWeeklyReports.weekStartDate))
+        .limit(12);
+      return res.json(reports);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/focus-weekly-reports/latest", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [report] = await db.select().from(focusWeeklyReports)
+        .where(eq(focusWeeklyReports.userId, userId))
+        .orderBy(desc(focusWeeklyReports.weekStartDate))
+        .limit(1);
+      return res.json(report ?? null);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/focus-weekly-reports/generate", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const today = new Date();
+      const day = today.getDay();
+      const daysFromMonday = day === 0 ? 6 : day - 1;
+      const thisMonday = new Date(today);
+      thisMonday.setDate(today.getDate() - daysFromMonday);
+      const lastMonday = new Date(thisMonday);
+      lastMonday.setDate(thisMonday.getDate() - 7);
+      const lastSunday = new Date(thisMonday);
+      lastSunday.setDate(thisMonday.getDate() - 1);
+      const weekStart = lastMonday.toISOString().split("T")[0];
+      const weekEnd = lastSunday.toISOString().split("T")[0];
+      const prevMonday = new Date(lastMonday);
+      prevMonday.setDate(lastMonday.getDate() - 7);
+      const prevSunday = new Date(lastMonday);
+      prevSunday.setDate(lastMonday.getDate() - 1);
+      const prevWeekStart = prevMonday.toISOString().split("T")[0];
+      const prevWeekEnd = prevSunday.toISOString().split("T")[0];
+
+      const [thisWeekLogs, thisWeekUsage, prevWeekUsage] = await Promise.all([
+        db.select().from(focusDailyLogs).where(and(eq(focusDailyLogs.userId, userId), gte(focusDailyLogs.logDate, weekStart), lte(focusDailyLogs.logDate, weekEnd))),
+        db.select().from(focusAppUsage).where(and(eq(focusAppUsage.userId, userId), gte(focusAppUsage.logDate, weekStart), lte(focusAppUsage.logDate, weekEnd))),
+        db.select().from(focusAppUsage).where(and(eq(focusAppUsage.userId, userId), gte(focusAppUsage.logDate, prevWeekStart), lte(focusAppUsage.logDate, prevWeekEnd))),
+      ]);
+
+      const daysCount = thisWeekLogs.length || 1;
+      const avgScreenTimeMinutes = Math.round(thisWeekLogs.reduce((s, r) => s + r.totalScreenTimeMinutes, 0) / daysCount);
+      const avgFocusTimeMinutes = Math.round(thisWeekLogs.reduce((s, r) => s + r.totalFocusTimeMinutes, 0) / daysCount);
+      const totalSessionsCompleted = thisWeekLogs.reduce((s, r) => s + r.sessionsCompleted, 0);
+      const totalScreen = thisWeekLogs.reduce((s, r) => s + r.totalScreenTimeMinutes, 0) || 1;
+      const totalDistractive = thisWeekLogs.reduce((s, r) => s + r.totalDistractiveMinutes, 0);
+      const totalNeutral = thisWeekLogs.reduce((s, r) => s + r.totalNeutralMinutes, 0);
+      const totalProductive = thisWeekLogs.reduce((s, r) => s + r.totalProductiveMinutes, 0);
+      const distractivePercent = parseFloat(((totalDistractive / totalScreen) * 100).toFixed(1));
+      const neutralPercent = parseFloat(((totalNeutral / totalScreen) * 100).toFixed(1));
+      const productivePercent = parseFloat(((totalProductive / totalScreen) * 100).toFixed(1));
+
+      const thisWeekByApp: Record<string, number> = {};
+      for (const r of thisWeekUsage) thisWeekByApp[r.appName] = (thisWeekByApp[r.appName] ?? 0) + r.timeSpentMinutes;
+      const prevWeekByApp: Record<string, number> = {};
+      for (const r of prevWeekUsage) prevWeekByApp[r.appName] = (prevWeekByApp[r.appName] ?? 0) + r.timeSpentMinutes;
+
+      const allApps = Array.from(new Set([...Object.keys(thisWeekByApp), ...Object.keys(prevWeekByApp)]));
+      const changes = allApps.map(app => ({ appName: app, changeMinutes: (thisWeekByApp[app] ?? 0) - (prevWeekByApp[app] ?? 0) }));
+      const topTimeSaverApps = changes.filter(a => a.changeMinutes < 0).sort((a, b) => a.changeMinutes - b.changeMinutes).slice(0, 3).map(a => ({ appName: a.appName, changeMinutes: Math.abs(a.changeMinutes) }));
+      const topTimeIncreaseApps = changes.filter(a => a.changeMinutes > 0).sort((a, b) => b.changeMinutes - a.changeMinutes).slice(0, 3).map(a => ({ appName: a.appName, changeMinutes: a.changeMinutes }));
+
+      const prevTotalScreen = Object.values(prevWeekByApp).reduce((s, v) => s + v, 0);
+      const thisTotalScreen = Object.values(thisWeekByApp).reduce((s, v) => s + v, 0);
+      const screenTimeChangePercent = prevTotalScreen > 0 ? parseFloat((((thisTotalScreen - prevTotalScreen) / prevTotalScreen) * 100).toFixed(1)) : 0;
+
+      const systemPrompt = "You are a digital wellbeing coach inside the Consistency System app. Given the user's weekly screen time data, generate a brief encouraging weekly summary and 3 specific actionable recommendations. Be warm, supportive, and non-judgmental. Focus on progress, not perfection. Return valid JSON with exactly two fields: summary (string, 2-3 sentences) and recommendations (string, 3 recommendations separated by newlines).";
+      const userPrompt = `Here is my weekly data: Average daily screen time: ${avgScreenTimeMinutes} min. Average daily focus time: ${avgFocusTimeMinutes} min. Sessions completed: ${totalSessionsCompleted}. Screen time change: ${screenTimeChangePercent}%. Breakdown: ${distractivePercent}% distractive, ${neutralPercent}% neutral, ${productivePercent}% productive. Top time-savers: ${JSON.stringify(topTimeSaverApps)}. Top increases: ${JSON.stringify(topTimeIncreaseApps)}. Return JSON: {"summary": "...", "recommendations": "..."}`;
+
+      let aiSummary = "";
+      let aiRecommendations = "";
+      try {
+        const aiResult = await aiService.generateJSON<{ summary: string; recommendations: string }>(userPrompt, { systemPrompt, model: "gpt-4o-mini" });
+        aiSummary = aiResult.summary ?? "";
+        aiRecommendations = aiResult.recommendations ?? "";
+      } catch (_) {}
+
+      const [report] = await db.insert(focusWeeklyReports).values({
+        userId, weekStartDate: weekStart, weekEndDate: weekEnd,
+        avgScreenTimeMinutes, avgFocusTimeMinutes, totalSessionsCompleted,
+        screenTimeChangePercent, topTimeSaverApps, topTimeIncreaseApps,
+        distractivePercent, neutralPercent, productivePercent,
+        aiSummary, aiRecommendations,
+      }).returning();
+      return res.status(201).json(report);
     } catch (e: any) { return res.status(500).json({ error: e.message }); }
   });
 

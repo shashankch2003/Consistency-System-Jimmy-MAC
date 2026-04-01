@@ -1,0 +1,58 @@
+PROMPT 2 OF 3 — All API Routes
+
+Copy everything below this line until you see "END OF PROMPT 2"
+
+
+Build Digital Focus & App Block — Phase 2: All API routes. Add all routes below inside server/routes.ts. Every route uses isAuthenticated middleware. Every route filters by userId: req.user.claims.sub. Do not create frontend pages yet.
+IMPORTANT — Strict Mode Lock Check: Before any PATCH or DELETE on profiles, schedules, targets, or usage limits, check if the parent profile has strictModeEnabled=true AND strictModeLockedUntil is in the future. If so, return 403 with message "Profile is locked by Strict Mode."
+Onboarding Routes
+GET /api/focus-onboarding — Returns the user's onboarding record or null.
+POST /api/focus-onboarding — Creates or updates onboarding. Zod body: { estimatedDailyScreenTime: number (0-1440), primaryGoal: string (1-200 chars), topDistractingApps: string array (max 10), preferredBlockType: "time"|"usage_limit"|"launch_count"|"location"|"wifi", onboardingCompleted: boolean }. Upsert: if record exists for user, update it. Otherwise insert.
+Profile Routes
+GET /api/focus-profiles — Returns all profiles for user, ordered by createdAt desc.
+GET /api/focus-profiles/:id — Returns one profile with its schedules, targets, and usage limits joined. Query focusSchedules, focusTargets, focusUsageLimits where profileId matches, then return { ...profile, schedules: [...], targets: [...], usageLimits: [...] }.
+POST /api/focus-profiles — Creates a profile. Zod body: { name: string (1-100), emoji: string (max 10, default "🎯"), color: string (max 20, default "#3B82F6"), mode: "relaxed"|"scheduled"|"timer"|"strict" (default "relaxed") }.
+PATCH /api/focus-profiles/:id — Updates a profile. Check strict mode lock first. Zod body (all optional): { name, emoji, color, mode, isActive: boolean, strictModeEnabled: boolean, strictModeUnlockMethod: "cooldown"|"pin"|"timer"|"approval", strictModeCooldownMinutes: number (1-1440), strictModeLockedUntil: datetime string }.
+DELETE /api/focus-profiles/:id — Check strict mode lock. Cascade delete: delete all schedules, targets, and usage limits with this profileId, then delete the profile.
+POST /api/focus-profiles/:id/activate-strict — Sets strictModeEnabled=true. Calculates strictModeLockedUntil = now + strictModeCooldownMinutes. Returns updated profile.
+POST /api/focus-profiles/:id/deactivate-strict — If strictModeLockedUntil is still in the future, return 403 "Strict Mode is still locked. Wait until the cooldown expires." If expired, set strictModeEnabled=false and strictModeLockedUntil=null. Return updated profile.
+Schedule Routes
+POST /api/focus-schedules — Zod body: { profileId: number, daysMask: number (0-127), startTime: string (HH:MM format regex /^\d{2}:\d{2}$/), endTime: string (same regex), isEnabled: boolean (default true) }.
+PATCH /api/focus-schedules/:id — All fields optional. Check strict mode lock on parent profile.
+DELETE /api/focus-schedules/:id — Check strict mode lock on parent profile.
+Target Routes
+POST /api/focus-targets — Zod body: { profileId: number, targetType: "app"|"website"|"keyword", value: string (1-500), category: "distractive"|"neutral"|"productive" (default "distractive") }.
+POST /api/focus-targets/bulk — Zod body: { profileId: number, targets: array (1-50 items) of { targetType, value, category } }. Insert all targets at once.
+DELETE /api/focus-targets/:id — Check strict mode lock on parent profile.
+Usage Limit Routes
+POST /api/focus-usage-limits — Zod body: { profileId: number, dailyTimeLimitMinutes: number (1-1440, default 30), dailyLaunchLimit: number (1-500, default 15) }.
+PATCH /api/focus-usage-limits/:id — All fields optional. Check strict mode lock.
+Session Routes
+GET /api/focus-sessions — Returns all sessions for user, ordered by startedAt desc, limit 50.
+GET /api/focus-sessions/active — Returns session where status="active" or null.
+POST /api/focus-sessions/start — If an active session already exists, return 409 "A session is already active." Zod body: { profileId: number (optional), sessionType: "quick_block"|"scheduled"|"pomodoro"|"timer", plannedDurationMinutes: number (1-1440), pomodoroWorkMinutes: number (1-120, optional), pomodoroBreakMinutes: number (1-60, optional), pomodoroRoundsTotal: number (1-20, optional) }.
+POST /api/focus-sessions/:id/complete — Calculate actualDurationMinutes = Math.round((now - startedAt) / 60000). Set status="completed", endedAt=now. Also upsert today's focus_daily_logs: increment sessionsCompleted by 1 and add actualDurationMinutes to totalFocusTimeMinutes. If no daily log exists for today, create one first.
+POST /api/focus-sessions/:id/abandon — Same duration calculation. Set wasInterrupted=true, status="abandoned", endedAt=now. Upsert today's daily log: increment sessionsAbandoned by 1.
+POST /api/focus-sessions/:id/interrupt — Increment interruptionCount by 1. Return updated session.
+POST /api/focus-sessions/:id/pomodoro-round — Increment pomodoroRoundsCompleted by 1. If pomodoroRoundsCompleted equals pomodoroRoundsTotal, auto-complete using same logic as the complete endpoint.
+Daily Log Routes
+GET /api/focus-daily-logs — Accepts query params startDate and endDate (YYYY-MM-DD strings). If missing, return last 30 days. Order by logDate desc.
+GET /api/focus-daily-logs/today — Returns today's log. If none exists, create one with all zeroes and return it.
+POST /api/focus-daily-logs — Upsert today's log. Zod body (all optional): { totalScreenTimeMinutes: number (0-1440), totalFocusTimeMinutes: number (0-1440), totalDistractiveMinutes: number (0-1440), totalNeutralMinutes: number (0-1440), totalProductiveMinutes: number (0-1440), totalPickups: number (0-1000), totalNotifications: number (0-5000), longestFocusStreak: number (0-1440), longestContinuousUse: number (0-1440), mood: "great"|"good"|"okay"|"bad"|"terrible" }. If record for today+userId exists, update. Otherwise insert.
+App Usage Routes
+GET /api/focus-app-usage — Accepts query param date (YYYY-MM-DD). Defaults to today. Order by timeSpentMinutes desc.
+GET /api/focus-app-usage/weekly — Aggregate current week (Monday–Sunday): group by appName, sum timeSpentMinutes, sum launchCount. Order by total timeSpentMinutes desc.
+POST /api/focus-app-usage — Zod body: { appName: string (1-200), appCategory: "distractive"|"neutral"|"productive", timeSpentMinutes: number (0-1440), launchCount: number (0-500, default 0) }. Upsert: if record with same userId+logDate(today)+appName exists, add timeSpentMinutes to existing. Otherwise insert.
+POST /api/focus-app-usage/bulk — Zod body: { date: string YYYY-MM-DD (optional, defaults to today), entries: array (1-50) of { appName, appCategory, timeSpentMinutes, launchCount } }. For each entry, apply same upsert logic.
+Weekly Report Routes
+GET /api/focus-weekly-reports — Returns all reports for user, ordered by weekStartDate desc, limit 12.
+GET /api/focus-weekly-reports/latest — Returns most recent report or null.
+POST /api/focus-weekly-reports/generate — Generates report for the most recently completed week (last Monday to Sunday). Steps:
+
+Query focus_daily_logs for that date range, calculate averages and totals.
+Query focus_app_usage for that date range and the week before it.
+Compare per-app time to find topTimeSaverApps (top 3 apps with biggest decrease, stored as JSON [{appName, changeMinutes}]) and topTimeIncreaseApps (top 3 with biggest increase, same format).
+Calculate distractivePercent, neutralPercent, productivePercent from total minutes.
+Call aiService.generateJSON with model "gpt-4o-mini", system prompt: "You are a digital wellbeing coach inside the Consistency System app. Given the user's weekly screen time data, generate a brief encouraging weekly summary and 3 specific actionable recommendations. Be warm, supportive, and non-judgmental. Focus on progress, not perfection. Return valid JSON with exactly two fields: summary (string, 2-3 sentences) and recommendations (string, 3 recommendations separated by newlines)."
+User prompt: "Here is my weekly data: Average daily screen time: ${avgScreenTimeMinutes} min. Average daily focus time: ${avgFocusTimeMinutes} min. Sessions completed: ${totalSessionsCompleted}. Screen time change: ${screenTimeChangePercent}%. Breakdown: ${distractivePercent}% distractive, ${neutralPercent}% neutral, ${productivePercent}% productive. Top time-savers: ${JSON.stringify(topTimeSaverApps)}. Top increases: ${JSON.stringify(topTimeIncreaseApps)}. Return JSON: {"summary": "...", "recommendations": "..."}"
+Insert the report with all calculated fields plus aiSummary and aiRecommendations from the AI response.
