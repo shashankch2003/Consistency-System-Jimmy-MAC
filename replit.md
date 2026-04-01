@@ -59,6 +59,7 @@ Preferred communication style: Simple, everyday language.
 -   **Notifications**: Centralized notification center with polling.
 -   **Messaging System**: REST-only messaging for channels, direct messages, reactions, and presence.
 -   **Notes System**: Rich text editor with various block types, contentEditable features, version history, collaboration, and AI assistance.
+-   **Digital Wellbeing / App Block**: Focus profiles with strict mode, schedules, target blocking (apps/websites/keywords), usage limits, Pomodoro & timer sessions, daily screen-time logging, per-app usage tracking, weekly AI-generated reports, multi-step onboarding wizard. Five pages: Focus Dashboard, Profile Editor, Focus Insights (Day/Week/Trend tabs), Log Screen Time, and Onboarding.
 
 ### Shared Code
 -   `shared/` directory contains common types, API route definitions with validation schemas (`shared/routes.ts`), and database schemas (`shared/schema.ts`).

@@ -1,0 +1,149 @@
+PROMPT 3 OF 3 — All Frontend Pages + Sidebar + Routing
+
+Copy everything below this line until you see "END OF PROMPT 3"
+
+
+Build Digital Focus & App Block — Phase 3: All frontend pages, sidebar items, and routing. The database tables and API routes already exist from previous phases. Use TanStack React Query v5 (object form), wouter for routing, lucide-react for icons, recharts for charts, framer-motion for animations, react-hook-form with zodResolver for forms, and shadcn/ui components.
+Sidebar Items
+In client/src/components/AppSidebar.tsx, add a new group called "Digital Wellbeing" after the last existing group with these 3 items:
+
+Label "Focus Dashboard", icon Shield from lucide-react, route /dashboard/digital-focus
+Label "Focus Insights", icon BarChart3 from lucide-react, route /dashboard/digital-focus-insights
+Label "Log Screen Time", icon Clock from lucide-react, route /dashboard/digital-focus-log
+
+Routes in App.tsx
+Add these imports and routes in client/src/App.tsx:
+tsximport DigitalFocus from "./pages/dashboard/digital-focus";
+import DigitalFocusProfile from "./pages/dashboard/digital-focus-profile";
+import DigitalFocusInsights from "./pages/dashboard/digital-focus-insights";
+import DigitalFocusLog from "./pages/dashboard/digital-focus-log";
+import DigitalFocusOnboarding from "./pages/dashboard/digital-focus-onboarding";
+Routes:
+
+/dashboard/digital-focus → DigitalFocus
+/dashboard/digital-focus/profile/:id → DigitalFocusProfile
+/dashboard/digital-focus-insights → DigitalFocusInsights
+/dashboard/digital-focus-log → DigitalFocusLog
+/dashboard/digital-focus-onboarding → DigitalFocusOnboarding
+
+Page 1: Focus Dashboard — client/src/pages/dashboard/digital-focus.tsx
+Title: "Digital Focus"
+Section A — Active Session Banner (only shows if GET /api/focus-sessions/active returns a session):
+
+Large countdown timer that auto-decrements every second using setInterval in useEffect. Calculate remaining = (startedAt + plannedDurationMinutes*60000) - Date.now(). Format as HH:MM:SS if over 1 hour, MM:SS otherwise. When timer reaches 0, auto-call POST /api/focus-sessions/:id/complete.
+Session type label and icon.
+For Pomodoro sessions: show "Round X of Y" and whether in work or break phase.
+Interruption count badge.
+"Complete" button (green, data-testid="session-complete") calls POST /api/focus-sessions/:id/complete.
+"Abandon" button (red outline, data-testid="session-abandon") shows confirmation dialog, then calls POST /api/focus-sessions/:id/abandon.
+
+Section B — Quick Block Card:
+
+Title "Quick Block", subtitle "Start blocking instantly with one tap."
+"Get started" button (data-testid="quick-block-start") opens a Sheet/Dialog with:
+
+Duration presets: 15m, 30m, 45m, 60m, 90m, 120m as clickable chips, plus custom number input
+Session type toggle: "Focus Timer" or "Pomodoro" (two buttons)
+If Pomodoro: work minutes input (default 25), break minutes input (default 5), rounds input (default 4)
+Optional profile selector dropdown (fetched from GET /api/focus-profiles)
+"Start Session" button calls POST /api/focus-sessions/start
+
+
+
+Section C — New Schedule:
+
+Title "New schedule", subtitle "Let's do this—schedule your first blocking!"
+Three cards side by side:
+
+"Time" card (clock icon, data-testid="new-schedule-time") — navigates to create profile page with mode="scheduled"
+"Usage limit" card (hourglass icon, data-testid="new-schedule-usage") — mode="timer"
+"Launch count" card (arrow-up-right icon, data-testid="new-schedule-launch") — mode="timer"
+
+
+
+Section D — My Profiles:
+
+Fetches GET /api/focus-profiles. Each profile card shows: emoji, name, schedule summary (e.g. "Weekdays, 08:00 – 17:00"), mode badge, active toggle (calls PATCH), strict mode lock icon if enabled. Click card navigates to /dashboard/digital-focus/profile/${id}.
+Empty state: "No profiles yet. Create your first focus profile!" with "Create Profile" button (data-testid="create-profile") that opens a dialog to POST /api/focus-profiles, then navigates to the new profile page.
+
+Section E — Today's Summary:
+
+Three stat cards from GET /api/focus-daily-logs/today: Screen Time (formatted Xh Ym), Focus Time (formatted Xh Ym), Sessions (count).
+
+Day mask helper for displaying schedule summaries:
+tsconst DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const formatDaysMask = (mask: number) => {
+  if (mask === 31) return "Weekdays";
+  if (mask === 96) return "Weekends";
+  if (mask === 127) return "Every day";
+  return DAYS.filter((_,i) => mask & (1 << i)).join(", ");
+};
+Query keys: ["focus-sessions-active"], ["focus-profiles"], ["focus-daily-log-today"].
+Mutations invalidate: ["focus-sessions-active"], ["focus-daily-log-today"], ["focus-profiles"].
+Page 2: Profile Editor — client/src/pages/dashboard/digital-focus-profile.tsx
+Title: Dynamic profile name. Get :id from wouter route params. Fetch GET /api/focus-profiles/:id.
+Top: Profile emoji (text input), name (text input), color picker (6 circles: #3B82F6, #EC4899, #8B5CF6, #10B981, #F59E0B, #EF4444), mode dropdown.
+Condition section: List schedules. Each shows time range, days (use formatDaysMask), enabled toggle, edit/delete buttons. "Add Schedule" button (data-testid="add-schedule") opens dialog with day checkboxes (Mon–Sun) + quick-select buttons (Weekdays/Weekends/Every day), start time input, end time input. Calls POST /api/focus-schedules.
+Blocking section: Three collapsible rows — Apps (count), Websites (count), Keywords (count). Each expands to show targets list. "Add" button (data-testid="add-target") opens dialog with text input and category dropdown. Calls POST /api/focus-targets. Delete button on each target calls DELETE /api/focus-targets/:id.
+Usage Limits section (visible when mode is "timer"): Daily time limit slider (5–480 min, step 5), daily launch limit slider (1–100, step 1).
+Strict Mode section: Enable toggle. If enabled: unlock method selector (Cooldown with minute input, Timer with duration input, PIN with 4-digit input, Approval with "Coming soon" label). "Activate Strict Mode" button (data-testid="activate-strict", purple). If already locked: show countdown until strictModeLockedUntil, disabled "Deactivate" button (data-testid="deactivate-strict") that enables when cooldown expires.
+Bottom: "Save" button (data-testid="save-profile", blue) calls PATCH. "Delete Profile" button (data-testid="delete-profile", red text) shows confirmation, calls DELETE, navigates to /dashboard/digital-focus.
+Query key: ["focus-profile", id]. Mutations invalidate ["focus-profile", id] and ["focus-profiles"].
+Page 3: Insights — client/src/pages/dashboard/digital-focus-insights.tsx
+Title: "Focus Insights". Three tabs at top: Day (data-testid="tab-day"), Week (data-testid="tab-week"), Trend (data-testid="tab-trend"). useState to track active tab.
+Day tab:
+
+Date navigator with arrows and "TODAY" label.
+Large screen time: "Xh Ym" from totalScreenTimeMinutes.
+Bar chart (recharts BarChart) with hourly breakdown (distribute totalScreenTimeMinutes across hours 0-23 with a realistic curve peaking around noon and evening).
+Two pills: distractive time (magenta #EC4899), productive time (green #10B981).
+Most Used Apps list from GET /api/focus-app-usage?date=X. Each row: app name, category dot (distractive=magenta, neutral=#6366F1, productive=green), time spent.
+Usage breakdown card: horizontal progress bars for Distractive%, Neutral%, Productive%.
+Focus card: Longest Focus streak, Continuous Use.
+Distractions card: Notifications count, Pickups count.
+Mood check-in: display current mood, "+" button (data-testid="mood-checkin") opens selector to POST /api/focus-daily-logs with mood.
+
+Week tab:
+
+Week navigator with arrows and "THIS WEEK" label.
+Average screen time with % change vs previous week.
+Stacked bar chart per day (recharts): distractive (magenta) + productive (green) bars.
+Most Used Apps from GET /api/focus-app-usage/weekly.
+Habits: Balance card (screen time as % of 16h awake time), Peak time sparkline.
+Same Usage/Focus/Distractions cards aggregated for the week.
+
+Trend tab:
+
+Title "SINCE {month} {year}" (month of first daily log).
+Screen time trend card: first week avg vs last week avg with change label.
+Top time-savers: podium (1st, 2nd, 3rd) showing apps with biggest time decrease, e.g. "-52m".
+Top increase: podium showing apps with biggest time increase + "pay attention" warning.
+Most Used Apps full list.
+"Generate Weekly Report" button (data-testid="generate-report") calls POST /api/focus-weekly-reports/generate.
+If latest report exists, show AI summary and recommendations in a card.
+
+Page 4: Log Screen Time — client/src/pages/dashboard/digital-focus-log.tsx
+Title: "Log Screen Time"
+Section A — Daily Overview: Date picker (default today). Total screen time: hours + minutes number inputs. Pickups and Notifications number inputs. "Save Daily Log" button (data-testid="save-daily-log") calls POST /api/focus-daily-logs.
+Section B — App Usage Log: Repeatable rows (start with 3). Each row: app name text input, category dropdown (Distractive/Neutral/Productive), time minutes input, launch count input. "Add another app" button adds a row. "Save App Usage" button (data-testid="save-app-usage") calls POST /api/focus-app-usage/bulk.
+Section C — Quick Templates: Three buttons that pre-fill Section B rows:
+
+"Social Media Pack": Instagram, TikTok, Twitter, Facebook, Snapchat — all Distractive
+"Work Pack": Slack, Email, Google Docs, Zoom, Calendar — all Productive
+"Entertainment Pack": YouTube, Netflix, Spotify, Gaming — all Distractive
+
+Page 5: Onboarding — client/src/pages/dashboard/digital-focus-onboarding.tsx
+Title: "Focus Setup". Multi-step wizard using useState for step (1-4). On load, fetch GET /api/focus-onboarding. If onboardingCompleted is true, redirect to /dashboard/digital-focus.
+Step 1: "How much time do you spend on your phone every day?" Large hour display. Slider from 1h to 12h+. "Continue" button (data-testid="onboarding-continue").
+Step 2: "What's your primary goal?" Four radio cards: "Reduce screen time", "Stop doomscrolling", "Improve focus at work", "Build better habits". "Continue" button.
+Step 3: "Which apps distract you the most?" Checkbox list: Instagram, TikTok, YouTube, Twitter/X, Facebook, Reddit, Snapchat, WhatsApp, Netflix, Discord, Chrome, Games. Plus a text input for custom apps. "Continue" button.
+Step 4: "Where would you like to improve your focus first?" Three cards: Time (tags: WORK, STUDY, BED TIME, HABIT), Usage limit (tags: LIMIT, USAGE CONTROL), Launch count (tags: LIMIT, HABIT, MINDFUL USE). "Complete Setup" button (data-testid="onboarding-complete") calls POST /api/focus-onboarding with onboardingCompleted=true, then navigates to /dashboard/digital-focus.
+Global Style Notes
+
+Colors: primary blue #3B82F6, distractive magenta #EC4899, neutral indigo #6366F1, productive green #10B981, strict purple #8B5CF6
+All loading states: centered Loader2 icon from lucide-react with animate-spin class
+All empty states: centered text message + CTA button
+Format minutes as "Xh Ym" everywhere: const fmt = (m: number) => { const h = Math.floor(m/60); const min = m%60; return h > 0 ? \{h}h ${min}m\` : \`
+{min}m\`; };`
+
+Every interactive element has a data-testid attribute as specified above

@@ -70,6 +70,11 @@ import AiWorkflowsPage from "@/pages/dashboard/ai-workflows";
 import ProjectManagerPage from "@/pages/dashboard/project-manager";
 import TaskIntelPage from "@/pages/dashboard/task-intel";
 import DatabaseAiPage from "@/pages/dashboard/database-ai";
+import DigitalFocus from "@/pages/dashboard/digital-focus";
+import DigitalFocusProfile from "@/pages/dashboard/digital-focus-profile";
+import DigitalFocusInsights from "@/pages/dashboard/digital-focus-insights";
+import DigitalFocusLog from "@/pages/dashboard/digital-focus-log";
+import DigitalFocusOnboarding from "@/pages/dashboard/digital-focus-onboarding";
 import MeetingsPage from "@/pages/dashboard/meetings";
 import DocGeneratorPage from "@/pages/dashboard/doc-generator";
 import MessagingAiPage from "@/pages/dashboard/messaging-ai";
@@ -406,6 +411,32 @@ function Router() {
       <Route path="/dashboard/pm-editor/:id">
         <DashboardLayout>
           <PmEditorPage />
+        </DashboardLayout>
+      </Route>
+
+      <Route path="/dashboard/digital-focus">
+        <DashboardLayout>
+          <DigitalFocus />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/digital-focus/profile/:id">
+        <DashboardLayout>
+          <DigitalFocusProfile />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/digital-focus-insights">
+        <DashboardLayout>
+          <DigitalFocusInsights />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/digital-focus-log">
+        <DashboardLayout>
+          <DigitalFocusLog />
+        </DashboardLayout>
+      </Route>
+      <Route path="/dashboard/digital-focus-onboarding">
+        <DashboardLayout>
+          <DigitalFocusOnboarding />
         </DashboardLayout>
       </Route>
 

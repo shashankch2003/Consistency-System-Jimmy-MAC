@@ -237,6 +237,41 @@ export function AppSidebar({ onOpenSearch }: AppSidebarProps) {
           </SidebarGroupContent>
         </SidebarGroup>
 
+        {/* Digital Wellbeing Group */}
+        <SidebarGroup className="mt-2">
+          <div className="px-3 py-1">
+            <p className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider">Digital Wellbeing</p>
+          </div>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive("/dashboard/digital-focus")} className="data-[active=true]:bg-white/10 data-[active=true]:text-white">
+                  <Link href="/dashboard/digital-focus" className="flex items-center gap-3 px-3 py-2" data-testid="nav-digital-focus">
+                    <Shield className="w-4 h-4" />
+                    <span>Focus Dashboard</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive("/dashboard/digital-focus-insights")} className="data-[active=true]:bg-white/10 data-[active=true]:text-white">
+                  <Link href="/dashboard/digital-focus-insights" className="flex items-center gap-3 px-3 py-2" data-testid="nav-digital-focus-insights">
+                    <BarChart3 className="w-4 h-4" />
+                    <span>Focus Insights</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive("/dashboard/digital-focus-log")} className="data-[active=true]:bg-white/10 data-[active=true]:text-white">
+                  <Link href="/dashboard/digital-focus-log" className="flex items-center gap-3 px-3 py-2" data-testid="nav-digital-focus-log">
+                    <Clock className="w-4 h-4" />
+                    <span>Log Screen Time</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
         {/* Spacer + Know More + Settings */}
         <div className="mt-4 pt-4 border-t border-border/40 px-1 space-y-0.5">
           <SidebarMenuButton asChild isActive={isActive("/dashboard/know-more")} className="data-[active=true]:bg-white/10 data-[active=true]:text-white w-full">
